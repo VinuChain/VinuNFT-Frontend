@@ -4,6 +4,7 @@ import Joi from "joi";
 import { joiResolver } from "@hookform/resolvers/joi";
 import ValidatedInput from "./ValidatedInput";
 import { schemas } from "../common";
+import config from "../config";
 
 const styles = {
     modalCard: {
@@ -27,6 +28,8 @@ export default function EditModal({
     balance,
     availableAmount,
     oldAmount,
+    oldPrice,
+    paymentToken,
 }) {
     const effectiveAvailableAmount = Math.min(
         availableAmount + oldAmount,
@@ -102,6 +105,10 @@ export default function EditModal({
                     </p>
                 </header>
                 <section className="modal-card-body">
+                    <p>
+                        {oldAmount} for {oldPrice}{" "}
+                        {config.tokens[paymentToken].symbol}
+                    </p>
                     <p>Balance: {balance}</p>
                     {balance != effectiveAvailableAmount ? (
                         <p>
@@ -135,6 +142,7 @@ export default function EditModal({
                                     type="number"
                                     min="1"
                                     step="1"
+                                    placeholder={oldAmount}
                                     {...register("amount")}
                                 />
                                 {errors.amount ? (
@@ -171,6 +179,7 @@ export default function EditModal({
                                     type="number"
                                     min="0"
                                     step="0.1"
+                                    placeholder={oldPrice}
                                     {...register("price")}
                                 />
                                 {errors.price ? (

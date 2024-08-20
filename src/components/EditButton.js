@@ -13,6 +13,7 @@ import { useTransactionHelper } from "../common/transaction_status";
 import { useRecoilState } from "recoil";
 import { standardErrorState } from "../common/error";
 import { formatTokenAmount, parseTokenAmount } from "../common/utils";
+import { tokenAddressToId } from "../common/user";
 
 export default function EditButton({
     nftContract,
@@ -22,6 +23,8 @@ export default function EditButton({
     balance,
     onUpdate,
     oldAmount,
+    oldPrice,
+    paymentToken,
 }) {
     const marketplaceAddress = config.contractAddresses.v1.marketplace;
     const marketplaceABI = v1.marketplace;
@@ -56,19 +59,17 @@ export default function EditButton({
             walletProvider
         );
 
+        // Retrieve a fresh price
         const listingInfo = await marketplaceContract.getListing(
             nftContract.address,
             nftId,
             listingId
         );
 
-        const paymentToken = listingInfo.paymentToken;
+        const paymentToken = tokenAddressToId[listingInfo.paymentToken];
 
         if (newPrice === null) {
-            newPrice = formatTokenAmount(
-                listingInfo.price,
-                listingInfo.paymentToken
-            );
+            newPrice = formatTokenAmount(listingInfo.price, paymentToken);
         }
 
         const contractWithSigner = marketplaceContract.connect(
@@ -118,6 +119,8 @@ export default function EditButton({
                 balance={balance}
                 availableAmount={availableAmount}
                 oldAmount={oldAmount}
+                oldPrice={oldPrice}
+                paymentToken={paymentToken}
             />
         </div>
     );

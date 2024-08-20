@@ -95,6 +95,12 @@ export default function Listings({
                                                 balance={userBalance}
                                                 onUpdate={onUpdate}
                                                 oldAmount={listing.amount}
+                                                oldPrice={listing.price}
+                                                paymentToken={
+                                                    tokenAddressToId[
+                                                        listing.paymentToken
+                                                    ]
+                                                }
                                                 availableAmount={
                                                     userAvailableAmount
                                                 }
