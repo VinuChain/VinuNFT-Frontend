@@ -813,7 +813,7 @@ export default function NFTPage({ location }) {
                                                         onUpdate={onUpdate}
                                                     />
                                                 </div>
-                                                <div className="is-flex is-justify-content-center mt-1">
+                                                {/*<div className="is-flex is-justify-content-center mt-1">
                                                     {tokenAuthor ==
                                                     walletAddress ? (
                                                         <EditRoyaltyButton
@@ -832,7 +832,7 @@ export default function NFTPage({ location }) {
                                                     ) : (
                                                         <></>
                                                     )}
-                                                </div>
+                                                    </div>*/}
                                             </div>
                                         ) : (
                                             <></>
