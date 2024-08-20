@@ -11,7 +11,7 @@ export default function Header() {
 
     useEffect(async () => {
         if (walletProvider) {
-            try {
+            /*try {
                 window.ethereum.request({
                     method: "wallet_addEthereumChain",
                     params: [
@@ -19,7 +19,7 @@ export default function Header() {
                             chainId: hexValue(config.networks.main.chainId),
                             rpcUrls: [config.rpc],
                             chainName: config.networks.main.name,
-                            nativeCurrency: config.networks.nativeCurrency,
+                            nativeCurrency: config.nativeCurrency,
                             blockExplorerUrls: [config.blockExplorer.url],
                         },
                     ],
@@ -27,7 +27,7 @@ export default function Header() {
             } catch (e) {
                 // Will revert if there is already a chain request, ignore
                 console.log(e);
-            }
+            }*/
 
             const network = await walletProvider.getNetwork();
 
