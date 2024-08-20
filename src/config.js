@@ -26,7 +26,7 @@ const config = {
             chainId: 1,
         },
     },
-    rpc: "https://vinufoundation-rpc.com",
+    rpc: "https://testnet-rpc.vinuchain.org/",
     api_keys: {
         alchemy: process.env.GATSBY_ALCHEMY_API_KEY,
         alchemy_mainnet: process.env.GATSBY_ALCHEMY_MAINNET_API_KEY,
@@ -48,6 +48,11 @@ const config = {
             symbol: "MERC",
             name: "Mock ERC20",
         },
+    },
+    nativeCurrency: {
+        name: "VinuCoin",
+        symbol: "VC",
+        decimals: 18,
     },
 };
 
