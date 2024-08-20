@@ -50,7 +50,7 @@ export default function EditRoyaltyButton({
         // setError(null);
 
         const contractWithSigner = nftContract.connect(
-            walletProvider.getSigner()
+            await walletProvider.getSigner()
         );
         const transactionFunction = async () =>
             await contractWithSigner.decreaseRoyaltyNumerator(
