@@ -1,7 +1,7 @@
 const config = {
     contractAddresses: {
         v1: {
-            text: "0xdCaDd503b7b444F5196d1B63A383a24ADAd4A42e",
+            text: "0x6021BDf97292eB59a91F3a5B1db35dF56c013F9e",
             marketplace: "0xF38778F9611F37b339410A55F9Df2940d9d6cBC7",
             image: "0xe476220Ea758Da1aA5C396352A54578BB08C9b4F",
         },
