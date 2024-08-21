@@ -16,7 +16,8 @@ import "../styles/globals.css";
 
 export default function Home() {
     const [readProvider] = useReadProvider();
-    const [lastNFTId, setLastNFTId] = useState(null);
+    const [lastTextNFTId, setLastTextNFTId] = useState(null);
+    const [lastImageNFtId, setLastImageNFTId] = useState(null);
     const [nfts, setNFTs] = useState([]);
 
     const [, setStandardError] = useRecoilState(standardErrorState);
@@ -24,17 +25,22 @@ export default function Home() {
     const increment = 5;
 
     useEffect(async () => {
-        const contractAddress = config.contractAddresses.v1.text;
-        const contractABI = v1.text;
-        const contract = new ethers.Contract(
-            contractAddress,
-            contractABI,
+        const textContract = new ethers.Contract(
+            config.contractAddresses.v1.text,
+            v1.text,
+            readProvider
+        );
+        const imageContract = new ethers.Contract(
+            config.contractAddresses.v1.image,
+            v1.image,
             readProvider
         );
 
         try {
-            const newLastNFTId = await contract.lastTokenId();
-            setLastNFTId(newLastNFTId.toNumber());
+            const newLastTextNFTId = await textContract.lastTokenId();
+            const newLastImageNFTId = await imageContract.lastTokenId();
+            setLastTextNFTId(newLastTextNFTId.toNumber());
+            setLastImageNFTId(newLastImageNFTId.toNumber());
         } catch (e) {
             setStandardError(formatError(e));
         }
@@ -44,16 +50,20 @@ export default function Home() {
         const newNFTs = [...nfts];
 
         for (let i = 0; i < count; i++) {
-            const newId = lastNFTId - newNFTs.length;
-            if (newId >= 1) {
-                newNFTs.push(newId);
+            const newTextNftId = lastTextNFTId - newNFTs.length;
+            if (newTextNftId >= 1) {
+                newNFTs.push({ type: "text", id: newTextNftId });
+            }
+            const newImageNftId = lastImageNFtId - newNFTs.length;
+            if (newImageNftId >= 1) {
+                newNFTs.push({ type: "image", id: newImageNftId });
             }
         }
 
         setNFTs(newNFTs);
     };
 
-    useEffect(() => getMoreIds(20), [lastNFTId]);
+    useEffect(() => getMoreIds(20), [lastTextNFTId, lastImageNFtId]);
 
     return (
         <div>
@@ -68,10 +78,10 @@ export default function Home() {
                     <InfiniteScroll
                         dataLength={nfts.length}
                         next={() => getMoreIds(increment)}
-                        hasMore={nfts.length < lastNFTId}
+                        hasMore={nfts.length < lastTextNFTId}
                         loader={<h4>Loading...</h4>}
                         endMessage={
-                            lastNFTId === null ? (
+                            lastTextNFTId === null ? (
                                 <p style={{ textAlign: "center" }}>
                                     Loading...
                                 </p>
@@ -90,8 +100,12 @@ export default function Home() {
                                 justifyContent: "center",
                             }}
                         >
-                            {nfts.map((id) => (
-                                <NFTCard id={id} key={id} />
+                            {nfts.map(({ id, type }) => (
+                                <NFTCard
+                                    id={id}
+                                    type={type}
+                                    key={type + "-" + id}
+                                />
                             ))}
                         </div>
                     </InfiniteScroll>

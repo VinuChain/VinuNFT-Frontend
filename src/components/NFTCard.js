@@ -17,6 +17,8 @@ import HTMLViewer from "./HTMLViewer";
 import Address from "./Address";
 import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
+import { maybeFetchIpfs } from "../common/ipfs";
+import { getTokenContent } from "../common/nftInfo";
 
 const styles = {
     card: {
@@ -45,7 +47,7 @@ const styles = {
     },
 };
 
-export default function NFTCard({ id }) {
+export default function NFTCard({ id, type }) {
     const { lookupEns } = useEns();
     const [tokenURI, setTokenURI] = useState(null);
     const [tokenData, setTokenData] = useState(null);
@@ -56,8 +58,8 @@ export default function NFTCard({ id }) {
     const [exists, setExists] = useState(true);
     const [_, setStandardError] = useRecoilState(standardErrorState);
 
-    const contractAddress = config.contractAddresses.v1.text;
-    const contractABI = v1.text;
+    const contractAddress = config.contractAddresses.v1[type];
+    const contractABI = v1[type];
 
     const queryTokenURI = async () => {
         if (!id || !readProvider) return;
@@ -108,7 +110,7 @@ export default function NFTCard({ id }) {
         if (!tokenURI) return;
 
         try {
-            const tokenDataResponse = await fetch(tokenURI);
+            const tokenDataResponse = await maybeFetchIpfs(tokenURI);
             const newTokenData = await tokenDataResponse.json();
             //console.log(newTokenData)
             setTokenData(newTokenData);
@@ -119,27 +121,23 @@ export default function NFTCard({ id }) {
     };
 
     const queryTokenContent = async () => {
-        if (!tokenData?.text_uri) return;
-        var parsedTextURI = tokenData.text_uri.replaceAll("#", "%23"); //TODO: workaround, togliere con nuovo deploy
-        parsedTextURI = parsedTextURI.replace("charset=UTF-8,", "");
-
         try {
-            const response = await fetch(parsedTextURI);
-            const parsedText = await response.text();
-            //console.log("content: " + parsedTextURI)
-            setTokenType(response.headers.get("content-type"));
-            setTokenContent(parsedText);
+            const newTokenContent = await getTokenContent(type, tokenData);
+            if (newTokenContent.exists) {
+                setTokenContent(newTokenContent.content);
+                setTokenType(newTokenContent.tokenType);
+            }
         } catch (e) {
             console.log(e);
             setStandardError(formatError(e));
         }
     };
 
-    useEffect(() => queryTokenURI(), [id, readProvider]);
+    useEffect(() => queryTokenURI(), [id, type, readProvider]);
     useEffect(() => queryTokenData(), [tokenURI]);
-    useEffect(() => queryTokenAuthor(), [id, readProvider]);
+    useEffect(() => queryTokenAuthor(), [id, type, readProvider]);
     useEffect(() => queryTokenContent(), [tokenData]);
-    useEffect(() => setExists(true), [id, readProvider]);
+    useEffect(() => setExists(true), [id, type, readProvider]);
 
     const effectiveTokenAuthor = tokenAuthor || null;
 
@@ -151,10 +149,12 @@ export default function NFTCard({ id }) {
         <div
             className="card m-3 cursor-pointer"
             style={styles.card}
-            onClick={() => navigate("/nft?id=" + id)}
+            onClick={() => navigate(`/nft/${type}?id=${id}`)} // TODO: Use the NFT type
         >
             <div style={styles.cardPreview}>
-                {tokenType && tokenContent !== null ? (
+                {type === "image" ? (
+                    <img src={tokenContent} />
+                ) : tokenType && tokenContent !== null ? (
                     tokenType == "text/html" ? (
                         <HTMLViewer source={tokenContent} />
                     ) : tokenType == "text/markdown" ? (

@@ -15,6 +15,8 @@ export default function TypeTag({ type, isUri }) {
         return <span className="tag is-link">markdown</span>;
     } else if (type == "text/html") {
         return <span className="tag is-warning">HTML</span>;
+    } else if (type == "image") {
+        return <span className="tag is-success">image</span>;
     } else {
         return <span className="tag is-danger">unknown</span>;
     }

@@ -56,6 +56,7 @@ const config = {
         symbol: "VC",
         decimals: 18,
     },
+    standardIpfsGateway: "https://gateway.pinata.cloud/ipfs",
 };
 
 export default config;

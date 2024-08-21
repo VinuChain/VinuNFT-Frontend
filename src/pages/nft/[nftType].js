@@ -46,11 +46,7 @@ import {
     parseHistory,
     getNftAuthor,
 } from "../../common/history";
-import {
-    formatTokenAmount,
-    parseTokenAmount,
-    shortenAddress,
-} from "../../common/utils";
+import { formatTokenAmount } from "../../common/utils";
 import NFTHistory from "../../components/NFTHistory";
 
 import Address from "../../components/Address";
@@ -59,6 +55,8 @@ import {
     tokenAddressToId,
     tokenAllowancesState,
 } from "../../common/user";
+import { maybeFetchIpfs } from "../../common/ipfs";
+import { getTokenContent } from "../../common/nftInfo";
 
 const burnedIdsState = atom({
     key: "burnedIds",
@@ -282,7 +280,7 @@ export default function NFTPage({ location, params }) {
         if (!tURI) return;
 
         try {
-            const tokenDataResponse = await fetch(tURI);
+            const tokenDataResponse = await maybeFetchIpfs(tURI);
             const newTokenData = await tokenDataResponse.json();
             setTokenData(newTokenData);
 
@@ -294,15 +292,15 @@ export default function NFTPage({ location, params }) {
     };
 
     const queryTokenContent = async (newTokenData) => {
-        if (!newTokenData?.text_uri) return;
-        var parsedTextURI = newTokenData.text_uri;
-        parsedTextURI = parsedTextURI.replace("charset=UTF-8,", "");
         try {
-            const response = await fetch(parsedTextURI);
-            const parsedText = await response.text();
-            console.log("Token type:", response.headers.get("content-type"));
-            setTokenType(response.headers.get("content-type"));
-            setTokenContent(parsedText);
+            const tokenContent = await getTokenContent(
+                macroNftType,
+                newTokenData
+            );
+            if (tokenContent.exists) {
+                setTokenContent(tokenContent.content);
+                setTokenType(tokenContent.tokenType);
+            }
         } catch (e) {
             console.log(e);
             setStandardError(formatError(e));
@@ -666,32 +664,38 @@ export default function NFTPage({ location, params }) {
                         >
                             {readProvider ? (
                                 <div>
-                                    <div className="box">
-                                        {tokenType &&
-                                        (tokenContent || tokenContent == "") ? (
-                                            tokenType == "text/html" ? (
-                                                <HTMLViewer
-                                                    source={tokenContent}
-                                                />
-                                            ) : tokenType == "text/markdown" ? (
-                                                <MDEditor.Markdown
-                                                    source={tokenContent}
-                                                    rehypePlugins={[
-                                                        () =>
-                                                            rehypeSanitize(
-                                                                schemas.validMarkdown
-                                                            ),
-                                                    ]}
-                                                />
+                                    {macroNftType === "image" ? (
+                                        <img src={tokenContent} />
+                                    ) : (
+                                        <div className="box">
+                                            {tokenType &&
+                                            (tokenContent ||
+                                                tokenContent == "") ? (
+                                                tokenType == "text/html" ? (
+                                                    <HTMLViewer
+                                                        source={tokenContent}
+                                                    />
+                                                ) : tokenType ==
+                                                  "text/markdown" ? (
+                                                    <MDEditor.Markdown
+                                                        source={tokenContent}
+                                                        rehypePlugins={[
+                                                            () =>
+                                                                rehypeSanitize(
+                                                                    schemas.validMarkdown
+                                                                ),
+                                                        ]}
+                                                    />
+                                                ) : (
+                                                    <pre className="nft-plain">
+                                                        {tokenContent}
+                                                    </pre>
+                                                )
                                             ) : (
-                                                <pre className="nft-plain">
-                                                    {tokenContent}
-                                                </pre>
-                                            )
-                                        ) : (
-                                            <Skeleton count="12" />
-                                        )}
-                                    </div>
+                                                <Skeleton count="12" />
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <p>Connect a wallet to view this NFT</p>
