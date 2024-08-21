@@ -7,7 +7,7 @@ import { v1 } from "./abi";
 import Decimal from "decimal.js";
 import { uploadFileToIpfs, uploadJSONToIpfs } from "./ipfs";
 
-async function getContentFunction(subPath, setStandardError) {
+async function getContentFunction(subPath) {
     function contentFunction(status, transaction, success, receipt) {
         if (status !== "success") {
             return null;
@@ -38,10 +38,9 @@ async function getContentFunction(subPath, setStandardError) {
                     </div>
                 );
             } else {
-                setStandardError(
+                throw new Error(
                     "Could not find token ID in transaction receipt."
                 );
-                return;
             }
         }
     }
@@ -59,8 +58,7 @@ async function mintImageNft(
         effectiveRoyaltyRecipient,
     },
     walletProvider,
-    handleTransaction,
-    setStandardError
+    handleTransaction
 ) {
     const uploadedFileHash = await uploadFileToIpfs(image);
 
@@ -82,7 +80,7 @@ async function mintImageNft(
     );
     const contractWithSigner = contract.connect(walletProvider.getSigner());
 
-    const contentFunction = await getContentFunction("image", setStandardError);
+    const contentFunction = await getContentFunction("image");
 
     async function transactionFunction() {
         return await contractWithSigner.mint(
@@ -108,8 +106,7 @@ async function mintTextNft(
         effectiveRoyaltyRecipient,
     },
     walletProvider,
-    handleTransaction,
-    setStandardError
+    handleTransaction
 ) {
     const isUTF8 = [...text].some((char) => char.charCodeAt(0) > 127);
 
@@ -129,7 +126,7 @@ async function mintTextNft(
     );
     const contractWithSigner = contract.connect(walletProvider.getSigner());
 
-    const contentFunction = await getContentFunction("text", setStandardError);
+    const contentFunction = await getContentFunction("text");
 
     async function transactionFunction() {
         return await contractWithSigner.mint(
@@ -160,8 +157,7 @@ async function mintNft(
     },
     walletProvider,
     ensProvider,
-    handleTransaction,
-    setStandardError
+    handleTransaction
 ) {
     const effectiveRoyaltyPercentage = new Decimal(royaltyPercentage)
         .mul("100")
@@ -179,17 +175,15 @@ async function mintNft(
                     effectiveRoyaltyRecipient
                 );
             } catch (e) {
-                setStandardError(
+                throw new Error(
                     'Invalid custom recipient address: "' + e.message + '".'
                 );
-                return;
             }
 
             if (resolvedAddress) {
                 effectiveRoyaltyRecipient = resolvedAddress;
             } else {
-                setStandardError("Could not resolve ENS name.");
-                return;
+                throw new Error("Could not resolve ENS name.");
             }
         }
     } else {
@@ -198,7 +192,7 @@ async function mintNft(
                 .getSigner()
                 .getAddress();
         } catch (e) {
-            setStandardError(
+            throw new Error(
                 'Could not retrieve wallet address: "' + e.message + '".'
             );
             return;
@@ -216,8 +210,7 @@ async function mintNft(
                 effectiveRoyaltyRecipient,
             },
             walletProvider,
-            handleTransaction,
-            setStandardError
+            handleTransaction
         );
     } else {
         await mintTextNft(
@@ -231,8 +224,7 @@ async function mintNft(
                 effectiveRoyaltyRecipient,
             },
             walletProvider,
-            handleTransaction,
-            setStandardError
+            handleTransaction
         );
     }
 }

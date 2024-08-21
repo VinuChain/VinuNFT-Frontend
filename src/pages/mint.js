@@ -77,13 +77,18 @@ export default function Mint() {
 
         console.log(file);
 
-        await mintNft(
-            data,
-            walletProvider,
-            ensProvider,
-            handleTransaction,
-            setStandardError
-        );
+        try {
+            await mintNft(
+                data,
+                walletProvider,
+                ensProvider,
+                handleTransaction,
+                setStandardError
+            );
+        } catch (e) {
+            console.log(e);
+            setStandardError(e.message);
+        }
     };
 
     return (
