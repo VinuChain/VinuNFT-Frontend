@@ -17,9 +17,11 @@ import "../styles/globals.css";
 export default function Home() {
     const [readProvider] = useReadProvider();
     const [walletProvider] = useWalletProvider();
-    const [lastNFTId, setLastNFTId] = useState(null);
-    const [nfts, setNFTs] = useState([]);
-    const [nftToBalance, setNftToBalance] = useState({});
+    const [lastTextNFTId, setLastTextNFTId] = useState(null);
+    const [lastImageNFtId, setLastImageNFTId] = useState(null);
+    const [textNfts, setTextNFTs] = useState([]);
+    const [imageNfts, setImageNFTs] = useState([]);
+    const [nftToBalance, setNftToBalance] = useState({ text: {}, image: {} });
     const [walletAddress, setWalletAddress] = useState(null);
 
     const [, setStandardError] = useRecoilState(standardErrorState);
@@ -38,13 +40,17 @@ export default function Home() {
                 setWalletAddress(newWalletAddress);
 
                 // Reset NFTs, since we don't know which ones we have
-                setNFTs([]);
+                setTextNFTs([]);
+                setImageNFTs([]);
 
-                setNftToBalance({});
-                for (const nftId of Object.keys(nftToBalance)) {
-                    updateNftToBalance(nftId, newWalletAddress);
+                setNftToBalance({ text: {}, image: {} });
+                for (const type of ["text", "image"]) {
+                    for (const nftId of Object.keys(nftToBalance[type])) {
+                        updateNftToBalance(type, nftId, newWalletAddress);
+                    }
                 }
             } catch (e) {
+                console.log(e);
                 setStandardError(formatError(e));
             }
         }
@@ -52,25 +58,32 @@ export default function Home() {
     }, [walletProvider]);
 
     useEffect(async () => {
-        const contractAddress = config.contractAddresses.v1.text;
-        const contractABI = v1.text;
-        const contract = new ethers.Contract(
-            contractAddress,
-            contractABI,
+        const textNftContract = new ethers.Contract(
+            config.contractAddresses.v1.text,
+            v1.text,
+            readProvider
+        );
+
+        const imageNftContract = new ethers.Contract(
+            config.contractAddresses.v1.image,
+            v1.image,
             readProvider
         );
 
         try {
-            const newLastNFTId = await contract.lastTokenId();
-            setLastNFTId(newLastNFTId.toNumber());
+            const newLastTextNFTId = await textNftContract.lastTokenId();
+            const newLastImageNFTId = await imageNftContract.lastTokenId();
+            setLastTextNFTId(newLastTextNFTId.toNumber());
+            setLastImageNFTId(newLastImageNFTId.toNumber());
         } catch (e) {
+            console.log(e);
             setStandardError(formatError(e));
         }
     }, []);
 
-    const updateNftToBalance = async (nftId, address) => {
-        const contractAddress = config.contractAddresses.v1.text;
-        const contractABI = v1.text;
+    const updateNftToBalance = async (type, nftId, address) => {
+        const contractAddress = config.contractAddresses.v1[type];
+        const contractABI = v1[type];
         const contract = new ethers.Contract(
             contractAddress,
             contractABI,
@@ -78,14 +91,28 @@ export default function Home() {
         );
 
         try {
+            console.log("Querying balance of", type, nftId, "for", address);
             const hexBalance = await contract.balanceOf(address, nftId);
+            console.log(
+                "Balance of",
+                type,
+                nftId,
+                "for",
+                address,
+                "is",
+                hexBalance
+            );
             const balance = hexBalance.toNumber();
 
             setNftToBalance((currentNftToBalance) => ({
                 ...currentNftToBalance,
-                [nftId]: balance,
+                [type]: {
+                    ...currentNftToBalance[type],
+                    [nftId]: balance,
+                },
             }));
         } catch (e) {
+            console.log(e);
             setStandardError(formatError(e));
         }
     };
@@ -95,31 +122,57 @@ export default function Home() {
             return;
         }
 
-        const newNFTs = [...nfts];
+        const newTextNFTs = [...textNfts];
+        const newImageNFTs = [...imageNfts];
 
         for (let i = 0; i < count; i++) {
-            const newId = lastNFTId - newNFTs.length;
-            if (newId >= 1) {
-                newNFTs.push(newId);
-                updateNftToBalance(newId, address);
+            const newTextId = lastTextNFTId - newTextNFTs.length;
+            const newImageId = lastImageNFtId - newImageNFTs.length;
+            if (newTextId >= 1) {
+                newTextNFTs.push(newTextId);
+                updateNftToBalance("text", newTextId, address);
+            }
+            if (newImageId >= 1) {
+                newImageNFTs.push(newImageId);
+                updateNftToBalance("image", newImageId, address);
             }
         }
 
-        setNFTs(newNFTs);
+        setTextNFTs(newTextNFTs);
+        setImageNFTs(newImageNFTs);
     };
 
-    useEffect(() => getMoreIds(20, walletAddress), [lastNFTId, walletAddress]);
+    useEffect(
+        () => getMoreIds(20, walletAddress),
+        [lastTextNFTId, walletAddress]
+    );
 
-    const filteredNfts = nfts.filter(
-        (nftId) =>
-            nftToBalance[nftId] !== undefined && nftToBalance[nftId] !== 0
+    const interleavedNfts = [];
+
+    for (let i = 0; i < Math.max(textNfts.length, imageNfts.length); i++) {
+        if (i < textNfts.length) {
+            interleavedNfts.push(["text", textNfts[i]]);
+        }
+        if (i < imageNfts.length) {
+            interleavedNfts.push(["image", imageNfts[i]]);
+        }
+    }
+
+    const filteredNfts = interleavedNfts.filter(
+        ([type, nftId]) =>
+            nftToBalance[type][nftId] !== undefined &&
+            nftToBalance[type][nftId] !== 0
     );
 
     useEffect(() => {
-        if (filteredNfts.length < 20 && nfts.length < lastNFTId) {
+        if (
+            filteredNfts.length < 20 &&
+            (textNfts.length < lastTextNFTId ||
+                imageNfts.length < lastImageNFtId)
+        ) {
             getMoreIds(20, walletAddress);
         }
-    }, [nfts, walletAddress]);
+    }, [interleavedNfts, walletAddress]);
 
     return (
         <div>
@@ -133,12 +186,15 @@ export default function Home() {
                     <h1 className="title has-text-centered">Owned NFTs</h1>
                     {walletAddress ? (
                         <InfiniteScroll
-                            dataLength={nfts.length}
+                            dataLength={interleavedNfts.length}
                             next={() => getMoreIds(increment, walletAddress)}
-                            hasMore={nfts.length < lastNFTId}
+                            hasMore={
+                                textNfts.length < lastTextNFTId ||
+                                imageNfts.length < lastImageNFtId
+                            }
                             loader={<h4>Loading...</h4>}
                             endMessage={
-                                lastNFTId === null ? (
+                                lastTextNFTId === null ? (
                                     <p style={{ textAlign: "center" }}>
                                         Loading...
                                     </p>
@@ -157,8 +213,8 @@ export default function Home() {
                                     justifyContent: "center",
                                 }}
                             >
-                                {filteredNfts.map((id) => (
-                                    <NFTCard id={id} key={id} />
+                                {filteredNfts.map(([type, id]) => (
+                                    <NFTCard id={id} key={id} type={type} />
                                 ))}
                             </div>
                         </InfiniteScroll>
