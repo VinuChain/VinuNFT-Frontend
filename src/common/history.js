@@ -289,6 +289,7 @@ const parseHistory = (events) => {
                     amount: event.args.amount.toNumber(), // Note the lack of _
                     transactionHash: event.transactionHash,
                     blockNumber: event.blockNumber,
+                    nftType: event.nftType,
                 });
                 break;
             case "TokenDelisted":
@@ -298,6 +299,7 @@ const parseHistory = (events) => {
                     seller: event.args._seller,
                     transactionHash: event.transactionHash,
                     blockNumber: event.blockNumber,
+                    nftType: event.nftType,
                 });
                 break;
             case "TransferSingle":
@@ -316,6 +318,7 @@ const parseHistory = (events) => {
                     operator: event.args.operator,
                     transactionHash: event.transactionHash,
                     blockNumber: event.blockNumber,
+                    nftType: event.nftType,
                 });
 
                 break;
@@ -333,6 +336,7 @@ const parseHistory = (events) => {
                     ).toString(),
                     transactionHash: event.transactionHash,
                     blockNumber: event.blockNumber,
+                    nftType: event.nftType,
                 });
 
                 break;

@@ -48,7 +48,7 @@ export default function NFTHistory({ history, hideId }) {
         <div>
             {[...history].reverse().map((event, index) => {
                 return (
-                    <div className="mb-4" id={index}>
+                    <div className="mb-4" id={index} key={index}>
                         {hideId ? (
                             <></>
                         ) : (
@@ -56,11 +56,14 @@ export default function NFTHistory({ history, hideId }) {
                                 {event.id ? (
                                     <tt className="is-size-5">
                                         <a
-                                            href={"/nft/?id=" + event.id}
+                                            href={`/nft/${event.nftType}?id=${event.id}`}
                                             style={{
                                                 textDecoration: "underline",
                                             }}
                                         >
+                                            {event.nftType == "image"
+                                                ? "IMAGE"
+                                                : "TEXT"}{" "}
                                             NFT #{event.id}
                                         </a>
                                     </tt>

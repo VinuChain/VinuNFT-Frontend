@@ -15,11 +15,6 @@ import { getAllEvents, parseHistory } from "../common/history";
 import NFTHistory from "../components/NFTHistory";
 
 export default function Activity() {
-    const zangAddress = config.contractAddresses.v1.text;
-    const zangABI = v1.text;
-    const marketplaceAddress = config.contractAddresses.v1.marketplace;
-    const marketplaceABI = v1.marketplace;
-
     const [events, setEvents] = useState(null);
 
     const [readProvider] = useReadProvider();
@@ -29,27 +24,53 @@ export default function Activity() {
             return;
         }
 
-        const nftContract = new ethers.Contract(
-            zangAddress,
-            zangABI,
+        const textNftContract = new ethers.Contract(
+            config.contractAddresses.v1.text,
+            v1.text,
             defaultReadProvider
         );
+
+        const imageNftContract = new ethers.Contract(
+            config.contractAddresses.v1.image,
+            v1.image,
+            defaultReadProvider
+        );
+
         const marketplaceContract = new ethers.Contract(
-            marketplaceAddress,
-            marketplaceABI,
+            config.contractAddresses.v1.marketplace,
+            v1.marketplace,
             defaultReadProvider
         );
         const firstNftBlock = config.firstBlocks.v1.text;
         const firstMarketplaceBlock = config.firstBlocks.v1.marketplace;
 
-        const events = await getAllEvents(
-            nftContract,
+        const textEvents = await getAllEvents(
+            textNftContract,
             marketplaceContract,
             firstNftBlock,
             firstMarketplaceBlock
         );
-        console.log("events", events);
-        setEvents(events);
+
+        const imageEvents = await getAllEvents(
+            imageNftContract,
+            marketplaceContract,
+            firstNftBlock,
+            firstMarketplaceBlock
+        );
+
+        const allEvents = [];
+
+        for (const event of textEvents) {
+            allEvents.push({ ...event, nftType: "text" });
+        }
+        for (const event of imageEvents) {
+            allEvents.push({ ...event, nftType: "image" });
+        }
+
+        allEvents.sort((a, b) => a.blockNumber - b.blockNumber);
+
+        console.log("events", allEvents);
+        setEvents(allEvents);
     };
 
     useEffect(async () => {
