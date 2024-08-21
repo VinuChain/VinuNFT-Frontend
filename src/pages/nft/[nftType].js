@@ -5,36 +5,36 @@ import {
     defaultReadProvider,
     useReadProvider,
     useWalletProvider,
-} from "../common/provider";
-import config from "../config";
+} from "../../common/provider";
+import config from "../../config";
 import { ethers } from "ethers";
-import { v1 } from "../common/abi";
+import { v1 } from "../../common/abi";
 import rehypeSanitize from "rehype-sanitize";
-import schemas from "../common/schemas";
+import schemas from "../../common/schemas";
 import * as queryString from "query-string";
 
 import MDEditor from "@uiw/react-md-editor";
-import HTMLViewer from "../components/HTMLViewer";
+import HTMLViewer from "../../components/HTMLViewer";
 import { navigate } from "gatsby-link";
 import { Helmet } from "react-helmet";
-import { Header } from "../components";
+import { Header } from "../../components";
 
 import "bulma/css/bulma.min.css";
-import "../styles/globals.css";
-import Listings from "../components/Listings";
-import TransferButton from "../components/TransferButton";
-import { useEns } from "../common/ens";
-import TypeTag from "../components/TypeTag";
-import BurnButton from "../components/BurnButton";
-import EditRoyaltyButton from "../components/EditRoyaltyButton";
+import "../../styles/globals.css";
+import Listings from "../../components/Listings";
+import TransferButton from "../../components/TransferButton";
+import { useEns } from "../../common/ens";
+import TypeTag from "../../components/TypeTag";
+import BurnButton from "../../components/BurnButton";
+import EditRoyaltyButton from "../../components/EditRoyaltyButton";
 import Decimal from "decimal.js";
 import {
     formatError,
     isTokenExistenceError,
     standardErrorState,
-} from "../common/error";
-import StandardErrorDisplay from "../components/StandardErrorDisplay";
-import NFTOwners from "../components/NFTOwners";
+} from "../../common/error";
+import StandardErrorDisplay from "../../components/StandardErrorDisplay";
+import NFTOwners from "../../components/NFTOwners";
 
 import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
@@ -45,20 +45,20 @@ import {
     computeBalances,
     parseHistory,
     getNftAuthor,
-} from "../common/history";
+} from "../../common/history";
 import {
     formatTokenAmount,
     parseTokenAmount,
     shortenAddress,
-} from "../common/utils";
-import NFTHistory from "../components/NFTHistory";
+} from "../../common/utils";
+import NFTHistory from "../../components/NFTHistory";
 
-import Address from "../components/Address";
+import Address from "../../components/Address";
 import {
     getTokenAllowances,
     tokenAddressToId,
     tokenAllowancesState,
-} from "../common/user";
+} from "../../common/user";
 
 const burnedIdsState = atom({
     key: "burnedIds",
@@ -78,7 +78,7 @@ const styles = {
     },
 };
 
-export default function NFTPage({ location }) {
+export default function NFTPage({ location, params }) {
     const [readProvider] = useReadProvider();
     const [walletProvider] = useWalletProvider();
     const marketplaceAddress = config.contractAddresses.v1.marketplace;
@@ -88,6 +88,8 @@ export default function NFTPage({ location }) {
     const id = parsedQuery ? parseInt(parsedQuery.id) : null;
 
     const macroNftType = parsedQuery?.type || "zang";
+
+    console.log(params);
 
     const nftAddress = config.contractAddresses.v1[macroNftType];
     const nftABI = v1[macroNftType];
