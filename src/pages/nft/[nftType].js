@@ -87,9 +87,7 @@ export default function NFTPage({ location, params }) {
     const parsedQuery = queryString.parse(location.search);
     const id = parsedQuery ? parseInt(parsedQuery.id) : null;
 
-    const macroNftType = parsedQuery?.type || "text";
-
-    console.log(params);
+    const macroNftType = params.nftType;
 
     const nftAddress = config.contractAddresses.v1[macroNftType];
     const nftABI = v1[macroNftType];
@@ -362,9 +360,9 @@ export default function NFTPage({ location, params }) {
 
     const changeId = (right) => () => {
         if (right) {
-            navigate("/nft?id=" + nextValidId);
+            navigate(`/nft/${macroNftType}?id=${nextValidId}`);
         } else {
-            navigate("/nft?id=" + prevValidId);
+            navigate(`/nft/${macroNftType}?id=${prevValidId}`);
         }
     };
 

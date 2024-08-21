@@ -7,7 +7,7 @@ import { v1 } from "./abi";
 import Decimal from "decimal.js";
 import { uploadFileToIpfs, uploadJSONToIpfs } from "./ipfs";
 
-async function getContentFunction(setStandardError) {
+async function getContentFunction(subPath, setStandardError) {
     function contentFunction(status, transaction, success, receipt) {
         if (status !== "success") {
             return null;
@@ -26,7 +26,7 @@ async function getContentFunction(setStandardError) {
                         <p>
                             <RoutingLink
                                 className="is-underlined"
-                                href={"/nft?id=" + tokenId}
+                                href={`$/nft/${subPath}?id=${tokenId}`}
                             >
                                 NFT #{tokenId}
                             </RoutingLink>{" "}
@@ -82,7 +82,7 @@ async function mintImageNft(
     );
     const contractWithSigner = contract.connect(walletProvider.getSigner());
 
-    const contentFunction = await getContentFunction(setStandardError);
+    const contentFunction = await getContentFunction("image", setStandardError);
 
     async function transactionFunction() {
         return await contractWithSigner.mint(
@@ -129,7 +129,7 @@ async function mintTextNft(
     );
     const contractWithSigner = contract.connect(walletProvider.getSigner());
 
-    const contentFunction = await getContentFunction(setStandardError);
+    const contentFunction = await getContentFunction("text", setStandardError);
 
     async function transactionFunction() {
         return await contractWithSigner.mint(
