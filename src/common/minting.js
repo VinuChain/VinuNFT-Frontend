@@ -26,7 +26,7 @@ async function getContentFunction(subPath, setStandardError) {
                         <p>
                             <RoutingLink
                                 className="is-underlined"
-                                href={`$/nft/${subPath}?id=${tokenId}`}
+                                href={`/nft/${subPath}?id=${tokenId}`}
                             >
                                 NFT #{tokenId}
                             </RoutingLink>{" "}
