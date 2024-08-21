@@ -214,7 +214,11 @@ export default function Home() {
                                 }}
                             >
                                 {filteredNfts.map(([type, id]) => (
-                                    <NFTCard id={id} key={id} type={type} />
+                                    <NFTCard
+                                        id={id}
+                                        key={type + "-" + id}
+                                        type={type}
+                                    />
                                 ))}
                             </div>
                         </InfiniteScroll>
