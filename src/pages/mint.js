@@ -1,15 +1,12 @@
 import React, { useState } from "react";
-import { ethers } from "ethers";
-import { v1 } from "../common/abi";
 import config from "../config";
 import { ensProvider, useWalletProvider } from "../common/provider";
 import "@uiw/react-md-editor/markdown-editor.css";
 import "@uiw/react-markdown-preview/markdown.css";
-import Decimal from "decimal.js";
 import { useForm } from "react-hook-form";
 import { joiResolver } from "@hookform/resolvers/joi";
 import { schemas } from "../common";
-import { MintConfirmModal, MultiEditor, RoutingLink } from "../components";
+import { MintConfirmModal, MultiEditor } from "../components";
 import { Header } from "../components";
 import { Helmet } from "react-helmet";
 
@@ -20,13 +17,15 @@ import { useRecoilState } from "recoil";
 import { standardErrorState } from "../common/error";
 import StandardErrorDisplay from "../components/StandardErrorDisplay";
 import ValidatedInput from "../components/ValidatedInput";
-import ViewOnExplorer from "../components/ViewOnExplorer";
+import { mintNft } from "../common/minting";
+
+const allowedFileTypes = ["JPG", "PNG", "GIF"];
 
 const defaultValues = {
     editionSize: 1,
     royaltyPercentage: 10,
     useCustomRecipient: false,
-    textType: "text/plain",
+    dataType: "text/plain",
 };
 
 export default function Mint() {
@@ -48,9 +47,10 @@ export default function Mint() {
         "useCustomRecipient",
         defaultValues.useCustomRecipient
     );
-    const watchTextType = watch("textType", defaultValues.textType);
+    const watchDataType = watch("dataType", defaultValues.dataType);
     const handleTransaction = useTransactionHelper();
     const [, setStandardError] = useRecoilState(standardErrorState);
+    const [file, setFile] = useState(null);
 
     const executeTransaction = (mintConfirmed) => async (data) => {
         if (!walletProvider) {
@@ -58,9 +58,12 @@ export default function Mint() {
             return;
         }
         // Add non-React Hook Form fields
-        data = { ...data, text };
+        data = { ...data, text, image: file };
 
-        if (!(data.title && data.description && data.text) && !mintConfirmed) {
+        if (
+            !(data.title && data.description && (data.text || data.image)) &&
+            !mintConfirmed
+        ) {
             // Open the confirm modal (if it's not already open)
             if (!confirmModalOpen) {
                 setConfirmModalOpen(true);
@@ -68,122 +71,19 @@ export default function Mint() {
             return;
         }
 
-        const isUTF8 = () => {
-            return [...data.text].some((char) => char.charCodeAt(0) > 127);
-        };
-
         setStandardError(null);
 
-        const uri =
-            "data:" +
-            data.textType +
-            (isUTF8() && data.textType === "text/plain"
-                ? ",charset=UTF-8"
-                : "") +
-            "," +
-            encodeURIComponent(data.text);
+        //await uploadToIpfs(file);
 
-        const contractAddress = config.contractAddresses.v1.zang;
+        console.log(file);
 
-        const contract = new ethers.Contract(
-            contractAddress,
-            v1.zang,
-            walletProvider
+        await mintNft(
+            data,
+            walletProvider,
+            ensProvider,
+            handleTransaction,
+            setStandardError
         );
-        const contractWithSigner = contract.connect(walletProvider.getSigner());
-
-        const effectiveRoyaltyPercentage = new Decimal(data.royaltyPercentage)
-            .mul("100")
-            .toNumber();
-
-        let effectiveRoyaltyRecipient = null;
-
-        if (data.useCustomRecipient) {
-            effectiveRoyaltyRecipient = data.customRecipient;
-
-            if (effectiveRoyaltyRecipient.includes(".eth")) {
-                let resolvedAddress = null;
-                try {
-                    resolvedAddress = await ensProvider.resolveName(
-                        effectiveRoyaltyRecipient
-                    );
-                } catch (e) {
-                    setStandardError(
-                        'Invalid custom recipient address: "' + e.message + '".'
-                    );
-                    return;
-                }
-
-                if (resolvedAddress) {
-                    effectiveRoyaltyRecipient = resolvedAddress;
-                } else {
-                    setStandardError("Could not resolve ENS name.");
-                    return;
-                }
-            }
-        } else {
-            try {
-                effectiveRoyaltyRecipient = await walletProvider
-                    .getSigner()
-                    .getAddress();
-            } catch (e) {
-                setStandardError(
-                    'Could not retrieve wallet address: "' + e.message + '".'
-                );
-                return;
-            }
-        }
-        const contentFunction = (status, transaction, success, receipt) => {
-            console.log("Calling content function");
-            if (status !== "success") {
-                return null;
-            }
-
-            if (success && receipt && receipt.blockNumber) {
-                const matchingEvents = receipt.events.filter(
-                    (event) =>
-                        event.event === "TransferSingle" &&
-                        event.args.from === ethers.constants.AddressZero
-                );
-                if (matchingEvents.length === 1) {
-                    const tokenId = matchingEvents[0].args[3].toString();
-                    return (
-                        <div>
-                            <p>
-                                <RoutingLink
-                                    className="is-underlined"
-                                    href={"/nft?id=" + tokenId}
-                                >
-                                    NFT #{tokenId}
-                                </RoutingLink>{" "}
-                                minted
-                            </p>
-                            <p>
-                                <ViewOnExplorer hash={transaction.hash} />
-                            </p>
-                        </div>
-                    );
-                } else {
-                    setStandardError(
-                        "Could not find token ID in transaction receipt."
-                    );
-                    return;
-                }
-            }
-        };
-
-        const transactionFunction = async () =>
-            await contractWithSigner.mint(
-                uri,
-                data.title,
-                data.description,
-                data.editionSize,
-                effectiveRoyaltyPercentage,
-                effectiveRoyaltyRecipient,
-                0
-            );
-
-        handleTransaction(transactionFunction, "Mint", contentFunction);
     };
 
     return (
@@ -223,7 +123,8 @@ export default function Mint() {
                         </label>
                         <div className="control">
                             <div className="select">
-                                <select {...register("textType")} id="content">
+                                <select {...register("dataType")} id="content">
+                                    <option value="image">Image</option>
                                     <option value="text/plain">
                                         Plain Text
                                     </option>
@@ -235,11 +136,22 @@ export default function Mint() {
                             </div>
                         </div>
                         <div className="control mt-3">
-                            <MultiEditor
-                                textType={watchTextType}
-                                value={text}
-                                setValue={setText}
-                            />
+                            {watchDataType === "image" ? (
+                                <div className="box has-text-centered">
+                                    <input
+                                        type="file"
+                                        onChange={(e) =>
+                                            setFile(e.target.files[0])
+                                        }
+                                    />
+                                </div>
+                            ) : (
+                                <MultiEditor
+                                    dataType={watchDataType}
+                                    value={text}
+                                    setValue={setText}
+                                />
+                            )}
                         </div>
                         <ValidatedInput
                             label="Royalty percentage"

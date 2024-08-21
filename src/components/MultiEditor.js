@@ -16,8 +16,8 @@ const styles = {
     },
 };
 
-export default function MultiEditor({ textType, value, setValue }) {
-    switch (textType) {
+export default function MultiEditor({ dataType, value, setValue }) {
+    switch (dataType) {
         case "text/markdown":
             return (
                 <div>
