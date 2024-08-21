@@ -149,7 +149,7 @@ export default function NFTCard({ id, type }) {
         <div
             className="card m-3 cursor-pointer"
             style={styles.card}
-            onClick={() => navigate(`/nft/${type}?id=${id}`)} // TODO: Use the NFT type
+            onClick={() => navigate(`/nft/${type}?id=${id}`)}
         >
             <div style={styles.cardPreview}>
                 {type === "image" ? (
