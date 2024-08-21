@@ -210,7 +210,10 @@ export default function NFTCard({ id, type }) {
                     )}
                 </div>
                 <div className="has-text-right">
-                    <TypeTag type={tokenData?.text_uri} isUri={true} />
+                    <TypeTag
+                        type={type === "image" ? "image" : tokenData?.text_uri}
+                        isUri={true}
+                    />
                 </div>
             </div>
         </div>

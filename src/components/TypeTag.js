@@ -5,7 +5,7 @@ export default function TypeTag({ type, isUri }) {
         return <></>;
     }
 
-    if (isUri) {
+    if (isUri && type.includes("text")) {
         type = type.split(",")[0].split(":")[1];
     }
 
