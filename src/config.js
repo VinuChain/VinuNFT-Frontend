@@ -1,14 +1,14 @@
 const config = {
     contractAddresses: {
         v1: {
-            zang: "0xdCaDd503b7b444F5196d1B63A383a24ADAd4A42e",
+            text: "0xdCaDd503b7b444F5196d1B63A383a24ADAd4A42e",
             marketplace: "0xF38778F9611F37b339410A55F9Df2940d9d6cBC7",
             image: "0xe476220Ea758Da1aA5C396352A54578BB08C9b4F",
         },
     },
     firstBlocks: {
         v1: {
-            zang: 467700,
+            text: 467700,
             marketplace: 467700,
             iamge: 467700,
         },

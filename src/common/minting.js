@@ -120,11 +120,11 @@ async function mintTextNft(
         "," +
         encodeURIComponent(text);
 
-    const contractAddress = config.contractAddresses.v1.zang;
+    const contractAddress = config.contractAddresses.v1.text;
 
     const contract = new ethers.Contract(
         contractAddress,
-        v1.zang,
+        v1.text,
         walletProvider
     );
     const contractWithSigner = contract.connect(walletProvider.getSigner());

@@ -17,8 +17,8 @@ export default function TransferButton({
     availableAmount,
     onUpdate,
 }) {
-    const zangAddress = config.contractAddresses.v1.zang;
-    const zangABI = v1.zang;
+    const zangAddress = config.contractAddresses.v1.text;
+    const zangABI = v1.text;
 
     const [walletProvider, setWalletProvider] = useWalletProvider();
 

@@ -52,8 +52,8 @@ export default function Home() {
     }, [walletProvider]);
 
     useEffect(async () => {
-        const contractAddress = config.contractAddresses.v1.zang;
-        const contractABI = v1.zang;
+        const contractAddress = config.contractAddresses.v1.text;
+        const contractABI = v1.text;
         const contract = new ethers.Contract(
             contractAddress,
             contractABI,
@@ -69,8 +69,8 @@ export default function Home() {
     }, []);
 
     const updateNftToBalance = async (nftId, address) => {
-        const contractAddress = config.contractAddresses.v1.zang;
-        const contractABI = v1.zang;
+        const contractAddress = config.contractAddresses.v1.text;
+        const contractABI = v1.text;
         const contract = new ethers.Contract(
             contractAddress,
             contractABI,

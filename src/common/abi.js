@@ -1,9 +1,9 @@
-import ZangNFT from "../abis/ZangNFT.json";
+import TextNFT from "../abis/TextNFT.json";
 import ImageNFT from "../abis/ImageNFT.json";
 import Marketplace from "../abis/Marketplace.json";
 
 const v1 = {
-    zang: ZangNFT.abi,
+    text: TextNFT.abi,
     marketplace: Marketplace.abi,
     image: ImageNFT.abi,
 };

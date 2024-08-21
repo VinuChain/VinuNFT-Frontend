@@ -24,8 +24,8 @@ export default function Home() {
     const increment = 5;
 
     useEffect(async () => {
-        const contractAddress = config.contractAddresses.v1.zang;
-        const contractABI = v1.zang;
+        const contractAddress = config.contractAddresses.v1.text;
+        const contractABI = v1.text;
         const contract = new ethers.Contract(
             contractAddress,
             contractABI,
@@ -58,7 +58,7 @@ export default function Home() {
     return (
         <div>
             <Helmet>
-                <title>zang</title>
+                <title>text</title>
             </Helmet>
             <Header />
             <StandardErrorDisplay />

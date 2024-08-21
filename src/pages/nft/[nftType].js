@@ -87,7 +87,7 @@ export default function NFTPage({ location, params }) {
     const parsedQuery = queryString.parse(location.search);
     const id = parsedQuery ? parseInt(parsedQuery.id) : null;
 
-    const macroNftType = parsedQuery?.type || "zang";
+    const macroNftType = parsedQuery?.type || "text";
 
     console.log(params);
 
@@ -143,7 +143,7 @@ export default function NFTPage({ location, params }) {
             marketplaceABI,
             defaultReadProvider
         );
-        const firstZangBlock = config.firstBlocks.v1.zang;
+        const firstTextBlock = config.firstBlocks.v1.text;
         const firstMarketplaceBlock = config.firstBlocks.v1.marketplace;
 
         const events = await getEvents(
@@ -151,7 +151,7 @@ export default function NFTPage({ location, params }) {
             nftContract,
             marketplaceContract,
             author,
-            firstZangBlock,
+            firstTextBlock,
             firstMarketplaceBlock
         );
         console.log("Find events", events, id, author);
@@ -337,7 +337,7 @@ export default function NFTPage({ location, params }) {
                 nftContract,
                 marketplaceContract,
                 null,
-                config.firstBlocks.v1.zang,
+                config.firstBlocks.v1.text,
                 config.firstBlocks.v1.marketplace
             );
 

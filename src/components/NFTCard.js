@@ -56,8 +56,8 @@ export default function NFTCard({ id }) {
     const [exists, setExists] = useState(true);
     const [_, setStandardError] = useRecoilState(standardErrorState);
 
-    const contractAddress = config.contractAddresses.v1.zang;
-    const contractABI = v1.zang;
+    const contractAddress = config.contractAddresses.v1.text;
+    const contractABI = v1.text;
 
     const queryTokenURI = async () => {
         if (!id || !readProvider) return;

@@ -15,8 +15,8 @@ import { getAllEvents, parseHistory } from "../common/history";
 import NFTHistory from "../components/NFTHistory";
 
 export default function Activity() {
-    const zangAddress = config.contractAddresses.v1.zang;
-    const zangABI = v1.zang;
+    const zangAddress = config.contractAddresses.v1.text;
+    const zangABI = v1.text;
     const marketplaceAddress = config.contractAddresses.v1.marketplace;
     const marketplaceABI = v1.marketplace;
 
@@ -29,7 +29,7 @@ export default function Activity() {
             return;
         }
 
-        const zangContract = new ethers.Contract(
+        const nftContract = new ethers.Contract(
             zangAddress,
             zangABI,
             defaultReadProvider
@@ -39,13 +39,13 @@ export default function Activity() {
             marketplaceABI,
             defaultReadProvider
         );
-        const firstZangBlock = config.firstBlocks.v1.zang;
+        const firstNftBlock = config.firstBlocks.v1.text;
         const firstMarketplaceBlock = config.firstBlocks.v1.marketplace;
 
         const events = await getAllEvents(
-            zangContract,
+            nftContract,
             marketplaceContract,
-            firstZangBlock,
+            firstNftBlock,
             firstMarketplaceBlock
         );
         console.log("events", events);
