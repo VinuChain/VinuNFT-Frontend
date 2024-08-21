@@ -18,7 +18,8 @@ export default function Home() {
     const [readProvider] = useReadProvider();
     const [lastTextNFTId, setLastTextNFTId] = useState(null);
     const [lastImageNFtId, setLastImageNFTId] = useState(null);
-    const [nfts, setNFTs] = useState([]);
+    const [textNfts, setTextNFTs] = useState([]);
+    const [imageNfts, setImageNFTs] = useState([]);
 
     const [, setStandardError] = useRecoilState(standardErrorState);
 
@@ -47,21 +48,35 @@ export default function Home() {
     }, []);
 
     const getMoreIds = (count) => {
-        const newNFTs = [...nfts];
+        const newTextNfts = [...textNfts];
+        const newImageNfts = [...imageNfts];
 
         for (let i = 0; i < count; i++) {
-            const newTextNftId = lastTextNFTId - newNFTs.length;
+            // TODO: This is incorrect
+            const newTextNftId = lastTextNFTId - newTextNfts.length;
             if (newTextNftId >= 1) {
-                newNFTs.push({ type: "text", id: newTextNftId });
+                newTextNfts.push(newTextNftId);
             }
-            const newImageNftId = lastImageNFtId - newNFTs.length;
+            const newImageNftId = lastImageNFtId - newImageNfts.length;
             if (newImageNftId >= 1) {
-                newNFTs.push({ type: "image", id: newImageNftId });
+                newImageNfts.push(newImageNftId);
             }
         }
 
-        setNFTs(newNFTs);
+        setTextNFTs(newTextNfts);
+        setImageNFTs(newImageNfts);
     };
+
+    const interleavedNfts = [];
+
+    for (let i = 0; i < Math.max(textNfts.length, imageNfts.length); i++) {
+        if (i < textNfts.length) {
+            interleavedNfts.push({ type: "text", id: textNfts[i] });
+        }
+        if (i < imageNfts.length) {
+            interleavedNfts.push({ type: "image", id: imageNfts[i] });
+        }
+    }
 
     useEffect(() => getMoreIds(20), [lastTextNFTId, lastImageNFtId]);
 
@@ -76,9 +91,12 @@ export default function Home() {
                 <div className="column">
                     <h1 className="title has-text-centered">Latest NFTs</h1>
                     <InfiniteScroll
-                        dataLength={nfts.length}
+                        dataLength={interleavedNfts.length}
                         next={() => getMoreIds(increment)}
-                        hasMore={nfts.length < lastTextNFTId}
+                        hasMore={
+                            textNfts.length < lastTextNFTId ||
+                            imageNfts.length < lastImageNFtId
+                        }
                         loader={<h4>Loading...</h4>}
                         endMessage={
                             lastTextNFTId === null ? (
@@ -100,7 +118,7 @@ export default function Home() {
                                 justifyContent: "center",
                             }}
                         >
-                            {nfts.map(({ id, type }) => (
+                            {interleavedNfts.map(({ id, type }) => (
                                 <NFTCard
                                     id={id}
                                     type={type}
