@@ -35,7 +35,7 @@
         $functionSelector = substr($encodedSignature, 0, 8);
         $id =  $_GET["id"];
 
-        echo '<meta name="og:url" content="#POST_BASE_URL#/nft?id=' . $id . '" />';
+        echo '<meta name="og:url" content="#POST_BASE_URL#/nft/text?id=' . $id . '" />';
 
         $hexId = dechex((float)$id);
 

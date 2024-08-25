@@ -169,26 +169,6 @@ export default function WalletButton() {
                 className="is-flex is-align-items-center is-justify-content-center has-background-white-ter"
                 style={{ borderRadius: "4px", padding: "2px" }}
             >
-                <div
-                    className="is-flex is-align-items-center has-text-black"
-                    style={{ height: "40px" }}
-                >
-                    <span>
-                        {balance && chainId === config.networks.main.chainId ? (
-                            <div className="p-2">
-                                {parseFloat(balance).toFixed(4)}{" "}
-                                <object
-                                    className="matic-6"
-                                    type="image/svg+xml"
-                                    data="https://zang.gallery/matic_logo.svg"
-                                    aria-label="Matic"
-                                />
-                            </div>
-                        ) : (
-                            ""
-                        )}
-                    </span>
-                </div>
                 <a
                     className="button has-background-white has-text-black m-0"
                     style={styles.walletButton}
@@ -213,16 +193,6 @@ export default function WalletButton() {
                     )}
                 </a>
             </div>
-            {balance ? (
-                <p className="is-size-7">
-                    Need more?{" "}
-                    <RoutingLink href="/bridge">
-                        <u>Bridge</u>
-                    </RoutingLink>
-                </p>
-            ) : (
-                <></>
-            )}
         </div>
     );
 }

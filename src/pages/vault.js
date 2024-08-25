@@ -177,7 +177,7 @@ export default function Home() {
     return (
         <div>
             <Helmet>
-                <title>Vault - zang</title>
+                <title>Vault - VinuNFT</title>
             </Helmet>
             <Header />
             <StandardErrorDisplay />

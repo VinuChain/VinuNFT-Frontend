@@ -623,7 +623,9 @@ export default function NFTPage({ location, params }) {
         <div>
             <Helmet>
                 <title>
-                    {id !== undefined && id !== null ? `#${id} - zang` : "zang"}
+                    {id !== undefined && id !== null
+                        ? `#${id} - VinuNFT`
+                        : "VinuNFT"}
                 </title>
             </Helmet>
             <Header />

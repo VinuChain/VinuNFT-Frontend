@@ -25,7 +25,7 @@ const defaultValues = {
     editionSize: 1,
     royaltyPercentage: 10,
     useCustomRecipient: false,
-    dataType: "text/plain",
+    dataType: "image",
 };
 
 export default function Mint() {
@@ -94,7 +94,7 @@ export default function Mint() {
     return (
         <div>
             <Helmet>
-                <title>Mint - zang</title>
+                <title>Mint - VinuNFT</title>
             </Helmet>
             <Header />
             <StandardErrorDisplay />
@@ -191,15 +191,6 @@ export default function Mint() {
                         ) : (
                             <></>
                         )}
-                        <div className="notification is-danger">
-                            <p>
-                                <strong>Important</strong>: zang.gallery
-                                currently uses{" "}
-                                <strong>{config.networks.main.name}</strong>.
-                                Make sure that you're signing a transaction on
-                                the {config.networks.main.name} network!
-                            </p>
-                        </div>
                         {walletProvider ? (
                             transactionState.status === "noTransaction" ||
                             transactionState.status === "error" ? (

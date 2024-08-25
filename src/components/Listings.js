@@ -83,6 +83,11 @@ export default function Listings({
                                     <Listing
                                         price={listing.price}
                                         amount={listing.amount}
+                                        paymentToken={
+                                            tokenAddressToId[
+                                                listing.paymentToken
+                                            ]
+                                        }
                                     >
                                         <div
                                             className="is-flex is-justify-content-center mt-2"
@@ -152,6 +157,11 @@ export default function Listings({
                                             <Listing
                                                 price={listing.price}
                                                 amount={listing.amount}
+                                                paymentToken={
+                                                    tokenAddressToId[
+                                                        listing.paymentToken
+                                                    ]
+                                                }
                                             >
                                                 {walletProvider ? (
                                                     <BuyButton

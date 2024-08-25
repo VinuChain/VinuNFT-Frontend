@@ -143,12 +143,7 @@ export default function BuyModal({
                     {total() && errors.amount === undefined ? (
                         <p>
                             Total: {total()}{" "}
-                            <object
-                                className="matic-6"
-                                type="image/svg+xml"
-                                data="https://zang.gallery/matic_logo.svg"
-                                aria-label="Matic"
-                            />
+                            {config.tokens[paymentToken].symbol}
                         </p>
                     ) : (
                         <p>Total: </p>

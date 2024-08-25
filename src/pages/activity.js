@@ -85,7 +85,7 @@ export default function Activity() {
                     className="px-6 is-flex is-flex-direction-column is-justify-content-center"
                     style={{ maxWidth: "100ch", minWidth: "50vw" }}
                 >
-                    <h1 className="title has-text-centered">Recent activity</h1>
+                    <h1 className="title has-text-centered">Recent Activity</h1>
                     <NFTHistory history={parseHistory(events)} />
                 </div>
             </div>

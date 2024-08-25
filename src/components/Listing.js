@@ -1,6 +1,7 @@
+import config from "../config";
 import React from "react";
 
-export default function Listing({ price, amount, children }) {
+export default function Listing({ price, amount, children, paymentToken }) {
     return (
         <div className="mt-4 is-flex is-flex-direction-column is-align-items-center">
             <div
@@ -9,19 +10,13 @@ export default function Listing({ price, amount, children }) {
             >
                 <div className="has-text-centered">
                     <p className="is-size-7">LIST PRICE</p>
-                    <p className="is-size-3">
-                        {price}{" "}
-                        <object
-                            className="matic-3"
-                            type="image/svg+xml"
-                            data="https://zang.gallery/matic_logo.svg"
-                            aria-label="Matic"
-                        />
+                    <p className="is-size-5">
+                        {price} {config.tokens[paymentToken].symbol}
                     </p>
                 </div>
                 <div className="has-text-centered">
                     <p className="is-size-7">LIST AMOUNT</p>
-                    <p className="is-size-3">{amount}</p>
+                    <p className="is-size-5">{amount}</p>
                 </div>
             </div>
             {children}

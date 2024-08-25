@@ -18,7 +18,7 @@ export default function TransactionNotifications() {
             pauseOnHover: false,
             progress: undefined,
             closeButton: (
-                <p>
+                <p onClick={() => toast.dismiss(transactionId)}>
                     <span onClick={() => toast.dismiss(transactionId)}>
                         <FontAwesomeIcon icon={faTimes} />
                     </span>

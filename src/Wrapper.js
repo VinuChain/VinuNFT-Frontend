@@ -10,7 +10,7 @@ export default function Wrapper({ children, props }) {
             <Helmet>
                 <meta charSet="utf-8" />
                 <meta name="icon" href="/public/favicon.ico" />
-                <meta name="keywords" content="zang, text, NFTs, on-chain" />
+                <meta name="keywords" content="vinu, text, NFTs, on-chain" />
             </Helmet>
             {process.env.NODE_ENV !== "development" ? (
                 <Helmet>
@@ -28,28 +28,22 @@ export default function Wrapper({ children, props }) {
                 <div className="columns">
                     <div className="column has-text-centered">
                         <p>
-                            <a href="mailto:team@zang.gallery">
-                                <u>team@zang.gallery</u>
+                            <a href="mailto:hello@vitainu.org">
+                                <u>hello@vitainu.org</u>
                             </a>
                         </p>
                         <p>Platform fee: 5%</p>
                     </div>
                     <div className="column has-text-centered">
-                        <a
-                            href="https://twitter.com/zanggallery"
-                            target="_blank"
-                        >
+                        <a href="https://x.com/vitainucoin" target="_blank">
                             <u>Twitter</u>
                         </a>
                         <br />
-                        <a
-                            href="https://github.com/zanggallery"
-                            target="_blank"
-                        >
+                        <a href="https://github.com/Vita-Inu" target="_blank">
                             <u>Github</u>
                         </a>
                         <br />
-                        <a href="https://discord.gg/jnpCz9R3gf" target="_blank">
+                        <a href="https://discord.gg/vinu" target="_blank">
                             <u>Discord</u>
                         </a>
                     </div>

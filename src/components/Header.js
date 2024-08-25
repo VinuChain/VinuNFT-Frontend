@@ -4,6 +4,9 @@ import { RoutingLink, WalletButton } from ".";
 import { useWalletProvider } from "../common/provider";
 import config from "../config";
 
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faHome } from "@fortawesome/free-solid-svg-icons";
+
 export default function Header() {
     const [isActive, setActive] = useState(false);
     const [walletProvider, setWalletProvider] = useWalletProvider();
@@ -64,7 +67,7 @@ export default function Header() {
                 <div className="navbar-brand">
                     <RoutingLink className="navbar-item" href=".">
                         <h1 className="title pb-1" style={{ height: "4rem" }}>
-                            {".zang{"}
+                            VinuNFT
                         </h1>
                     </RoutingLink>
 

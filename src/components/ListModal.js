@@ -75,6 +75,7 @@ export default function ListModal({
     });
 
     const watchAmount = watch("amount");
+    const watchPaymentToken = watch("paymentToken");
 
     const closeModal = (data) => {
         setIsOpen(false);
@@ -201,7 +202,7 @@ export default function ListModal({
                         </select>
                     </label>
                     <ValidatedInput
-                        label="Price (MATIC)"
+                        label={`Price (${config.tokens[watchPaymentToken]?.symbol})`}
                         name="price"
                         type="number"
                         step="0.1"

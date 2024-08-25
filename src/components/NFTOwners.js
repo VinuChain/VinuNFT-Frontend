@@ -14,13 +14,13 @@ export default function NFTOwners({ balances }) {
                         <div key={index}>
                             <p className="is-size-6">
                                 {balances[owner]} <span>×</span>{" "}
-                                <tt>
+                                <span>
                                     <Address
                                         address={owner}
                                         shorten
                                         nChar={8}
                                     />
-                                </tt>
+                                </span>
                             </p>
                         </div>
                     );
