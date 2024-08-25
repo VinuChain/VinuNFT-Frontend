@@ -798,6 +798,9 @@ export default function NFTPage({ location, params }) {
                                                 )}
                                                 <div className="is-flex is-justify-content-center">
                                                     <TransferButton
+                                                        nftContract={
+                                                            nftContract
+                                                        }
                                                         id={id}
                                                         walletAddress={
                                                             walletAddress

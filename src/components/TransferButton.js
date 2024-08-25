@@ -1,7 +1,4 @@
 import React, { useState } from "react";
-import { ethers } from "ethers";
-import { v1 } from "../common/abi";
-import config from "../config";
 
 import { useWalletProvider, ensProvider } from "../common/provider";
 
@@ -11,15 +8,13 @@ import { useRecoilState } from "recoil";
 import { standardErrorState } from "../common/error";
 
 export default function TransferButton({
+    nftContract,
     id,
     walletAddress,
     balance,
     availableAmount,
     onUpdate,
 }) {
-    const zangAddress = config.contractAddresses.v1.text;
-    const zangABI = v1.text;
-
     const [walletProvider, setWalletProvider] = useWalletProvider();
 
     const handleTransaction = useTransactionHelper();
@@ -54,12 +49,9 @@ export default function TransferButton({
             to = ensProvider.resolveName(to);
         }
 
-        const contract = new ethers.Contract(
-            zangAddress,
-            zangABI,
-            walletProvider
+        const contractWithSigner = nftContract.connect(
+            walletProvider.getSigner()
         );
-        const contractWithSigner = contract.connect(walletProvider.getSigner());
 
         const transactionFunction = async () =>
             await contractWithSigner.safeTransferFrom(
