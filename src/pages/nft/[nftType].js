@@ -89,7 +89,6 @@ export default function NFTPage({ location, params }) {
 
     const nftAddress = config.contractAddresses.v1[macroNftType];
     const nftABI = v1[macroNftType];
-    const nftContract = new ethers.Contract(nftAddress, nftABI, readProvider);
 
     const marketplaceContract = new ethers.Contract(
         marketplaceAddress,
@@ -141,6 +140,11 @@ export default function NFTPage({ location, params }) {
         );
         const firstTextBlock = config.firstBlocks.v1.text;
         const firstMarketplaceBlock = config.firstBlocks.v1.marketplace;
+        const nftContract = new ethers.Contract(
+            nftAddress,
+            nftABI,
+            readProvider
+        );
 
         const events = await getEvents(
             id,
@@ -166,6 +170,11 @@ export default function NFTPage({ location, params }) {
                 prevId--;
             } else {
                 try {
+                    const nftContract = new ethers.Contract(
+                        nftAddress,
+                        nftABI,
+                        readProvider
+                    );
                     isValid = await nftContract.exists(prevId);
                 } catch (e) {
                     console.log(e);
@@ -190,6 +199,11 @@ export default function NFTPage({ location, params }) {
     };
 
     const queryLastNFTId = async () => {
+        const nftContract = new ethers.Contract(
+            nftAddress,
+            nftABI,
+            readProvider
+        );
         try {
             const newLastNFTId = await nftContract.lastTokenId();
             setLastNFTId(newLastNFTId.toNumber());
@@ -219,6 +233,11 @@ export default function NFTPage({ location, params }) {
             if (burnedIds.includes(nextId)) {
                 nextId++;
             } else {
+                const nftContract = new ethers.Contract(
+                    nftAddress,
+                    nftABI,
+                    readProvider
+                );
                 try {
                     isValid = await nftContract.exists(nextId);
                 } catch (e) {
@@ -246,6 +265,11 @@ export default function NFTPage({ location, params }) {
     const queryTokenURI = async () => {
         if (!id || !readProvider) return;
 
+        const nftContract = new ethers.Contract(
+            nftAddress,
+            nftABI,
+            readProvider
+        );
         try {
             const tURI = await nftContract.uri(id);
             return tURI;
@@ -262,6 +286,11 @@ export default function NFTPage({ location, params }) {
     const queryTokenAuthor = async () => {
         if (!id || !readProvider) return;
 
+        const nftContract = new ethers.Contract(
+            nftAddress,
+            nftABI,
+            readProvider
+        );
         try {
             const author = await getNftAuthor(nftContract, id);
             setTokenAuthor(author);
@@ -310,6 +339,11 @@ export default function NFTPage({ location, params }) {
     const queryRoyaltyInfo = async () => {
         if (!id || !readProvider) return;
 
+        const nftContract = new ethers.Contract(
+            nftAddress,
+            nftABI,
+            readProvider
+        );
         try {
             let [recipient, amount] = await nftContract.royaltyInfo(id, 10000);
             console.log("Royalty info:", recipient, amount);
@@ -327,6 +361,11 @@ export default function NFTPage({ location, params }) {
     const queryTotalSupply = async () => {
         if (!id || !readProvider) return;
 
+        const nftContract = new ethers.Contract(
+            nftAddress,
+            nftABI,
+            readProvider
+        );
         try {
             const events = await getEvents(
                 id,
@@ -370,54 +409,64 @@ export default function NFTPage({ location, params }) {
         }
     }, [id]);
 
-    useEffect(async () => {
-        if (walletProvider) {
-            try {
-                setWalletAddress(await walletProvider.getSigner().getAddress());
-            } catch (e) {
-                setStandardError(formatError(e));
+    useEffect(() => {
+        async function queryWalletAddress() {
+            if (walletProvider) {
+                try {
+                    setWalletAddress(
+                        await walletProvider.getSigner().getAddress()
+                    );
+                } catch (e) {
+                    setStandardError(formatError(e));
+                }
             }
         }
+        queryWalletAddress();
     }, [walletProvider]);
 
     useEffect(() => {
         setStandardError(null);
     }, [id]);
 
-    useEffect(async () => {
-        setExists(true);
-        setTokenData(null);
-        setTokenContent(null);
-        setTokenType(null);
-        setTokenAuthor(null);
-        setRoyaltyInfo(null);
-        setTotalSupply(null);
-        setPrevValidId(null);
-        setNextValidId(null);
-        setListings(null);
-        setListingSellerBalances({});
-        setEvents(null);
+    useEffect(() => {
+        async function resetInfo() {
+            setExists(true);
+            setTokenData(null);
+            setTokenContent(null);
+            setTokenType(null);
+            setTokenAuthor(null);
+            setRoyaltyInfo(null);
+            setTotalSupply(null);
+            setPrevValidId(null);
+            setNextValidId(null);
+            setListings(null);
+            setListingSellerBalances({});
+            setEvents(null);
 
-        queryTokenURI()
-            .then((tURI) => queryTokenData(tURI))
-            .then((newTokenData) => queryTokenContent(newTokenData));
-        queryTokenAuthor().then((author) => queryBalances(author));
-        queryRoyaltyInfo();
-        queryTotalSupply();
+            queryTokenURI()
+                .then((tURI) => queryTokenData(tURI))
+                .then((newTokenData) => queryTokenContent(newTokenData));
+            queryTokenAuthor().then((author) => queryBalances(author));
+            queryRoyaltyInfo();
+            queryTotalSupply();
 
-        const [prevId, nextId] = await Promise.all([
-            queryPrevValidId(),
-            queryNextValidId(),
-        ]);
-        setPrevValidId(prevId);
-        setNextValidId(nextId);
+            const [prevId, nextId] = await Promise.all([
+                queryPrevValidId(),
+                queryNextValidId(),
+            ]);
+            setPrevValidId(prevId);
+            setNextValidId(nextId);
+        }
+        resetInfo();
     }, [id, readProvider]);
 
     /*useEffect(() => queryTokenAuthor(), [id, readProvider])
     useEffect(() => queryRoyaltyInfo(), [id, readProvider])
     useEffect(() => queryTotalSupply(), [id, readProvider])
     useEffect(() => setExists(true), [id, readProvider])*/
-    useEffect(queryLastNFTId, []);
+    useEffect(() => {
+        queryLastNFTId();
+    }, []);
 
     // === Listing info ===
 
@@ -508,9 +557,9 @@ export default function NFTPage({ location, params }) {
         );
 
         try {
-            console.log("Querying listing count for", nftContract.address, id);
+            console.log("Querying listing count for", nftAddress, id);
             const listingCount = (
-                await contract.listingCount(nftContract.address, id)
+                await contract.listingCount(nftAddress, id)
             ).toNumber();
             console.log("Listing count:", listingCount);
 
@@ -520,7 +569,7 @@ export default function NFTPage({ location, params }) {
             for (let i = 0; i < listingCount; i++) {
                 promises.push(
                     contract
-                        .listings(nftContract.address, id, i)
+                        .listings(nftAddress, id, i)
                         .then((listing) =>
                             newListings.push({
                                 amount: listing.amount.toNumber(),
@@ -551,6 +600,11 @@ export default function NFTPage({ location, params }) {
     const updateSellerBalance = async (sellerAddress) => {
         if (!sellerAddress || !readProvider || !id) return;
 
+        const nftContract = new ethers.Contract(
+            nftAddress,
+            nftABI,
+            readProvider
+        );
         try {
             const balance = await nftContract.balanceOf(sellerAddress, id);
             setListingSellerBalances((currentBalance) => ({
@@ -769,7 +823,7 @@ export default function NFTPage({ location, params }) {
                             )}
                             <hr />
                             <Listings
-                                nftContract={nftContract}
+                                nftType={macroNftType}
                                 readProvider={readProvider}
                                 walletProvider={walletProvider}
                                 id={id}
@@ -798,9 +852,7 @@ export default function NFTPage({ location, params }) {
                                                 )}
                                                 <div className="is-flex is-justify-content-center">
                                                     <TransferButton
-                                                        nftContract={
-                                                            nftContract
-                                                        }
+                                                        nftType={macroNftType}
                                                         id={id}
                                                         walletAddress={
                                                             walletAddress
@@ -810,9 +862,7 @@ export default function NFTPage({ location, params }) {
                                                         onUpdate={onUpdate}
                                                     />
                                                     <BurnButton
-                                                        nftContract={
-                                                            nftContract
-                                                        }
+                                                        nftType={macroNftType}
                                                         id={id}
                                                         walletAddress={
                                                             walletAddress
@@ -855,7 +905,7 @@ export default function NFTPage({ location, params }) {
                             )}
                             {readProvider ? (
                                 <>
-                                    <div class="tabs is-centered is-fullwidth">
+                                    <div className="tabs is-centered is-fullwidth">
                                         <ul>
                                             <li
                                                 className={

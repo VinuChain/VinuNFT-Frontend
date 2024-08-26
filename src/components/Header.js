@@ -12,7 +12,7 @@ export default function Header() {
     const [walletProvider, setWalletProvider] = useWalletProvider();
     const [chainId, setChainId] = useState(null);
 
-    useEffect(async () => {
+    async function walletProviderChanged() {
         if (walletProvider) {
             /*try {
                 window.ethereum.request({
@@ -44,6 +44,10 @@ export default function Header() {
 
             setChainId(newChainId);
         }
+    }
+
+    useEffect(() => {
+        walletProviderChanged();
     }, [walletProvider]);
 
     function toggleClass() {

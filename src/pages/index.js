@@ -25,7 +25,7 @@ export default function Home() {
 
     const increment = 5;
 
-    useEffect(async () => {
+    async function preparePage() {
         const textContract = new ethers.Contract(
             config.contractAddresses.v1.text,
             v1.text,
@@ -45,6 +45,10 @@ export default function Home() {
         } catch (e) {
             setStandardError(formatError(e));
         }
+    }
+
+    useEffect(() => {
+        preparePage();
     }, []);
 
     const getMoreIds = (count) => {
@@ -78,7 +82,9 @@ export default function Home() {
         }
     }
 
-    useEffect(() => getMoreIds(20), [lastTextNFTId, lastImageNFtId]);
+    useEffect(() => {
+        getMoreIds(20);
+    }, [lastTextNFTId, lastImageNFtId]);
 
     return (
         <div>

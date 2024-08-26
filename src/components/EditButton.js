@@ -16,7 +16,7 @@ import { formatTokenAmount, parseTokenAmount } from "../common/utils";
 import { tokenAddressToId } from "../common/user";
 
 export default function EditButton({
-    nftContract,
+    nftType,
     nftId,
     listingId,
     availableAmount,
@@ -26,6 +26,7 @@ export default function EditButton({
     oldPrice,
     paymentToken,
 }) {
+    const nftAddress = config.contractAddresses.v1[nftType];
     const marketplaceAddress = config.contractAddresses.v1.marketplace;
     const marketplaceABI = v1.marketplace;
 
@@ -61,7 +62,7 @@ export default function EditButton({
 
         // Retrieve a fresh price
         const listingInfo = await marketplaceContract.getListing(
-            nftContract.address,
+            nftAddress,
             nftId,
             listingId
         );
@@ -85,7 +86,7 @@ export default function EditButton({
 
         async function edit() {
             return await contractWithSigner.editListing(
-                nftContract.address,
+                nftAddress,
                 nftId,
                 listingId,
                 parseTokenAmount(newPrice, paymentToken).toString(),

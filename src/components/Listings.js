@@ -16,9 +16,12 @@ import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
 
 import { tokenAddressToId } from "../common/user";
+import { useReadProvider } from "../common/provider";
+import { v1 } from "../common/abi";
+import { ethers } from "ethers";
 
 export default function Listings({
-    nftContract,
+    nftType,
     walletProvider,
     id,
     listingGroups,
@@ -27,7 +30,10 @@ export default function Listings({
     userAvailableAmount,
     onUpdate,
 }) {
+    const nftAddress = config.contractAddresses.v1[nftType];
+    const nftABI = v1[nftType];
     const marketplaceAddress = config.contractAddresses.v1.marketplace;
+    const [readProvider, setReadProvider] = useReadProvider();
 
     const [isApproved, setIsApproved] = useState(false);
 
@@ -45,6 +51,15 @@ export default function Listings({
     const checkApproval = async () => {
         if (!id || !walletAddress) return;
 
+        console.log("Checking approval");
+        console.log(nftAddress, !!nftABI, readProvider);
+
+        const nftContract = new ethers.Contract(
+            nftAddress,
+            nftABI,
+            readProvider
+        );
+
         try {
             const approved = await nftContract.isApprovedForAll(
                 walletAddress,
@@ -56,13 +71,15 @@ export default function Listings({
         }
     };
 
-    useEffect(checkApproval, [id, walletAddress]);
+    useEffect(() => {
+        checkApproval();
+    }, [id, walletAddress]);
 
     return (
         <div>
             {userBalance ? (
                 <ListButton
-                    nftContract={nftContract}
+                    nftType={nftType}
                     id={id}
                     userBalance={userBalance}
                     userAvailableAmount={userAvailableAmount}
@@ -94,7 +111,7 @@ export default function Listings({
                                             style={{ width: "100%" }}
                                         >
                                             <EditButton
-                                                nftContract={nftContract}
+                                                nftType={nftType}
                                                 nftId={id}
                                                 listingId={listing.id}
                                                 balance={userBalance}
@@ -111,7 +128,7 @@ export default function Listings({
                                                 }
                                             />
                                             <DelistButton
-                                                nftContract={nftContract}
+                                                nftType={nftType}
                                                 nftId={id}
                                                 listingId={listing.id}
                                                 onUpdate={onUpdate}
@@ -165,9 +182,7 @@ export default function Listings({
                                             >
                                                 {walletProvider ? (
                                                     <BuyButton
-                                                        nftContract={
-                                                            nftContract
-                                                        }
+                                                        nftType={nftType}
                                                         nftId={id}
                                                         listingId={listing.id}
                                                         price={listing.price}

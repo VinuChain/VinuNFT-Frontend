@@ -13,7 +13,7 @@ import { useTransactionHelper } from "../common/transaction_status";
 import { parseTokenAmount } from "../common/utils";
 
 export default function BuyButton({
-    nftContract,
+    nftType,
     nftId,
     listingId,
     price,
@@ -24,6 +24,7 @@ export default function BuyButton({
 }) {
     sellerBalance = sellerBalance || 0;
 
+    const nftAddress = config.contractAddresses.v1[nftType];
     const marketplaceAddress = config.contractAddresses.v1.marketplace;
     const marketplaceABI = v1.marketplace;
 
@@ -66,7 +67,7 @@ export default function BuyButton({
 
         const transactionFunction = async () =>
             await contractWithSigner.buyToken(
-                nftContract.address,
+                nftAddress,
                 nftId,
                 listingId,
                 amount,

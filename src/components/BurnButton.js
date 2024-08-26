@@ -6,15 +6,21 @@ import { useWalletProvider } from "../common/provider";
 import BurnModal from "./BurnModal";
 import { useTransactionHelper } from "../common/transaction_status";
 import { standardErrorState } from "../common/error";
+import config from "../config";
+import { v1 } from "../common/abi";
+import { ethers } from "ethers";
 
 export default function BurnButton({
-    nftContract,
+    nftType,
     id,
     walletAddress,
     balance,
     availableAmount,
     onUpdate,
 }) {
+    const nftAddress = config.contractAddresses.v1[nftType];
+    const nftABI = v1[nftType];
+
     const handleTransaction = useTransactionHelper();
     const [_, setStandardError] = useRecoilState(standardErrorState);
 
@@ -38,6 +44,12 @@ export default function BurnButton({
             return;
         }
         setStandardError(null);
+
+        const nftContract = new ethers.Contract(
+            nftAddress,
+            nftABI,
+            walletProvider
+        );
 
         const contractWithSigner = nftContract.connect(
             walletProvider.getSigner()

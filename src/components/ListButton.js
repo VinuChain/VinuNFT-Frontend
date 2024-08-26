@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { v1 } from "../common/abi";
 import { ListModal } from ".";
 import config from "../config";
-import { useWalletProvider } from "../common/provider";
+import { useReadProvider, useWalletProvider } from "../common/provider";
 import { useTransactionHelper } from "../common/transaction_status";
 
 import { useRecoilState } from "recoil";
@@ -11,15 +11,18 @@ import { standardErrorState } from "../common/error";
 import { parseTokenAmount } from "../common/utils";
 
 export default function ListButton({
-    nftContract,
+    nftType,
     id,
     userBalance,
     userAvailableAmount,
     onUpdate,
     walletAddress,
 }) {
+    const nftAddress = config.contractAddresses.v1[nftType];
+    const nftABI = v1[nftType];
     const marketplaceAddress = config.contractAddresses.v1.marketplace;
     const marketplaceABI = v1.marketplace;
+    const [readProvider, setReadProvider] = useReadProvider();
 
     const [walletProvider, setWalletProvider] = useWalletProvider();
     const handleTransaction = useTransactionHelper();
@@ -47,6 +50,12 @@ export default function ListButton({
         }
 
         setStandardError(null);
+
+        const nftContract = new ethers.Contract(
+            nftAddress,
+            nftABI,
+            readProvider
+        );
 
         const marketplaceContract = new ethers.Contract(
             marketplaceAddress,
@@ -83,7 +92,7 @@ export default function ListButton({
                 List
             </button>
             <ListModal
-                nftContract={nftContract}
+                nftType={nftType}
                 isOpen={listModalOpen}
                 setIsOpen={setListModalOpen}
                 onClose={list}

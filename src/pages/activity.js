@@ -73,7 +73,7 @@ export default function Activity() {
         setEvents(allEvents);
     };
 
-    useEffect(async () => {
+    useEffect(() => {
         queryEvents();
     }, [readProvider]);
 

@@ -8,7 +8,9 @@ import { useTransactionHelper } from "../common/transaction_status";
 import { useRecoilState } from "recoil";
 import { formatError, standardErrorState } from "../common/error";
 import config from "../config";
-import { useWalletProvider } from "../common/provider";
+import { useReadProvider, useWalletProvider } from "../common/provider";
+import { ethers } from "ethers";
+import { v1 } from "../common/abi";
 
 const styles = {
     modalCard: {
@@ -52,7 +54,7 @@ const etherValidator = (label) => (value, helpers) => {
 };
 
 export default function ListModal({
-    nftContract,
+    nftType,
     isOpen,
     setIsOpen,
     onClose,
@@ -62,7 +64,11 @@ export default function ListModal({
     walletAddress,
     onUpdate,
 }) {
+    const nftAddress = config.contractAddresses.v1[nftType];
+    const nftABI = v1[nftType];
     const marketplaceAddress = config.contractAddresses.v1.marketplace;
+    const [readProvider, setReadProvider] = useReadProvider();
+
     const {
         register,
         formState: { isDirty, isValid, errors },
@@ -120,6 +126,12 @@ export default function ListModal({
             return;
         }
 
+        const nftContract = new ethers.Contract(
+            nftAddress,
+            nftABI,
+            walletProvider
+        );
+
         const contractWithSigner = nftContract.connect(
             walletProvider.getSigner()
         );
@@ -144,6 +156,12 @@ export default function ListModal({
     const checkApproval = async () => {
         if (!id || !walletAddress) return;
 
+        const nftContract = new ethers.Contract(
+            nftAddress,
+            nftABI,
+            readProvider
+        );
+
         try {
             const approved = await nftContract.isApprovedForAll(
                 walletAddress,
@@ -156,7 +174,9 @@ export default function ListModal({
         }
     };
 
-    useEffect(checkApproval, [id, walletAddress]);
+    useEffect(() => {
+        checkApproval();
+    }, [id, walletAddress]);
 
     if (!isOpen) return <></>;
 

@@ -133,11 +133,21 @@ export default function NFTCard({ id, type }) {
         }
     };
 
-    useEffect(() => queryTokenURI(), [id, type, readProvider]);
-    useEffect(() => queryTokenData(), [tokenURI]);
-    useEffect(() => queryTokenAuthor(), [id, type, readProvider]);
-    useEffect(() => queryTokenContent(), [tokenData]);
-    useEffect(() => setExists(true), [id, type, readProvider]);
+    useEffect(() => {
+        queryTokenURI();
+    }, [id, type, readProvider]);
+    useEffect(() => {
+        queryTokenData();
+    }, [tokenURI]);
+    useEffect(() => {
+        queryTokenAuthor();
+    }, [id, type, readProvider]);
+    useEffect(() => {
+        queryTokenContent();
+    }, [tokenData]);
+    useEffect(() => {
+        setExists(true);
+    }, [id, type, readProvider]);
 
     const effectiveTokenAuthor = tokenAuthor || null;
 

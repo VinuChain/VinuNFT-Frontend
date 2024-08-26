@@ -8,12 +8,8 @@ import { standardErrorState } from "../common/error";
 
 import { useTransactionHelper } from "../common/transaction_status";
 
-export default function DelistButton({
-    nftContract,
-    nftId,
-    listingId,
-    onUpdate,
-}) {
+export default function DelistButton({ nftType, nftId, listingId, onUpdate }) {
+    const nftAddress = config.contractAddresses.v1[nftType];
     const marketplaceAddress = config.contractAddresses.v1.marketplace;
     const marketplaceABI = v1.marketplace;
 
@@ -42,11 +38,7 @@ export default function DelistButton({
         const contractWithSigner = contract.connect(walletProvider.getSigner());
 
         const transactionFunction = async () =>
-            await contractWithSigner.delistToken(
-                nftContract.address,
-                nftId,
-                listingId
-            );
+            await contractWithSigner.delistToken(nftAddress, nftId, listingId);
 
         const { success } = await handleTransaction(
             transactionFunction,

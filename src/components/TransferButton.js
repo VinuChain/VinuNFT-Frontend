@@ -6,15 +6,20 @@ import TransferModal from "./TransferModal";
 import { useTransactionHelper } from "../common/transaction_status";
 import { useRecoilState } from "recoil";
 import { standardErrorState } from "../common/error";
+import config from "../config";
+import { v1 } from "../common/abi";
+import { ethers } from "ethers";
 
 export default function TransferButton({
-    nftContract,
+    nftType,
     id,
     walletAddress,
     balance,
     availableAmount,
     onUpdate,
 }) {
+    const nftAddress = config.contractAddresses.v1[nftType];
+    const nftABI = v1[nftType];
     const [walletProvider, setWalletProvider] = useWalletProvider();
 
     const handleTransaction = useTransactionHelper();
@@ -48,6 +53,12 @@ export default function TransferButton({
         if (to.includes(".eth")) {
             to = ensProvider.resolveName(to);
         }
+
+        const nftContract = new ethers.Contract(
+            nftAddress,
+            nftABI,
+            walletProvider
+        );
 
         const contractWithSigner = nftContract.connect(
             walletProvider.getSigner()

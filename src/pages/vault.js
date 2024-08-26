@@ -14,7 +14,7 @@ import StandardErrorDisplay from "../components/StandardErrorDisplay";
 import "bulma/css/bulma.min.css";
 import "../styles/globals.css";
 
-export default function Home() {
+export default function Vault() {
     const [readProvider] = useReadProvider();
     const [walletProvider] = useWalletProvider();
     const [lastTextNFTId, setLastTextNFTId] = useState(null);
@@ -57,7 +57,7 @@ export default function Home() {
         setInfo();
     }, [walletProvider]);
 
-    useEffect(async () => {
+    async function preparePage() {
         const textNftContract = new ethers.Contract(
             config.contractAddresses.v1.text,
             v1.text,
@@ -79,6 +79,10 @@ export default function Home() {
             console.log(e);
             setStandardError(formatError(e));
         }
+    }
+
+    useEffect(() => {
+        preparePage();
     }, []);
 
     const updateNftToBalance = async (type, nftId, address) => {
@@ -142,10 +146,9 @@ export default function Home() {
         setImageNFTs(newImageNFTs);
     };
 
-    useEffect(
-        () => getMoreIds(20, walletAddress),
-        [lastTextNFTId, walletAddress]
-    );
+    useEffect(() => {
+        getMoreIds(20, walletAddress);
+    }, [lastTextNFTId, walletAddress]);
 
     const interleavedNfts = [];
 
