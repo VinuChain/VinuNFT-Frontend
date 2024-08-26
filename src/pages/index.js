@@ -89,7 +89,7 @@ export default function Home() {
     return (
         <div>
             <Helmet>
-                <title>text</title>
+                <title>VinuNFT</title>
             </Helmet>
             <Header />
             <StandardErrorDisplay />
