@@ -13,11 +13,12 @@
     "scripts": {
         "dev": "gatsby develop",
         "start": "gatsby develop",
-        "build": "gatsby build",
+        "build": "gatsby build && yarn add-csp",
         "serve": "gatsby serve",
         "clean": "gatsby clean",
         "prepare": "husky install",
-        "precommit": "lint-staged"
+        "precommit": "lint-staged",
+        "add-csp": "node add_csp.js"
     },
     "lint-staged": {
         "*.js": [
@@ -47,6 +48,8 @@
         "ethers": "^5.5.2",
         "file-loader": "^6.2.0",
         "gatsby": "^5.13.7",
+        "gatsby-plugin-csp": "^1.1.4",
+        "gatsby-plugin-csp-nonce": "^1.2.0",
         "gatsby-plugin-mdx": "^5.13.1",
         "gatsby-plugin-react-helmet": "^4.14.0",
         "gatsby-source-filesystem": "^3.14.0",
@@ -91,6 +94,7 @@
     "devDependencies": {
         "eslint-config-react-app": "^6.0.0",
         "eslint-plugin-react": "^7.26.0",
+        "htmlparser2": "^9.1.0",
         "prettier": "2.6.1"
     }
 }

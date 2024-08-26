@@ -18,5 +18,6 @@ module.exports = {
             __key: "pages",
         },
         "gatsby-plugin-react-helmet",
+        "gatsby-plugin-csp-nonce",
     ],
 };
