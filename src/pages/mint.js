@@ -133,10 +133,10 @@ export default function Mint() {
                                     <option value="text/plain">
                                         Plain Text
                                     </option>
-                                    <option value="text/markdown">
+                                    {/*<option value="text/markdown">
                                         Markdown
                                     </option>
-                                    <option value="text/html">HTML</option>
+                                    <option value="text/html">HTML</option>*/}
                                 </select>
                             </div>
                         </div>
