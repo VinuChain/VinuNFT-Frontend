@@ -7,7 +7,7 @@ import { v1 } from "./abi";
 import Decimal from "decimal.js";
 import { uploadFileToIpfs, uploadJSONToIpfs } from "./ipfs";
 
-async function getContentFunction(subPath) {
+async function getContentFunction(nftType) {
     function contentFunction(status, transaction, success, receipt) {
         if (status !== "success") {
             return null;
@@ -26,7 +26,7 @@ async function getContentFunction(subPath) {
                         <p>
                             <RoutingLink
                                 className="is-underlined"
-                                href={`/nft/${subPath}?id=${tokenId}`}
+                                href={`/nft?type=${nftType}&id=${tokenId}`}
                             >
                                 NFT #{tokenId}
                             </RoutingLink>{" "}

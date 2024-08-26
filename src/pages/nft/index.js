@@ -76,7 +76,7 @@ const styles = {
     },
 };
 
-export default function NFTPage({ location, params }) {
+export default function NFTPage({ location }) {
     const [readProvider] = useReadProvider();
     const [walletProvider] = useWalletProvider();
     const marketplaceAddress = config.contractAddresses.v1.marketplace;
@@ -85,7 +85,7 @@ export default function NFTPage({ location, params }) {
     const parsedQuery = queryString.parse(location.search);
     const id = parsedQuery ? parseInt(parsedQuery.id) : null;
 
-    const macroNftType = params.nftType;
+    const macroNftType = parsedQuery.type;
 
     const nftAddress = config.contractAddresses.v1[macroNftType];
     const nftABI = v1[macroNftType];
@@ -397,9 +397,9 @@ export default function NFTPage({ location, params }) {
 
     const changeId = (right) => () => {
         if (right) {
-            navigate(`/nft/${macroNftType}?id=${nextValidId}`);
+            navigate(`/nft?type=${macroNftType}&id=${nextValidId}`);
         } else {
-            navigate(`/nft/${macroNftType}?id=${prevValidId}`);
+            navigate(`/nft?type=${macroNftType}&id=${prevValidId}`);
         }
     };
 

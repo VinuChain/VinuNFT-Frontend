@@ -56,7 +56,7 @@ export default function NFTHistory({ history, hideId }) {
                                 {event.id ? (
                                     <tt className="is-size-5">
                                         <a
-                                            href={`/nft/${event.nftType}?id=${event.id}`}
+                                            href={`/nft?type=${event.nftType}&id=${event.id}`}
                                             style={{
                                                 textDecoration: "underline",
                                             }}
