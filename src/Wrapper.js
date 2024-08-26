@@ -1,10 +1,16 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useTransactionStatus } from "./common/transaction_status";
 import { ToastContainer, toast } from "react-toastify";
 import TransactionNotifications from "./components/TransactionNotifications";
 
 export default function Wrapper({ children, props }) {
+    const [visibility, setVisibility] = useState("hidden");
+
+    useEffect(() => {
+        setVisibility("visible");
+    }, []);
+
     return (
         <div>
             <Helmet>
@@ -22,33 +28,38 @@ export default function Wrapper({ children, props }) {
             ) : (
                 <></>
             )}
-            <div style={{ minHeight: "90vh" }}>{children}</div>
-            <TransactionNotifications />
-            <footer className="footer has-background-black has-text-white">
-                <div className="columns">
-                    <div className="column has-text-centered">
-                        <p>
-                            <a href="mailto:hello@vitainu.org">
-                                <u>hello@vitainu.org</u>
+            <div style={{ visibility: visibility }}>
+                <div style={{ minHeight: "90vh" }}>{children}</div>
+                <TransactionNotifications />
+                <footer className="footer has-background-black has-text-white">
+                    <div className="columns">
+                        <div className="column has-text-centered">
+                            <p>
+                                <a href="mailto:hello@vitainu.org">
+                                    <u>hello@vitainu.org</u>
+                                </a>
+                            </p>
+                            <p>Platform fee: 5%</p>
+                        </div>
+                        <div className="column has-text-centered">
+                            <a href="https://x.com/vitainucoin" target="_blank">
+                                <u>Twitter</u>
                             </a>
-                        </p>
-                        <p>Platform fee: 5%</p>
+                            <br />
+                            <a
+                                href="https://github.com/Vita-Inu"
+                                target="_blank"
+                            >
+                                <u>Github</u>
+                            </a>
+                            <br />
+                            <a href="https://discord.gg/vinu" target="_blank">
+                                <u>Discord</u>
+                            </a>
+                        </div>
                     </div>
-                    <div className="column has-text-centered">
-                        <a href="https://x.com/vitainucoin" target="_blank">
-                            <u>Twitter</u>
-                        </a>
-                        <br />
-                        <a href="https://github.com/Vita-Inu" target="_blank">
-                            <u>Github</u>
-                        </a>
-                        <br />
-                        <a href="https://discord.gg/vinu" target="_blank">
-                            <u>Discord</u>
-                        </a>
-                    </div>
-                </div>
-            </footer>
+                </footer>
+            </div>
         </div>
     );
 }
