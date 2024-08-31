@@ -18,6 +18,8 @@ import { standardErrorState } from "../common/error";
 import StandardErrorDisplay from "../components/StandardErrorDisplay";
 import ValidatedInput from "../components/ValidatedInput";
 import { mintNft } from "../common/minting";
+import { navigate } from "gatsby";
+import { ethers } from "ethers";
 
 const allowedFileTypes = ["JPG", "PNG", "GIF"];
 
@@ -78,13 +80,28 @@ export default function Mint() {
         console.log(file);
 
         try {
-            await mintNft(
+            const mintInfo = await mintNft(
                 data,
                 walletProvider,
                 ensProvider,
                 handleTransaction,
                 setStandardError
             );
+
+            if (mintInfo.receipt) {
+                const matchingEvents = mintInfo.receipt.events.filter(
+                    (event) =>
+                        event.event === "TransferSingle" &&
+                        event.args.from === ethers.constants.AddressZero
+                );
+                const tokenId = matchingEvents[0].args[3].toString();
+
+                const macroType = data.dataType === "image" ? "image" : "text";
+
+                navigate(`/nft?type=${macroType}&id=${tokenId}`);
+            } else {
+                throw new Error("No transaction receipt");
+            }
         } catch (e) {
             console.log(e);
             setStandardError(e.message);

@@ -92,7 +92,7 @@ async function mintImageNft(
         );
     }
 
-    handleTransaction(transactionFunction, "Mint", contentFunction);
+    return handleTransaction(transactionFunction, "Mint", contentFunction);
 }
 
 async function mintTextNft(
@@ -140,7 +140,7 @@ async function mintTextNft(
         );
     }
 
-    handleTransaction(transactionFunction, "Mint", contentFunction);
+    return handleTransaction(transactionFunction, "Mint", contentFunction);
 }
 
 async function mintNft(
@@ -200,7 +200,7 @@ async function mintNft(
     }
 
     if (dataType === "image") {
-        await mintImageNft(
+        return await mintImageNft(
             {
                 title,
                 description,
@@ -213,7 +213,7 @@ async function mintNft(
             handleTransaction
         );
     } else {
-        await mintTextNft(
+        return await mintTextNft(
             {
                 dataType,
                 title,
