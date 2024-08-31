@@ -57,20 +57,7 @@ export default function WalletButton() {
     const [, setStandardError] = useRecoilState(standardErrorState);
     const [chainId, setChainId] = useRecoilState(chainIdState);
 
-    const providerOptions = {
-        /* See Provider Options Section */
-        walletconnect: {
-            package: WalletConnectProvider,
-            options: {
-                rpc: {
-                    [config.networks.main.chainId]: config.rpc,
-                },
-            },
-        },
-        frame: {
-            package: ethProvider,
-        },
-    };
+    const providerOptions = {};
 
     const connectWallet = async () => {
         const web3Modal = new Web3Modal({
@@ -145,22 +132,6 @@ export default function WalletButton() {
         setWalletProvider(newProvider);
         const network = await newProvider.getNetwork();
         setChainId(network?.chainId);
-
-        try {
-            const walletAddress = await newProvider.getSigner().getAddress();
-            newProvider.getBalance(walletAddress).then((balance) => {
-                const balanceFormatted = ethers.utils.formatEther(balance);
-                setBalance(balanceFormatted);
-            });
-            const _ensAddress = await ensProvider.lookupAddress(walletAddress);
-            setEnsAddress(_ensAddress);
-
-            const _ensAvatar = await ensProvider.getAvatar(_ensAddress);
-            setEnsAvatar(_ensAvatar);
-        } catch (e) {
-            // Fetching can fail without side effects
-            console.log(e);
-        }
     };
 
     return (
@@ -176,17 +147,7 @@ export default function WalletButton() {
                 >
                     {walletProvider ? (
                         <div style={styles.ensInfoContainer}>
-                            {ensAvatar ? (
-                                <div className="image" style={styles.avatar}>
-                                    <img
-                                        className="is-rounded is-1by1"
-                                        src={ensAvatar || ""}
-                                    />
-                                </div>
-                            ) : (
-                                <></>
-                            )}
-                            <p>{ensAddress ? ensAddress : "Change Wallet"}</p>
+                            <p>{"Change Wallet"}</p>
                         </div>
                     ) : (
                         "Connect Wallet"
