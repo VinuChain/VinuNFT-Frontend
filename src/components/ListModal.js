@@ -211,8 +211,8 @@ export default function ListModal({
                         errors={errors}
                         register={register}
                     />
-                    <label>
-                        Payment Token:{" "}
+                    <label style={{ display: "block" }}>Payment Token:</label>
+                    <div className="select">
                         <select {...register("paymentToken")}>
                             {Object.entries(config.tokens).map(
                                 ([key, value]) => (
@@ -220,7 +220,7 @@ export default function ListModal({
                                 )
                             )}
                         </select>
-                    </label>
+                    </div>
                     <ValidatedInput
                         label={`Price (${config.tokens[watchPaymentToken]?.symbol})`}
                         name="price"

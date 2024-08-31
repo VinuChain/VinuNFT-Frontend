@@ -44,6 +44,12 @@ const config = {
         url: "https://testnet.vinuscan.com",
     },
     tokens: {
+        wvc: {
+            address: "0x0104cb33ab69540ff6b60c9b859d78718e99155a",
+            decimals: 18,
+            symbol: "WVC",
+            name: "Wrapped VinuCoin",
+        },
         merc: {
             address: "0x6a219e51722df3d9882ef85dbf57720939974b5a",
             decimals: 18,
