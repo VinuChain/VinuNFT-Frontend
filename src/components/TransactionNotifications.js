@@ -5,15 +5,22 @@ import "react-toastify/dist/ReactToastify.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTimes } from "@fortawesome/free-solid-svg-icons";
 
-import config from "../config";
 import ViewOnExplorer from "./ViewOnExplorer";
+
+function truncateString(str, maxLength) {
+    if (str.length > maxLength) {
+        return str.slice(0, maxLength) + "...";
+    } else {
+        return str;
+    }
+}
 
 export default function TransactionNotifications() {
     const { register } = useTransactionStatus();
 
     const createNotification = (transactionId) => {
         toast.loading(<></>, {
-            autoClose: false,
+            autoClose: 30000,
             draggable: false,
             pauseOnHover: false,
             progress: undefined,
@@ -97,7 +104,7 @@ export default function TransactionNotifications() {
                         {status.content || (
                             <div>
                                 <p>Transaction failed</p>
-                                <p>{status.errorMessage}</p>
+                                <p>{truncateString(status.errorMessage, 30)}</p>
                                 {viewOnExplorer}
                             </div>
                         )}
