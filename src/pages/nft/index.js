@@ -395,14 +395,6 @@ export default function NFTPage({ location }) {
         }
     };
 
-    const changeId = (right) => () => {
-        if (right) {
-            navigate(`/nft?type=${macroNftType}&id=${nextValidId}`);
-        } else {
-            navigate(`/nft?type=${macroNftType}&id=${prevValidId}`);
-        }
-    };
-
     useEffect(() => {
         if (!id) {
             navigate("/");
@@ -647,6 +639,7 @@ export default function NFTPage({ location }) {
         queryListings();
         queryTotalSupply();
         queryRoyaltyInfo();
+        queryTokenAuthor().then((author) => queryBalances(author));
         //}
     }, [updateTracker, id, walletProvider]);
 
@@ -683,33 +676,6 @@ export default function NFTPage({ location }) {
                 </title>
             </Helmet>
             <Header />
-            <div style={styles.arrowContainer}>
-                {prevValidId ? (
-                    <a
-                        style={styles.arrow}
-                        className="icon"
-                        role="button"
-                        onClick={changeId(false)}
-                    >
-                        {"\u25c0"}
-                    </a>
-                ) : (
-                    <></>
-                )}
-                {nextValidId ? (
-                    <a
-                        style={styles.arrow}
-                        className="icon"
-                        role="button"
-                        onClick={changeId(true)}
-                    >
-                        {"\u25b6"}
-                    </a>
-                ) : (
-                    <></>
-                )}
-            </div>
-
             <StandardErrorDisplay />
             {exists ? (
                 <div>
