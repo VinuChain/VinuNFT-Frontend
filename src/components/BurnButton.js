@@ -1,3 +1,4 @@
+import { navigate } from "gatsby";
 import React, { useState } from "react";
 import { useRecoilState } from "recoil";
 
@@ -60,8 +61,14 @@ export default function BurnButton({
             transactionFunction,
             `Burn NFT #${id}`
         );
-        if (success && onUpdate) {
-            onUpdate(id);
+
+        if (success) {
+            if (onUpdate) {
+                onUpdate(id);
+            }
+            if (amount === availableAmount) {
+                navigate("/vault");
+            }
         }
     };
 
