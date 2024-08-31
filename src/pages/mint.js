@@ -3,7 +3,7 @@ import config from "../config";
 import { ensProvider, useWalletProvider } from "../common/provider";
 import "@uiw/react-md-editor/markdown-editor.css";
 import "@uiw/react-markdown-preview/markdown.css";
-import { useForm } from "react-hook-form";
+import { set, useForm } from "react-hook-form";
 import { joiResolver } from "@hookform/resolvers/joi";
 import { schemas } from "../common";
 import { MintConfirmModal, MultiEditor } from "../components";
@@ -20,6 +20,8 @@ import ValidatedInput from "../components/ValidatedInput";
 import { mintNft } from "../common/minting";
 import { navigate } from "gatsby";
 import { ethers } from "ethers";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faUpload } from "@fortawesome/free-solid-svg-icons";
 
 const allowedFileTypes = ["JPG", "PNG", "GIF"];
 
@@ -53,6 +55,7 @@ export default function Mint() {
     const handleTransaction = useTransactionHelper();
     const [, setStandardError] = useRecoilState(standardErrorState);
     const [file, setFile] = useState(null);
+    const [isUploading, setIsUploading] = useState(false);
 
     const executeTransaction = (mintConfirmed) => async (data) => {
         if (!walletProvider) {
@@ -75,11 +78,8 @@ export default function Mint() {
 
         setStandardError(null);
 
-        //await uploadToIpfs(file);
-
-        console.log(file);
-
         try {
+            setIsUploading(true);
             const mintInfo = await mintNft(
                 data,
                 walletProvider,
@@ -98,6 +98,7 @@ export default function Mint() {
 
                 const macroType = data.dataType === "image" ? "image" : "text";
 
+                setIsUploading(false);
                 navigate(`/nft?type=${macroType}&id=${tokenId}`);
             } else {
                 throw new Error("No transaction receipt");
@@ -105,6 +106,7 @@ export default function Mint() {
         } catch (e) {
             console.log(e);
             setStandardError(e.message);
+            setIsUploading(false);
         }
     };
 
@@ -159,13 +161,28 @@ export default function Mint() {
                         </div>
                         <div className="control mt-3">
                             {watchDataType === "image" ? (
-                                <div className="box has-text-centered">
-                                    <input
-                                        type="file"
-                                        onChange={(e) =>
-                                            setFile(e.target.files[0])
-                                        }
-                                    />
+                                <div className="file is-boxed">
+                                    <label className="file-label">
+                                        <input
+                                            className="file-input"
+                                            type="file"
+                                            onChange={(e) =>
+                                                setFile(e.target.files[0])
+                                            }
+                                        />
+                                        <span className="file-cta">
+                                            <span className="file-icon">
+                                                <FontAwesomeIcon
+                                                    icon={faUpload}
+                                                />
+                                            </span>
+                                            <span className="file-label">
+                                                {" "}
+                                                {file?.name ||
+                                                    "Choose a file…"}{" "}
+                                            </span>
+                                        </span>
+                                    </label>
                                 </div>
                             ) : (
                                 <MultiEditor
@@ -213,12 +230,12 @@ export default function Mint() {
                             transactionState.status === "error" ? (
                                 <button
                                     className="button is-primary"
-                                    disabled={!isValid}
+                                    disabled={!isValid || isUploading}
                                     onClick={handleSubmit(
                                         executeTransaction(false)
                                     )}
                                 >
-                                    Mint
+                                    {isUploading ? "Uploading..." : "Mint"}
                                 </button>
                             ) : (
                                 <></>

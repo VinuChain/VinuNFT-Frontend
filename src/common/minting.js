@@ -195,7 +195,6 @@ async function mintNft(
             throw new Error(
                 'Could not retrieve wallet address: "' + e.message + '".'
             );
-            return;
         }
     }
 

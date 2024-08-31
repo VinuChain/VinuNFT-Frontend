@@ -104,7 +104,7 @@ export default function TransactionNotifications() {
                         {status.content || (
                             <div>
                                 <p>Transaction failed</p>
-                                <p>{truncateString(status.errorMessage, 30)}</p>
+                                <p>{truncateString(status.errorMessage, 40)}</p>
                                 {viewOnExplorer}
                             </div>
                         )}
