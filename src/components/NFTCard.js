@@ -163,7 +163,10 @@ export default function NFTCard({ id, type }) {
         >
             <div style={styles.cardPreview}>
                 {type === "image" ? (
-                    <img src={tokenContent} />
+                    <img
+                        src={tokenContent}
+                        style={{ objectFit: "contain", width: "100%" }}
+                    />
                 ) : tokenType && tokenContent !== null ? (
                     tokenType == "text/html" ? (
                         <HTMLViewer source={tokenContent} />

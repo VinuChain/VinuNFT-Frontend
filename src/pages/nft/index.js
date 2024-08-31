@@ -721,7 +721,13 @@ export default function NFTPage({ location }) {
                             {readProvider ? (
                                 <div>
                                     {macroNftType === "image" ? (
-                                        <img src={tokenContent} />
+                                        <img
+                                            src={tokenContent}
+                                            style={{
+                                                objectFit: "contain",
+                                                width: "100%",
+                                            }}
+                                        />
                                     ) : (
                                         <div className="box">
                                             {tokenType &&
