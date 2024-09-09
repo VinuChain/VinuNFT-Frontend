@@ -11,6 +11,7 @@ import { Header } from "../components";
 import { Helmet } from "react-helmet";
 
 import "bulma/css/bulma.min.css";
+import "bulma-extensions/dist/css/bulma-extensions.min.css";
 import "../styles/globals.css";
 import { useTransactionHelper } from "../common/transaction_status";
 import { useRecoilState } from "recoil";

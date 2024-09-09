@@ -20,6 +20,7 @@ import { Helmet } from "react-helmet";
 import { Header } from "../../components";
 
 import "bulma/css/bulma.min.css";
+import "bulma-extensions/dist/css/bulma-extensions.min.css";
 import "../../styles/globals.css";
 import Listings from "../../components/Listings";
 import TransferButton from "../../components/TransferButton";
@@ -199,6 +200,7 @@ export default function NFTPage({ location }) {
     };
 
     const queryLastNFTId = async () => {
+        if (!readProvider || !nftAddress) return;
         const nftContract = new ethers.Contract(
             nftAddress,
             nftABI,

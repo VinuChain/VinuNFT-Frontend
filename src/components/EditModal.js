@@ -106,7 +106,7 @@ export default function EditModal({
                 </header>
                 <section className="modal-card-body">
                     <p>
-                        {oldAmount} for {oldPrice}{" "}
+                        Current listing: {oldAmount} for {oldPrice}{" "}
                         {config.tokens[paymentToken].symbol}
                     </p>
                     <p>Balance: {balance}</p>
@@ -118,7 +118,7 @@ export default function EditModal({
                     ) : (
                         <></>
                     )}
-
+                    <div className="is-divider" />
                     <div className="field">
                         <label className="checkbox label">
                             <input
@@ -129,7 +129,7 @@ export default function EditModal({
                                     setEditAmount(e.target.checked)
                                 }
                             />
-                            Amount
+                            Edit Amount
                         </label>
 
                         {editAmount ? (
@@ -166,7 +166,7 @@ export default function EditModal({
                                 className="mr-1"
                                 onChange={(e) => setEditPrice(e.target.checked)}
                             />
-                            Price
+                            Edit Price
                         </label>
 
                         {editPrice ? (

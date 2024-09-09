@@ -12,6 +12,7 @@ import { formatError, standardErrorState } from "../common/error";
 import StandardErrorDisplay from "../components/StandardErrorDisplay";
 
 import "bulma/css/bulma.min.css";
+import "bulma-extensions/dist/css/bulma-extensions.min.css";
 import "../styles/globals.css";
 
 export default function Home() {
