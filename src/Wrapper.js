@@ -16,6 +16,10 @@ export default function Wrapper({ children, props }) {
             <Helmet>
                 <meta charSet="utf-8" />
                 <meta name="icon" href="/public/favicon.ico" />
+                <meta
+                    name="description"
+                    content="NFTs by VinuNFT, Vita Inu's premier NFT platform."
+                />
                 <meta name="keywords" content="vinu, text, NFTs, on-chain" />
             </Helmet>
             {process.env.NODE_ENV !== "development" ? (
