@@ -57,7 +57,11 @@ export default function WalletButton() {
     const [, setStandardError] = useRecoilState(standardErrorState);
     const [chainId, setChainId] = useRecoilState(chainIdState);
 
-    const providerOptions = {};
+    const providerOptions = {
+        frame: {
+            package: ethProvider,
+        },
+    };
 
     const connectWallet = async () => {
         const web3Modal = new Web3Modal({
