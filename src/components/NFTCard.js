@@ -121,6 +121,7 @@ export default function NFTCard({ id, type }) {
     };
 
     const queryTokenContent = async () => {
+        if (!type || !tokenData) return;
         try {
             const newTokenContent = await getTokenContent(type, tokenData);
             if (newTokenContent.exists) {
