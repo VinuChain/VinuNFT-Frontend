@@ -51,8 +51,8 @@ export default function Listings({
     const checkApproval = async () => {
         if (!id || !walletAddress) return;
 
-        console.log("Checking approval");
-        console.log(nftAddress, !!nftABI, readProvider);
+        // console.log("Checking approval");
+        // console.log(nftAddress, !!nftABI, readProvider);
 
         const nftContract = new ethers.Contract(
             nftAddress,

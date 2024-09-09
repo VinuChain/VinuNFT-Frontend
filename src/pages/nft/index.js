@@ -155,7 +155,7 @@ export default function NFTPage({ location }) {
             firstTextBlock,
             firstMarketplaceBlock
         );
-        console.log("Find events", events, id, author);
+        // console.log("Find events", events, id, author);
         setEvents(events);
     };
 
@@ -229,7 +229,7 @@ export default function NFTPage({ location }) {
 
         while (nextId <= actualLastNFTId && !isValid) {
             if (nextId == actualLastNFTId) {
-                console.log("Querying...");
+                // console.log("Querying...");
                 await queryLastNFTId();
             }
             if (burnedIds.includes(nextId)) {
@@ -348,14 +348,14 @@ export default function NFTPage({ location }) {
         );
         try {
             let [recipient, amount] = await nftContract.royaltyInfo(id, 10000);
-            console.log("Royalty info:", recipient, amount);
+            // console.log("Royalty info:", recipient, amount);
             amount = new Decimal(amount.toString());
             setRoyaltyInfo({
                 recipient,
                 amount: amount.div(100).toNumber(),
             });
         } catch (e) {
-            console.log(e);
+            // console.log(e);
             setStandardError(formatError(e));
         }
     };
@@ -384,7 +384,7 @@ export default function NFTPage({ location }) {
             );
 
             if (matchingEvents.length == 1) {
-                console.log("Found total supply:", matchingEvents[0].args.to);
+                // console.log("Found total supply:", matchingEvents[0].args.to);
                 setTotalSupply(matchingEvents[0].args.value);
             } else {
                 console.log("No total supply found");
@@ -551,11 +551,11 @@ export default function NFTPage({ location }) {
         );
 
         try {
-            console.log("Querying listing count for", nftAddress, id);
+            // console.log("Querying listing count for", nftAddress, id);
             const listingCount = (
                 await contract.listingCount(nftAddress, id)
             ).toNumber();
-            console.log("Listing count:", listingCount);
+            // console.log("Listing count:", listingCount);
 
             const newListings = [];
             const promises = [];
@@ -620,9 +620,9 @@ export default function NFTPage({ location }) {
         const promises = [];
 
         try {
-            console.log("Querying seller balances...");
+            // console.log("Querying seller balances...");
             if (activeListings()) {
-                console.log("Active listings:", activeListings());
+                // console.log("Active listings:", activeListings());
                 for (const listing of activeListings()) {
                     const promise = updateSellerBalance(listing.seller);
                     promises.push(promise);

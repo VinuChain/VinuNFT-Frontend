@@ -70,7 +70,7 @@ async function mintImageNft(
 
     const uploadedMetadataHash = await uploadJSONToIpfs(metadata);
 
-    console.log(uploadedFileHash);
+    // console.log(uploadedFileHash);
     const contractAddress = config.contractAddresses.v1.image;
 
     const contract = new ethers.Contract(

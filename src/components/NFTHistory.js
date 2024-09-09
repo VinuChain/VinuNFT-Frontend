@@ -42,7 +42,7 @@ export default function NFTHistory({ history, hideId }) {
         }
     }, [history]);
 
-    console.log(history);
+    // console.log(history);
 
     return history ? (
         <div>

@@ -39,7 +39,7 @@ export default function TransferModal({
     const watchAmount = watch("amount");
 
     const closeModal = (data) => {
-        console.log("Data: ", data);
+        // console.log("Data: ", data);
         if (data) {
             onClose(data.to, data.amount);
         }

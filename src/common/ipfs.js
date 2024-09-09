@@ -7,10 +7,10 @@ const pinata = new PinataSDK({
 });
 
 async function uploadFileToIpfs(image) {
-    console.log(image);
+    // console.log(image);
     try {
         const upload = await pinata.upload.file(image);
-        console.log(upload);
+        // console.log(upload);
         return upload.IpfsHash;
     } catch (error) {
         console.log(error);
@@ -20,7 +20,7 @@ async function uploadFileToIpfs(image) {
 async function uploadJSONToIpfs(json) {
     try {
         const upload = await pinata.upload.json(json);
-        console.log(upload);
+        // console.log(upload);
         return upload.IpfsHash;
     } catch (error) {
         console.log(error);

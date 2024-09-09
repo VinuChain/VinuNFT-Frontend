@@ -24,7 +24,7 @@ async function getTokenAllowances(walletAddress, readProvider) {
                 walletAddress,
                 config.contractAddresses.v1.marketplace
             );
-            console.log("Allowance for", tokenId, allowance.toString());
+            // console.log("Allowance for", tokenId, allowance.toString());
             newAllowances[tokenId] = allowance;
         } catch (e) {
             console.log(e);
@@ -41,6 +41,6 @@ for (const [tokenId, tokenInfo] of Object.entries(config.tokens)) {
     tokenAddressToId[tokenInfo.address.toLowerCase()] = tokenId;
 }
 
-console.log("tokenAddressToId", tokenAddressToId);
+// console.log("tokenAddressToId", tokenAddressToId);
 
 export { tokenAllowancesState, getTokenAllowances, tokenAddressToId };

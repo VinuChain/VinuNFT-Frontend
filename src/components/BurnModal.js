@@ -38,7 +38,7 @@ export default function BurnModal({
     const watchAmount = watch("amount");
 
     const closeModal = (data) => {
-        console.log("Data: ", data);
+        // console.log("Data: ", data);
         if (data) {
             onClose(data.amount);
         }

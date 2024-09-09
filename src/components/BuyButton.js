@@ -61,9 +61,9 @@ export default function BuyButton({
         const contractWithSigner = contract.connect(walletProvider.getSigner());
 
         // Convert to wei
-        console.log("Original price:", price);
+        // console.log("Original price:", price);
         price = parseTokenAmount(price, paymentToken);
-        console.log("Converted:", price.toString());
+        // console.log("Converted:", price.toString());
 
         const transactionFunction = async () =>
             await contractWithSigner.buyToken(

@@ -53,7 +53,7 @@ const getTransferEvents = async (
         const eventPromises = [];
 
         for (const address of currentRelevantAddresses) {
-            console.log("Querying address", address);
+            // console.log("Querying address", address);
             queriedAddresses.push(address);
 
             if (address === null) {
@@ -101,7 +101,7 @@ const getTransferEvents = async (
         }
     }
 
-    console.log("Found events:", foundEvents);
+    // console.log("Found events:", foundEvents);
 
     return foundEvents;
 };
@@ -251,13 +251,13 @@ const computeBalances = (events) => {
 };
 
 const parseHistory = (events) => {
-    console.log("Parsing history for events:", events);
+    // console.log("Parsing history for events:", events);
     if (!events) {
         return;
     }
     let parsedEvents = [];
 
-    console.log(events);
+    // console.log(events);
 
     const paymentTokens = {};
 
@@ -273,10 +273,10 @@ const parseHistory = (events) => {
     for (const event of events) {
         switch (event.event) {
             case "TokenListed":
-                console.log(
+                /*console.log(
                     "Parsing TokenListed event with payment token:",
                     event.args._paymentToken
-                );
+                );*/
                 parsedEvents.push({
                     id: parseInt(event.args._tokenId),
                     type: "list",
@@ -359,7 +359,7 @@ const parseHistory = (events) => {
         );
     }
 
-    console.log(parsedEvents.map((e) => e.type));
+    // console.log(parsedEvents.map((e) => e.type));
 
     return parsedEvents;
 };
@@ -378,7 +378,7 @@ const getNftAuthor = async (contract, id) => {
     const events = await contract.queryFilter(transferFromFilter);
     const filteredEvents = events.filter((event) => event.args.id == id);
     if (filteredEvents.length == 1) {
-        console.log("Found author:", filteredEvents[0].args.operator);
+        // console.log("Found author:", filteredEvents[0].args.operator);
         return filteredEvents[0].args.operator;
     } else {
         throw new Error("Could not find author of NFT");

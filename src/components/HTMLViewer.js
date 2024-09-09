@@ -39,7 +39,7 @@ export default function HTMLViewer({ source }) {
             .use(rehypeSanitize, schemas.validHTML)
             .use(rehypeStringify)
             .processSync(html);
-        console.log(sanitized.value);
+        // console.log(sanitized.value);
         return sanitized.value;
     };
     console.log("Source:", source);

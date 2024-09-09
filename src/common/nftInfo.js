@@ -16,14 +16,14 @@ async function getTokenContent(nftType, tokenData) {
     } else if (nftType === "image") {
         if (!tokenData?.image) return { exists: false };
 
-        console.log("Token data URI: ", tokenData.image);
+        // console.log("Token data URI: ", tokenData.image);
 
         const response = await maybeFetchIpfs(tokenData.image);
-        console.log("Token data response:", response);
+        // console.log("Token data response:", response);
         const blob = await response.blob();
-        console.log("Blob:", blob);
+        // console.log("Blob:", blob);
         const url = URL.createObjectURL(blob);
-        console.log("Final URL:", url);
+        // console.log("Final URL:", url);
 
         return { exists: true, tokenType: "image", content: url };
     } else {

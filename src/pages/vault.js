@@ -96,9 +96,9 @@ export default function Vault() {
         );
 
         try {
-            console.log("Querying balance of", type, nftId, "for", address);
+            // console.log("Querying balance of", type, nftId, "for", address);
             const hexBalance = await contract.balanceOf(address, nftId);
-            console.log(
+            /*console.log(
                 "Balance of",
                 type,
                 nftId,
@@ -106,7 +106,7 @@ export default function Vault() {
                 address,
                 "is",
                 hexBalance
-            );
+            );*/
             const balance = hexBalance.toNumber();
 
             setNftToBalance((currentNftToBalance) => ({

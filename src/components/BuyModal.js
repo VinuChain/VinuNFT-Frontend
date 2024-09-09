@@ -95,7 +95,7 @@ export default function BuyModal({
                 );
         }
 
-        console.log("Approving...");
+        // console.log("Approving...");
 
         const { success } = await handleTransaction(
             doApproval,

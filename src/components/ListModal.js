@@ -85,7 +85,7 @@ export default function ListModal({
 
     const closeModal = (data) => {
         setIsOpen(false);
-        console.log("Data:", data);
+        // console.log("Data:", data);
         if (data) {
             onClose(data.amount, data.paymentToken, data.price);
         }

@@ -69,7 +69,7 @@ export default function Activity() {
 
         allEvents.sort((a, b) => a.blockNumber - b.blockNumber);
 
-        console.log("events", allEvents);
+        // console.log("events", allEvents);
         setEvents(allEvents);
     };
 
