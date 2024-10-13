@@ -1,9 +1,9 @@
 const config = {
     contractAddresses: {
         v1: {
-            text: "0x6021BDf97292eB59a91F3a5B1db35dF56c013F9e",
-            marketplace: "0xF38778F9611F37b339410A55F9Df2940d9d6cBC7",
-            image: "0xa62d1F406dFaDAc0b86f8Ec7D1196418A0D1f3dA",
+            text: "0x8974168eC4c942C6D34161e994A759DC3F19b5a8",
+            marketplace: "0xcA396A95E0EB8B6804e25F9db131780a60564047",
+            image: "0xDE63a95387b89679869591351f5bFD897Dc87DFB",
         },
     },
     firstBlocks: {
@@ -20,15 +20,15 @@ const config = {
     },
     networks: {
         main: {
-            name: "Vinu Testnet",
-            chainId: 206,
+            name: "Vinu",
+            chainId: 207,
         },
         ens: {
             name: "ENS",
             chainId: 1,
         },
     },
-    rpc: "https://testnet-rpc.vinuchain.org/",
+    rpc: "https://rpc.vinuchain.org",
     api_keys: {
         alchemy: process.env.GATSBY_ALCHEMY_API_KEY,
         alchemy_mainnet: process.env.GATSBY_ALCHEMY_MAINNET_API_KEY,
@@ -41,20 +41,32 @@ const config = {
     },
     blockExplorer: {
         name: "VinuScan",
-        url: "https://testnet.vinuscan.com",
+        url: "https://mainnet.vinuscan.com/",
     },
     tokens: {
         wvc: {
-            address: "0x0104cb33ab69540ff6b60c9b859d78718e99155a",
+            address: "0xEd8c5530a0A086a12f57275728128a60DFf04230",
             decimals: 18,
             symbol: "WVC",
             name: "Wrapped VinuCoin",
         },
-        merc: {
-            address: "0x6a219e51722df3d9882ef85dbf57720939974b5a",
+        usdt: {
+            address: "0xC0264277fcCa5FCfabd41a8bC01c1FcAF8383E41",
+            decimals: 6,
+            symbol: "USDT",
+            name: "Tether USD",
+        },
+        vinu: {
+            address: "0x00c1E515EA9579856304198EFb15f525A0bb50f6",
             decimals: 18,
-            symbol: "MERC",
-            name: "Mock ERC20",
+            symbol: "VINU",
+            name: "Vinu",
+        },
+        eth: {
+            address: "0xDd4b9b3Ce03faAbA4a3839c8B5023b7792be6e2C",
+            decimals: 18,
+            symbol: "ETH",
+            name: "Ethereum",
         },
     },
     nativeCurrency: {
