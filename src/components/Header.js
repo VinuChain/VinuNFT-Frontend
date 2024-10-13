@@ -70,6 +70,11 @@ export default function Header() {
             >
                 <div className="navbar-brand">
                     <RoutingLink className="navbar-item" href=".">
+                        <img
+                            className="title pb-1 vinuimage"
+                            src="/vinunft.png"
+                            alt="VinuNFT"
+                        />
                         <h1 className="title pb-1" style={{ height: "4rem" }}>
                             VinuNFT
                         </h1>
