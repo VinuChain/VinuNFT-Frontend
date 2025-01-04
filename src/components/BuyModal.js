@@ -1,15 +1,15 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { joiResolver } from "@hookform/resolvers/joi";
 import ValidatedInput from "./ValidatedInput";
 import { schemas } from "../common";
 import { FixedNumber, ethers } from "ethers";
-import { useWalletProvider } from "../common/provider";
+import { defaultReadProvider, useWalletProvider } from "../common/provider";
 import { useRecoilState } from "recoil";
 import { tokenAllowancesState } from "../common/user";
 import config from "../config";
 import { useTransactionHelper } from "../common/transaction_status";
-import { parseTokenAmount } from "../common/utils";
+import { formatTokenAmount, parseTokenAmount } from "../common/utils";
 
 const styles = {
     modalCard: {
@@ -43,6 +43,8 @@ export default function BuyModal({
 
     const allowance = tokenAllowances[paymentToken];
 
+    const [paymentTokenBalance, setPaymentTokenBalance] = useState(null);
+
     const {
         register,
         formState: { isDirty, isValid, errors },
@@ -57,6 +59,8 @@ export default function BuyModal({
     const watchAmount = watch("amount", defaultValues.amount);
 
     const validAmount = () => watchAmount <= Math.min(maxAmount, sellerBalance);
+    const validPaymentTokenBalance = () =>
+        total() && parseFloat(paymentTokenBalance) >= parseFloat(total());
 
     const closeModal = (data) => {
         if (data) {
@@ -78,6 +82,34 @@ export default function BuyModal({
             return undefined;
         }
     };
+
+    async function queryPaymentTokenBalance() {
+        if (!walletProvider) {
+            return;
+        }
+
+        const signer = await walletProvider.getSigner();
+        const signerAddress = await signer.getAddress();
+
+        const tokenContract = new ethers.Contract(
+            config.tokens[paymentToken].address,
+            ["function balanceOf(address owner) view returns (uint256)"],
+            defaultReadProvider
+        );
+
+        console.log("Token contract:", tokenContract);
+        console.log("Signer address:", signerAddress);
+
+        const balance = await tokenContract.balanceOf(signerAddress);
+
+        console.log("Balance:", balance.toString());
+        setPaymentTokenBalance(
+            formatTokenAmount(balance.toString(), paymentToken)
+        );
+    }
+    useEffect(() => {
+        queryPaymentTokenBalance();
+    }, [walletProvider, paymentToken]);
 
     async function approve() {
         const tokenContract = new ethers.Contract(
@@ -141,12 +173,27 @@ export default function BuyModal({
                         register={register}
                     />
                     {total() && errors.amount === undefined ? (
-                        <p>
-                            Total: {total()}{" "}
-                            {config.tokens[paymentToken].symbol}
-                        </p>
+                        <>
+                            <p>
+                                Total: {total()}{" "}
+                                {config.tokens[paymentToken].symbol}
+                            </p>
+                            <p>
+                                Your balance: {paymentTokenBalance.toString()}{" "}
+                                {config.tokens[paymentToken].symbol}
+                            </p>
+                        </>
                     ) : (
                         <p>Total: </p>
+                    )}
+                    {total() && errors.amount === undefined ? (
+                        <></>
+                    ) : validPaymentTokenBalance() ? (
+                        <></>
+                    ) : (
+                        <p className="notification is-danger">
+                            <b>Error</b>: Insufficient balance.
+                        </p>
                     )}
                     {validAmount() ? (
                         <></>
@@ -164,7 +211,11 @@ export default function BuyModal({
                     allowance.gte(parseTokenAmount(total(), paymentToken)) ? (
                         <button
                             className="button is-black"
-                            disabled={(!isValid && isDirty) || !validAmount()}
+                            disabled={
+                                (!isValid && isDirty) ||
+                                !validAmount() ||
+                                !validPaymentTokenBalance()
+                            }
                             onClick={handleSubmit(closeModal)}
                         >
                             Buy
@@ -172,7 +223,11 @@ export default function BuyModal({
                     ) : (
                         <button
                             className="button is-black"
-                            disabled={(!isValid && isDirty) || !validAmount()}
+                            disabled={
+                                (!isValid && isDirty) ||
+                                !validAmount() ||
+                                !validPaymentTokenBalance()
+                            }
                             onClick={approve}
                         >
                             Approve {total()}{" "}

@@ -62,7 +62,7 @@ export default function BuyButton({
 
         // Convert to wei
         // console.log("Original price:", price);
-        price = parseTokenAmount(price, paymentToken);
+        const parsedPrice = parseTokenAmount(price, paymentToken);
         // console.log("Converted:", price.toString());
 
         const transactionFunction = async () =>
@@ -71,7 +71,7 @@ export default function BuyButton({
                 nftId,
                 listingId,
                 amount,
-                price
+                parsedPrice
             );
         const { success } = await handleTransaction(
             transactionFunction,
