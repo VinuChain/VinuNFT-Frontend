@@ -41,7 +41,7 @@ const config = {
     },
     blockExplorer: {
         name: "VinuScan",
-        url: "https://mainnet.vinuscan.com/",
+        url: "https://mainnet.vinuscan.com",
     },
     tokens: {
         wvc: {

@@ -42,24 +42,21 @@ export default function Wrapper({ children, props }) {
                                 <a href="mailto:hello@vitainu.org">
                                     <u>hello@vitainu.org</u>
                                 </a>
+                                <br />
+                                <a
+                                    href="https://github.com/Vita-Inu"
+                                    target="_blank"
+                                >
+                                    <u>github.com/Vita-Inu</u>
+                                </a>
+                                <br />
+                                <a
+                                    href="https://x.com/vinuchain"
+                                    target="_blank"
+                                >
+                                    <u>x.com/vinuchain</u>
+                                </a>
                             </p>
-                            <p>Platform fee: 5%</p>
-                        </div>
-                        <div className="column has-text-centered">
-                            <a href="https://x.com/vitainucoin" target="_blank">
-                                <u>Twitter</u>
-                            </a>
-                            <br />
-                            <a
-                                href="https://github.com/Vita-Inu"
-                                target="_blank"
-                            >
-                                <u>Github</u>
-                            </a>
-                            <br />
-                            <a href="https://discord.gg/vinu" target="_blank">
-                                <u>Discord</u>
-                            </a>
                         </div>
                     </div>
                 </footer>
