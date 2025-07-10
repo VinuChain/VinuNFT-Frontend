@@ -98,3 +98,16 @@ button {
 .navbar {
     margin: 0.15em;
 }
+
+.imageNft {
+    width: 100%;
+}
+
+@media screen and (min-width: 1000px) {
+  .imageNft {
+    width: unset;
+    max-width: 100%;
+    display: block;
+    margin: auto;
+  }
+}

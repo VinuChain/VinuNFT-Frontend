@@ -693,8 +693,8 @@ export default function NFTPage({ location }) {
                                             src={tokenContent}
                                             style={{
                                                 objectFit: "contain",
-                                                width: "100%",
                                             }}
+                                            className="imageNft"
                                         />
                                     ) : (
                                         <div className="box">
