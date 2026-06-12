@@ -2,7 +2,10 @@
     "name": "vinu-nft",
     "version": "1.0.0",
     "private": true,
-    "description": "Text-focused NFT platform.",
+    "description": "VinuChain text and image NFT dapp.",
+    "engines": {
+        "node": ">=18 <23"
+    },
     "contributors": [
         "Samuele Marro",
         "Luca Donno"
@@ -14,6 +17,10 @@
         "dev": "gatsby develop",
         "start": "gatsby develop",
         "build": "gatsby build && yarn add-csp",
+        "lint": "eslint --ext .js src gatsby-browser.js gatsby-config.js gatsby-node.js gatsby-ssr.js add_csp.js",
+        "test": "node --test test/*.test.js",
+        "audit:triage": "node scripts/audit-triage.js",
+        "verify": "yarn lint && yarn test",
         "serve": "gatsby serve",
         "clean": "gatsby clean",
         "prepare": "husky install",
@@ -22,7 +29,7 @@
     },
     "lint-staged": {
         "*.js": [
-            "prettier --write ."
+            "prettier --write"
         ]
     },
     "dependencies": {
@@ -62,7 +69,6 @@
         "net-browserify": "^0.2.4",
         "os-browserify": "^0.3.0",
         "path-browserify": "^1.0.1",
-        "pinata": "^0.3.4",
         "query-string": "^7.0.1",
         "react": "18",
         "react-ace": "^9.5.0",
@@ -93,9 +99,10 @@
         "zlib-browserify": "^0.0.3"
     },
     "devDependencies": {
-        "eslint-config-react-app": "^6.0.0",
+        "eslint": "^7.32.0",
         "eslint-plugin-react": "^7.26.0",
         "htmlparser2": "^9.1.0",
         "prettier": "2.6.1"
-    }
+    },
+    "packageManager": "yarn@1.22.22"
 }

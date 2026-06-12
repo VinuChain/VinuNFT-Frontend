@@ -41,20 +41,19 @@ export default function Activity() {
             v1.marketplace,
             defaultReadProvider
         );
-        const firstNftBlock = config.firstBlocks.v1.text;
         const firstMarketplaceBlock = config.firstBlocks.v1.marketplace;
 
         const textEvents = await getAllEvents(
             textNftContract,
             marketplaceContract,
-            firstNftBlock,
+            config.firstBlocks.v1.text,
             firstMarketplaceBlock
         );
 
         const imageEvents = await getAllEvents(
             imageNftContract,
             marketplaceContract,
-            firstNftBlock,
+            config.firstBlocks.v1.image,
             firstMarketplaceBlock
         );
 

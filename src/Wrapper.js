@@ -4,6 +4,52 @@ import { useTransactionStatus } from "./common/transaction_status";
 import { ToastContainer, toast } from "react-toastify";
 import TransactionNotifications from "./components/TransactionNotifications";
 
+const VINUCHAIN_SOCIAL_LINKS = [
+    {
+        label: "GitHub",
+        shortLabel: "GH",
+        href: "https://github.com/VinuChain",
+    },
+    {
+        label: "X",
+        shortLabel: "X",
+        href: "https://twitter.com/vinuchain",
+    },
+    {
+        label: "Discord",
+        shortLabel: "DC",
+        href: "https://discord.gg/vinu",
+    },
+    {
+        label: "Telegram",
+        shortLabel: "TG",
+        href: "https://t.me/vitainu",
+    },
+    {
+        label: "Medium",
+        shortLabel: "MD",
+        href: "https://medium.com/vinuchain",
+    },
+];
+
+const FOOTER_LINKS = [
+    {
+        label: "Contact",
+        href: "mailto:hello@vitainu.org",
+        external: false,
+    },
+    {
+        label: "VinuExplorer",
+        href: "https://mainnet.vinuexplorer.org",
+        external: true,
+    },
+    {
+        label: "VinuChain",
+        href: "https://vinuchain.org",
+        external: true,
+    },
+];
+
 export default function Wrapper({ children, props }) {
     const [visibility, setVisibility] = useState("hidden");
 
@@ -15,6 +61,10 @@ export default function Wrapper({ children, props }) {
         <div>
             <Helmet>
                 <meta charSet="utf-8" />
+                <meta
+                    name="viewport"
+                    content="width=device-width, initial-scale=1"
+                />
                 <meta name="icon" href="/public/favicon.ico" />
                 <meta
                     name="description"
@@ -25,7 +75,7 @@ export default function Wrapper({ children, props }) {
             {process.env.NODE_ENV !== "development" ? (
                 <Helmet>
                     <meta
-                        http-equiv="Content-Security-Policy"
+                        httpEquiv="Content-Security-Policy"
                         content="script-src 'self'"
                     />
                 </Helmet>
@@ -35,28 +85,73 @@ export default function Wrapper({ children, props }) {
             <div style={{ visibility: visibility }}>
                 <div style={{ minHeight: "90vh" }}>{children}</div>
                 <TransactionNotifications />
-                <footer className="footer has-background-black has-text-white">
-                    <div className="columns">
-                        <div className="column has-text-centered">
-                            <p>
-                                <a href="mailto:hello@vitainu.org">
-                                    <u>hello@vitainu.org</u>
-                                </a>
-                                <br />
-                                <a
-                                    href="https://github.com/Vita-Inu"
-                                    target="_blank"
-                                >
-                                    <u>github.com/Vita-Inu</u>
-                                </a>
-                                <br />
-                                <a
-                                    href="https://x.com/vinuchain"
-                                    target="_blank"
-                                >
-                                    <u>x.com/vinuchain</u>
-                                </a>
+                <footer className="vinunft-footer">
+                    <div className="vinunft-footer__inner">
+                        <div className="vinunft-footer__content">
+                            <div className="vinunft-footer__brand">
+                                <img
+                                    className="vinunft-footer__logo"
+                                    src="/vinunft.png"
+                                    alt=""
+                                    aria-hidden="true"
+                                />
+                                <div>
+                                    <p className="vinunft-footer__eyebrow">
+                                        VinuNFT
+                                    </p>
+                                    <p className="vinunft-footer__copy">
+                                        Collect text and image NFTs on VinuChain
+                                        mainnet.
+                                    </p>
+                                </div>
+                            </div>
+                            <nav
+                                className="vinunft-footer__links"
+                                aria-label="VinuNFT links"
+                            >
+                                {FOOTER_LINKS.map((link) => (
+                                    <a
+                                        key={link.label}
+                                        className="vinunft-footer__link"
+                                        href={link.href}
+                                        target={
+                                            link.external ? "_blank" : undefined
+                                        }
+                                        rel="noreferrer"
+                                    >
+                                        {link.label}
+                                    </a>
+                                ))}
+                            </nav>
+                        </div>
+
+                        <div className="vinunft-footer__social-block">
+                            <p className="vinunft-footer__section-title">
+                                VinuChain socials
                             </p>
+                            <nav
+                                className="vinunft-footer__socials"
+                                aria-label="VinuChain social links"
+                            >
+                                {VINUCHAIN_SOCIAL_LINKS.map((link) => (
+                                    <a
+                                        key={link.label}
+                                        className="vinunft-footer__social"
+                                        href={link.href}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        aria-label={`VinuChain ${link.label}`}
+                                    >
+                                        <span
+                                            className="vinunft-footer__social-mark"
+                                            aria-hidden="true"
+                                        >
+                                            {link.shortLabel}
+                                        </span>
+                                        <span>{link.label}</span>
+                                    </a>
+                                ))}
+                            </nav>
                         </div>
                     </div>
                 </footer>

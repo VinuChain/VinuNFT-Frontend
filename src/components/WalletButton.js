@@ -1,61 +1,26 @@
-import React, { useState } from "react";
+import React from "react";
 import { ethers } from "ethers";
 import Web3Modal from "web3modal";
-import WalletConnectProvider from "@walletconnect/web3-provider";
 import {
-    ensProvider,
     restoreDefaultReadProvider,
     useReadProvider,
     useWalletProvider,
 } from "../common/provider";
 import config from "../config";
 import ethProvider from "eth-provider";
-import { RoutingLink } from ".";
 import { atom, useRecoilState } from "recoil";
 import { formatError, standardErrorState } from "../common/error";
-
-const ensAddressState = atom({
-    key: "ensAddress",
-    default: null,
-});
-
-const ensAvatarState = atom({
-    key: "ensAvatar",
-    default: null,
-});
-
-const walletBalanceState = atom({
-    key: "walletBalance",
-    default: null,
-});
 
 const chainIdState = atom({
     key: "chainId",
     default: null,
 });
 
-const styles = {
-    ensInfoContainer: {
-        display: "flex",
-        alignItems: "space-between",
-        justifyContent: "center",
-    },
-    avatar: {
-        marginRight: "0.5em",
-    },
-    walletButton: {
-        borderColor: "white",
-    },
-};
-
 export default function WalletButton() {
-    const [readProvider, setReadProvider] = useReadProvider();
+    const [, setReadProvider] = useReadProvider();
     const [walletProvider, setWalletProvider] = useWalletProvider();
-    const [ensAddress, setEnsAddress] = useRecoilState(ensAddressState);
-    const [ensAvatar, setEnsAvatar] = useRecoilState(ensAvatarState);
-    const [balance, setBalance] = useRecoilState(walletBalanceState);
     const [, setStandardError] = useRecoilState(standardErrorState);
-    const [chainId, setChainId] = useRecoilState(chainIdState);
+    const [, setChainId] = useRecoilState(chainIdState);
 
     const providerOptions = {
         frame: {
@@ -139,25 +104,23 @@ export default function WalletButton() {
     };
 
     return (
-        <div>
-            <div
-                className="is-flex is-align-items-center is-justify-content-center has-background-white-ter"
-                style={{ borderRadius: "4px", padding: "2px" }}
+        <div className="vinunft-wallet">
+            <button
+                type="button"
+                className="vinunft-wallet__button"
+                onClick={connectWallet}
             >
-                <a
-                    className="button has-background-white has-text-black m-0"
-                    style={styles.walletButton}
-                    onClick={connectWallet}
-                >
-                    {walletProvider ? (
-                        <div style={styles.ensInfoContainer}>
-                            <p>{"Change Wallet"}</p>
-                        </div>
-                    ) : (
-                        "Connect Wallet"
-                    )}
-                </a>
-            </div>
+                <span
+                    className={
+                        "vinunft-wallet__status" +
+                        (walletProvider ? " is-connected" : "")
+                    }
+                    aria-hidden="true"
+                ></span>
+                <span>
+                    {walletProvider ? "Change Wallet" : "Connect Wallet"}
+                </span>
+            </button>
         </div>
     );
 }

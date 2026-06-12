@@ -33,7 +33,7 @@ export default function MultiEditor({ dataType, value, setValue }) {
                         commands={defaultCommands}
                     />
                     <article className="message is-info is-small mt-2">
-                        <div class="message-body">
+                        <div className="message-body">
                             <p>
                                 For help regarding Markdown, see the{" "}
                                 <a

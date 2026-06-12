@@ -58,7 +58,13 @@ const getTransferEvents = async (
 
             if (address === null) {
                 const allTransfersFilter = nftContract.filters.TransferSingle();
-                eventPromises.push(nftContract.queryFilter(allTransfersFilter));
+                eventPromises.push(
+                    nftContract.queryFilter(
+                        allTransfersFilter,
+                        firstNftBlock,
+                        "latest"
+                    )
+                );
             } else {
                 const transferOperatorFilter =
                     nftContract.filters.TransferSingle(address, null, null);
@@ -76,10 +82,19 @@ const getTransferEvents = async (
                 eventPromises.push(
                     nftContract.queryFilter(
                         transferOperatorFilter,
-                        firstNftBlock
+                        firstNftBlock,
+                        "latest"
                     ),
-                    nftContract.queryFilter(transferFromFilter, firstNftBlock),
-                    nftContract.queryFilter(transferToFilter, firstNftBlock)
+                    nftContract.queryFilter(
+                        transferFromFilter,
+                        firstNftBlock,
+                        "latest"
+                    ),
+                    nftContract.queryFilter(
+                        transferToFilter,
+                        firstNftBlock,
+                        "latest"
+                    )
                 );
             }
         }
@@ -136,15 +151,18 @@ const getEvents = async (
         await Promise.all([
             marketplaceContract.queryFilter(
                 tokenListedFilter,
-                firstMarketplaceBlock
+                firstMarketplaceBlock,
+                "latest"
             ),
             marketplaceContract.queryFilter(
                 tokenDelistedFilter,
-                firstMarketplaceBlock
+                firstMarketplaceBlock,
+                "latest"
             ),
             marketplaceContract.queryFilter(
                 tokenPurchasedFilter,
-                firstMarketplaceBlock
+                firstMarketplaceBlock,
+                "latest"
             ),
         ]);
 
@@ -259,17 +277,6 @@ const parseHistory = (events) => {
 
     // console.log(events);
 
-    const paymentTokens = {};
-
-    for (const event of events) {
-        if (event.event == "TokenListed") {
-            paymentTokens[event.args._listingId] =
-                tokenAddressToId[event.args._paymentToken];
-        }
-    }
-
-    console.log("Payment tokens:", paymentTokens);
-
     for (const event of events) {
         switch (event.event) {
             case "TokenListed":
@@ -323,16 +330,18 @@ const parseHistory = (events) => {
 
                 break;
             case "TokenPurchased":
+                const purchasePaymentToken =
+                    tokenAddressToId[event.args._paymentToken];
                 parsedEvents.push({
                     id: parseInt(event.args._tokenId),
                     type: "purchase",
                     buyer: event.args._buyer,
                     seller: event.args._seller,
                     amount: event.args._amount.toNumber(),
-                    paymentToken: paymentTokens[event.args._tokenId],
+                    paymentToken: purchasePaymentToken,
                     price: formatTokenAmount(
                         event.args._price.toString(),
-                        paymentTokens[event.args._listingId]
+                        purchasePaymentToken
                     ).toString(),
                     transactionHash: event.transactionHash,
                     blockNumber: event.blockNumber,
@@ -370,19 +379,7 @@ const getBlockTime = async (provider, blockNumber) => {
 };
 
 const getNftAuthor = async (contract, id) => {
-    const transferFromFilter = contract.filters.TransferSingle(
-        null,
-        ethers.constants.AddressZero,
-        null
-    );
-    const events = await contract.queryFilter(transferFromFilter);
-    const filteredEvents = events.filter((event) => event.args.id == id);
-    if (filteredEvents.length == 1) {
-        // console.log("Found author:", filteredEvents[0].args.operator);
-        return filteredEvents[0].args.operator;
-    } else {
-        throw new Error("Could not find author of NFT");
-    }
+    return await contract.authorOf(id);
 };
 
 export {

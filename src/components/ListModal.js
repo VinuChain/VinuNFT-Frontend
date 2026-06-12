@@ -11,6 +11,7 @@ import config from "../config";
 import { useReadProvider, useWalletProvider } from "../common/provider";
 import { ethers } from "ethers";
 import { v1 } from "../common/abi";
+import BridgeShortcut from "./BridgeShortcut";
 
 const styles = {
     modalCard: {
@@ -82,6 +83,10 @@ export default function ListModal({
 
     const watchAmount = watch("amount");
     const watchPaymentToken = watch("paymentToken");
+    const selectedPaymentToken =
+        watchPaymentToken || Object.keys(config.tokens)[0];
+    const selectedPaymentTokenSymbol =
+        config.tokens[selectedPaymentToken]?.symbol;
 
     const closeModal = (data) => {
         setIsOpen(false);
@@ -216,13 +221,27 @@ export default function ListModal({
                         <select {...register("paymentToken")}>
                             {Object.entries(config.tokens).map(
                                 ([key, value]) => (
-                                    <option value={key}>{value.name}</option>
+                                    <option key={key} value={key}>
+                                        {value.name}
+                                    </option>
                                 )
                             )}
                         </select>
                     </div>
+                    {selectedPaymentTokenSymbol ? (
+                        <BridgeShortcut
+                            token={selectedPaymentTokenSymbol}
+                            direction="into"
+                            variant="quiet"
+                        >
+                            Buyers can bridge {selectedPaymentTokenSymbol} to
+                            VinuChain
+                        </BridgeShortcut>
+                    ) : (
+                        <></>
+                    )}
                     <ValidatedInput
-                        label={`Price (${config.tokens[watchPaymentToken]?.symbol})`}
+                        label={`Price (${selectedPaymentTokenSymbol})`}
                         name="price"
                         type="number"
                         step="0.1"

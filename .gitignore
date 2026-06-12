@@ -1,7 +1,10 @@
 node_modules/
 .cache/
 public
+.omx/
+.serena/
 .next
 .env
 .env*
+!.env.example
 known_hosts

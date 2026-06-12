@@ -1,30 +1,86 @@
-import { PinataSDK } from "pinata";
 import config from "../config";
 
-const pinata = new PinataSDK({
-    pinataJwt: process.env.GATSBY_PINATA_API_JWT,
-    pinataGateway: process.env.GATSBY_PINATA_GATEWAY,
-});
-
-async function uploadFileToIpfs(image) {
-    // console.log(image);
-    try {
-        const upload = await pinata.upload.file(image);
-        // console.log(upload);
-        return upload.IpfsHash;
-    } catch (error) {
-        console.log(error);
-    }
+function createUploadMessage(address, issuedAt) {
+    return [
+        "VinuNFT IPFS upload",
+        `Address: ${address}`,
+        `Issued At: ${issuedAt}`,
+        "Purpose: mint-image",
+    ].join("\n");
 }
 
-async function uploadJSONToIpfs(json) {
-    try {
-        const upload = await pinata.upload.json(json);
-        // console.log(upload);
-        return upload.IpfsHash;
-    } catch (error) {
-        console.log(error);
+async function createIpfsUploadAuth(walletProvider) {
+    const signer = walletProvider.getSigner();
+    const address = await signer.getAddress();
+    const issuedAt = new Date().toISOString();
+    const message = createUploadMessage(address, issuedAt);
+    const signature = await signer.signMessage(message);
+
+    return { address, issuedAt, signature };
+}
+
+function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const chunkSize = 0x8000;
+    let binary = "";
+
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, i + chunkSize);
+        binary += String.fromCharCode.apply(null, chunk);
     }
+
+    return btoa(binary);
+}
+
+async function uploadToIpfs(payload, auth) {
+    const response = await fetch(config.ipfsUploadEndpoint, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ...payload, auth }),
+    });
+
+    if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || "IPFS upload failed");
+    }
+
+    const result = await response.json();
+    if (!result.IpfsHash) {
+        throw new Error("IPFS upload response did not include an IpfsHash");
+    }
+
+    return result.IpfsHash;
+}
+
+async function uploadFileToIpfs(image, auth) {
+    if (image.size > config.maxIpfsUploadBytes) {
+        throw new Error(
+            "File is larger than the configured IPFS upload limit."
+        );
+    }
+
+    return uploadToIpfs(
+        {
+            type: "file",
+            name: image.name,
+            contentType: image.type || "application/octet-stream",
+            size: image.size,
+            data: arrayBufferToBase64(await image.arrayBuffer()),
+        },
+        auth
+    );
+}
+
+async function uploadJSONToIpfs(json, auth) {
+    return uploadToIpfs(
+        {
+            type: "json",
+            metadata: json,
+        },
+        auth
+    );
 }
 
 async function maybeFetchIpfs(url) {
@@ -37,4 +93,9 @@ async function maybeFetchIpfs(url) {
     }
 }
 
-export { uploadFileToIpfs, uploadJSONToIpfs, maybeFetchIpfs };
+export {
+    createIpfsUploadAuth,
+    uploadFileToIpfs,
+    uploadJSONToIpfs,
+    maybeFetchIpfs,
+};

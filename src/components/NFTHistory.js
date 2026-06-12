@@ -168,7 +168,7 @@ export default function NFTHistory({ history, hideId }) {
                         <p className="is-size-7">
                             <a
                                 target="_blank"
-                                rel="noopener"
+                                rel="noreferrer"
                                 style={{ textDecoration: "underline" }}
                                 href={
                                     config.blockExplorer.url +

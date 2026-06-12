@@ -153,13 +153,20 @@ export default function Mint() {
                                     <option value="text/plain">
                                         Plain Text
                                     </option>
-                                    {/*<option value="text/markdown">
+                                    <option value="text/markdown">
                                         Markdown
                                     </option>
-                                    <option value="text/html">HTML</option>*/}
                                 </select>
                             </div>
                         </div>
+                        {watchDataType === "text/markdown" ? (
+                            <p className="help">
+                                Markdown is sanitized before preview and
+                                display.
+                            </p>
+                        ) : (
+                            <></>
+                        )}
                         <div className="control mt-3">
                             {watchDataType === "image" ? (
                                 <div className="file is-boxed">

@@ -1,49 +1,50 @@
-import { hexValue } from "ethers/lib/utils";
 import React, { useEffect, useState } from "react";
 import { RoutingLink, WalletButton } from ".";
 import { useWalletProvider } from "../common/provider";
 import config from "../config";
 
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faHome } from "@fortawesome/free-solid-svg-icons";
+const NAV_LINKS = [
+    {
+        href: "/",
+        label: "Home",
+    },
+    {
+        href: "/mint",
+        label: "Mint",
+    },
+    {
+        href: "/marketplace",
+        label: "Marketplace",
+    },
+    {
+        href: "/bridge",
+        label: "Bridge",
+    },
+    {
+        href: "/activity",
+        label: "Activity",
+    },
+];
 
 export default function Header() {
     const [isActive, setActive] = useState(false);
-    const [walletProvider, setWalletProvider] = useWalletProvider();
+    const [walletProvider] = useWalletProvider();
     const [chainId, setChainId] = useState(null);
 
     async function walletProviderChanged() {
-        if (walletProvider) {
-            /*try {
-                window.ethereum.request({
-                    method: "wallet_addEthereumChain",
-                    params: [
-                        {
-                            chainId: hexValue(config.networks.main.chainId),
-                            rpcUrls: [config.rpc],
-                            chainName: config.networks.main.name,
-                            nativeCurrency: config.nativeCurrency,
-                            blockExplorerUrls: [config.blockExplorer.url],
-                        },
-                    ],
-                });
-            } catch (e) {
-                // Will revert if there is already a chain request, ignore
-                console.log(e);
-            }*/
-
-            const network = await walletProvider.getNetwork();
-
-            const newChainId = network.chainId;
-
-            if (chainId !== null && newChainId !== chainId) {
-                // Chain ID changed. Following ethers.js recommendations, we
-                // should reload the page
-                window.location.reload();
-            }
-
-            setChainId(newChainId);
+        if (!walletProvider) {
+            return;
         }
+
+        const network = await walletProvider.getNetwork();
+        const newChainId = network.chainId;
+
+        if (chainId !== null && newChainId !== chainId) {
+            // Chain ID changed. Following ethers.js recommendations, reload.
+            window.location.reload();
+        }
+
+        setChainId(newChainId);
     }
 
     useEffect(() => {
@@ -51,106 +52,102 @@ export default function Header() {
     }, [walletProvider]);
 
     function toggleClass() {
-        setActive(!isActive);
+        setActive((current) => !current);
     }
 
-    const styles = {
-        navbarItem: {
-            paddingTop: "0",
-            height: "4rem",
-        },
-    };
-
     return (
-        <div>
+        <header className="vinunft-header-shell">
             <nav
-                className="navbar"
+                className="navbar vinunft-header"
                 role="navigation"
-                aria-label="main navigation"
+                aria-label="Main navigation"
             >
-                <div className="navbar-brand">
-                    <RoutingLink className="navbar-item" href=".">
-                        <img
-                            className="title pb-1 vinuimage"
-                            src="/vinunft.png"
-                            alt="VinuNFT"
-                        />
-                        <h1 className="title pb-1" style={{ height: "4rem" }}>
-                            VinuNFT
-                        </h1>
-                    </RoutingLink>
-
-                    <a
-                        role="button"
-                        className={
-                            "navbar-burger" + (isActive ? " is-active" : "")
-                        }
-                        onClick={toggleClass}
-                        aria-label="menu"
-                        aria-expanded="false"
-                        data-target="navbarBasicExample"
-                    >
-                        <span aria-hidden="true"></span>
-                        <span aria-hidden="true"></span>
-                        <span aria-hidden="true"></span>
-                    </a>
-                </div>
-
-                <div
-                    id="navbarBasicExample"
-                    className={"navbar-menu" + (isActive ? " is-active" : "")}
-                >
-                    <div className="navbar-start">
+                <div className="vinunft-header__inner">
+                    <div className="navbar-brand vinunft-header__brand">
                         <RoutingLink
+                            className="navbar-item vinunft-header__home"
                             href="/"
-                            className="navbar-item is-size-5 has-text-weight-bold"
-                            style={styles.navbarItem}
                         >
-                            Home
+                            <span className="vinunft-header__logo-frame">
+                                <img
+                                    className="vinunft-header__logo"
+                                    src="/vinunft.png"
+                                    alt=""
+                                    aria-hidden="true"
+                                />
+                            </span>
+                            <span className="vinunft-header__title-stack">
+                                <span className="vinunft-header__title">
+                                    VinuNFT
+                                </span>
+                                <span className="vinunft-header__subtitle">
+                                    VinuChain mainnet
+                                </span>
+                            </span>
                         </RoutingLink>
 
-                        <RoutingLink
-                            href="/mint"
-                            className="navbar-item is-size-5 has-text-weight-bold"
-                            style={styles.navbarItem}
+                        <button
+                            type="button"
+                            className={
+                                "navbar-burger vinunft-header__burger" +
+                                (isActive ? " is-active" : "")
+                            }
+                            onClick={toggleClass}
+                            aria-label="Toggle navigation"
+                            aria-expanded={isActive}
+                            aria-controls="vinunft-navbar"
+                            data-target="vinunft-navbar"
                         >
-                            Mint
-                        </RoutingLink>
-
-                        <RoutingLink
-                            href="/activity"
-                            className="navbar-item is-size-5 has-text-weight-bold"
-                            style={styles.navbarItem}
-                        >
-                            Activity
-                        </RoutingLink>
-
-                        {walletProvider ? (
-                            <RoutingLink
-                                href="/vault"
-                                className="navbar-item is-size-5 has-text-weight-bold"
-                                style={styles.navbarItem}
-                            >
-                                Vault
-                            </RoutingLink>
-                        ) : null}
+                            <span aria-hidden="true"></span>
+                            <span aria-hidden="true"></span>
+                            <span aria-hidden="true"></span>
+                        </button>
                     </div>
 
-                    <div className="navbar-end">
-                        <div className="navbar-item">
-                            <WalletButton />
+                    <div
+                        id="vinunft-navbar"
+                        className={
+                            "navbar-menu vinunft-header__menu" +
+                            (isActive ? " is-active" : "")
+                        }
+                    >
+                        <div className="navbar-start vinunft-header__nav">
+                            {NAV_LINKS.map((link) => (
+                                <RoutingLink
+                                    key={link.href}
+                                    href={link.href}
+                                    className="navbar-item vinunft-header__nav-link"
+                                >
+                                    {link.label}
+                                </RoutingLink>
+                            ))}
+
+                            {walletProvider ? (
+                                <RoutingLink
+                                    href="/vault"
+                                    className="navbar-item vinunft-header__nav-link"
+                                >
+                                    Vault
+                                </RoutingLink>
+                            ) : null}
+                        </div>
+
+                        <div className="navbar-end vinunft-header__actions">
+                            <div className="navbar-item vinunft-header__wallet">
+                                <WalletButton />
+                            </div>
                         </div>
                     </div>
                 </div>
             </nav>
             {chainId !== null && chainId !== config.networks.main.chainId ? (
-                <div className="notification is-danger">
+                <div className="notification is-danger vinunft-header__network-alert">
                     <p>
                         Error: please switch to{" "}
                         <strong>{config.networks.main.name}</strong>.
                     </p>
                 </div>
             ) : null}
-        </div>
+        </header>
     );
 }

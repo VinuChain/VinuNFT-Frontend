@@ -10,7 +10,7 @@ const config = {
         v1: {
             text: 467700,
             marketplace: 467700,
-            iamge: 467700,
+            image: 467700,
         },
     },
     nativeCurrency: {
@@ -69,12 +69,25 @@ const config = {
             name: "Ethereum",
         },
     },
-    nativeCurrency: {
-        name: "VinuCoin",
-        symbol: "VC",
-        decimals: 18,
-    },
     standardIpfsGateway: "https://gateway.pinata.cloud/ipfs",
+    ipfsUploadEndpoint:
+        process.env.GATSBY_IPFS_UPLOAD_ENDPOINT || "/api/upload-ipfs",
+    maxIpfsUploadBytes: 10 * 1024 * 1024,
 };
+
+function validateConfig(config) {
+    for (const contractName of ["text", "image", "marketplace"]) {
+        if (!config.contractAddresses.v1[contractName]) {
+            throw new Error(
+                `Missing VinuNFT contract address: ${contractName}`
+            );
+        }
+        if (!config.firstBlocks.v1[contractName]) {
+            throw new Error(`Missing VinuNFT first block: ${contractName}`);
+        }
+    }
+}
+
+validateConfig(config);
 
 export default config;

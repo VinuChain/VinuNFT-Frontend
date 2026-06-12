@@ -139,8 +139,8 @@ export default function NFTPage({ location }) {
             marketplaceABI,
             defaultReadProvider
         );
-        const firstTextBlock = config.firstBlocks.v1.text;
         const firstMarketplaceBlock = config.firstBlocks.v1.marketplace;
+        const firstNftBlock = config.firstBlocks.v1[macroNftType];
         const nftContract = new ethers.Contract(
             nftAddress,
             nftABI,
@@ -152,7 +152,7 @@ export default function NFTPage({ location }) {
             nftContract,
             marketplaceContract,
             author,
-            firstTextBlock,
+            firstNftBlock,
             firstMarketplaceBlock
         );
         // console.log("Find events", events, id, author);
@@ -369,29 +369,26 @@ export default function NFTPage({ location }) {
             readProvider
         );
         try {
-            const events = await getEvents(
-                id,
-                nftContract,
-                marketplaceContract,
+            const transferFromFilter = nftContract.filters.TransferSingle(
                 null,
-                config.firstBlocks.v1.text,
-                config.firstBlocks.v1.marketplace
+                ethers.constants.AddressZero,
+                null
             );
-
-            // Find transfers from the 0 address to get the total supply
+            const events = await nftContract.queryFilter(
+                transferFromFilter,
+                config.firstBlocks.v1[macroNftType],
+                "latest"
+            );
             const matchingEvents = events.filter(
-                (event) => event.args.from == ethers.constants.AddressZero
+                (event) => event.args.id == id
             );
 
             if (matchingEvents.length == 1) {
-                // console.log("Found total supply:", matchingEvents[0].args.to);
                 setTotalSupply(matchingEvents[0].args.value);
             } else {
                 console.log("No total supply found");
                 setTotalSupply(null);
             }
-
-            //setTotalSupply(await contract.totalSupply(id));
         } catch (e) {
             setStandardError(formatError(e));
         }
@@ -623,8 +620,12 @@ export default function NFTPage({ location }) {
             // console.log("Querying seller balances...");
             if (activeListings()) {
                 // console.log("Active listings:", activeListings());
-                for (const listing of activeListings()) {
-                    const promise = updateSellerBalance(listing.seller);
+                for (const sellerAddress of [
+                    ...new Set(
+                        activeListings().map((listing) => listing.seller)
+                    ),
+                ]) {
+                    const promise = updateSellerBalance(sellerAddress);
                     promises.push(promise);
                 }
             }
@@ -668,6 +669,21 @@ export default function NFTPage({ location }) {
         setUpdateTracker(([_, counter]) => [updatedNFTId, counter + 1]);
     };
 
+    const safeSocialType =
+        macroNftType === "text" || macroNftType === "image"
+            ? macroNftType
+            : "NFT";
+    const safeSocialId = Number.isInteger(id) && id > 0 ? id : null;
+    const socialTitle = safeSocialId
+        ? `${safeSocialType} #${safeSocialId} - VinuNFT`
+        : "VinuNFT";
+    const socialDescription = safeSocialId
+        ? `View ${safeSocialType} NFT #${safeSocialId} on VinuNFT.`
+        : "VinuNFT on VinuChain mainnet.";
+    const socialUrl = safeSocialId
+        ? `/nft?type=${encodeURIComponent(safeSocialType)}&id=${safeSocialId}`
+        : "/nft";
+
     return (
         <div>
             <Helmet>
@@ -676,6 +692,14 @@ export default function NFTPage({ location }) {
                         ? `#${id} - VinuNFT`
                         : "VinuNFT"}
                 </title>
+                <meta name="description" content={socialDescription} />
+                <meta property="og:title" content={socialTitle} />
+                <meta property="og:description" content={socialDescription} />
+                <meta property="og:type" content="website" />
+                <meta property="og:url" content={socialUrl} />
+                <meta name="twitter:card" content="summary" />
+                <meta name="twitter:title" content={socialTitle} />
+                <meta name="twitter:description" content={socialDescription} />
             </Helmet>
             <Header />
             <StandardErrorDisplay />

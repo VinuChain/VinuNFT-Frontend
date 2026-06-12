@@ -6,33 +6,19 @@ var defaultReadProvider = new ethers.providers.JsonRpcProvider(config.rpc);
 
 var _readProvider = defaultReadProvider;
 var _walletProvider = null;
-var _readListeners = [];
-var _writeListeners = [];
-
-const _useComponentWillUnmount = (action) => {
-    useEffect(() => {
-        return () => {
-            action();
-        };
-    }, []);
-};
+var _readListeners = new Set();
+var _writeListeners = new Set();
 
 const _useForceUpdate = (listeners) => {
     const [, updateState] = useState();
-    const [ownListener, setOwnListener] = useState(null);
     useEffect(() => {
         const forceUpdate = () => updateState({});
-        setOwnListener(forceUpdate);
-        listeners.push(forceUpdate);
-    }, []);
-
-    _useComponentWillUnmount(() => {
-        const index = listeners.indexOf(ownListener);
-        listeners.splice(index, 1);
+        listeners.add(forceUpdate);
+        return () => listeners.delete(forceUpdate);
     });
 
     return () => {
-        for (const listener of listeners) {
+        for (const listener of Array.from(listeners)) {
             listener();
         }
     };
@@ -60,7 +46,7 @@ const useWalletProvider = () => {
 
 const restoreDefaultReadProvider = () => {
     _readProvider = defaultReadProvider;
-    for (const listener of _readListeners) {
+    for (const listener of Array.from(_readListeners)) {
         listener();
     }
 };

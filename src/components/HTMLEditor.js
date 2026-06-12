@@ -40,7 +40,7 @@ export default function HTMLEditor({ value, setValue }) {
                     </Split>
                 </div>
                 <article className="message is-info is-small mt-2">
-                    <div class="message-body">
+                    <div className="message-body">
                         <p>
                             <strong>Note</strong>: Most HTML tags are supported,
                             with the notable exception of <tt>{"<script>"}</tt>.

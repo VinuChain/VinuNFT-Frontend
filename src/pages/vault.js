@@ -87,6 +87,14 @@ export default function Vault() {
     }, []);
 
     const updateNftToBalance = async (type, nftId, address) => {
+        await updateNftBalances(type, [nftId], address);
+    };
+
+    const updateNftBalances = async (type, nftIds, address) => {
+        if (!address || nftIds.length === 0) {
+            return;
+        }
+
         const contractAddress = config.contractAddresses.v1[type];
         const contractABI = v1[type];
         const contract = new ethers.Contract(
@@ -96,24 +104,18 @@ export default function Vault() {
         );
 
         try {
-            // console.log("Querying balance of", type, nftId, "for", address);
-            const hexBalance = await contract.balanceOf(address, nftId);
-            /*console.log(
-                "Balance of",
-                type,
-                nftId,
-                "for",
-                address,
-                "is",
-                hexBalance
-            );*/
-            const balance = hexBalance.toNumber();
+            const balances = await Promise.all(
+                nftIds.map(async (nftId) => [
+                    nftId,
+                    (await contract.balanceOf(address, nftId)).toNumber(),
+                ])
+            );
 
             setNftToBalance((currentNftToBalance) => ({
                 ...currentNftToBalance,
                 [type]: {
                     ...currentNftToBalance[type],
-                    [nftId]: balance,
+                    ...Object.fromEntries(balances),
                 },
             }));
         } catch (e) {
@@ -129,22 +131,28 @@ export default function Vault() {
 
         const newTextNFTs = [...textNfts];
         const newImageNFTs = [...imageNfts];
+        const textIdsToQuery = [];
+        const imageIdsToQuery = [];
 
         for (let i = 0; i < count; i++) {
             const newTextId = lastTextNFTId - newTextNFTs.length;
             const newImageId = lastImageNFtId - newImageNFTs.length;
             if (newTextId >= 1) {
                 newTextNFTs.push(newTextId);
-                updateNftToBalance("text", newTextId, address);
+                textIdsToQuery.push(newTextId);
             }
             if (newImageId >= 1) {
                 newImageNFTs.push(newImageId);
-                updateNftToBalance("image", newImageId, address);
+                imageIdsToQuery.push(newImageId);
             }
         }
 
         setTextNFTs(newTextNFTs);
         setImageNFTs(newImageNFTs);
+        await Promise.all([
+            updateNftBalances("text", textIdsToQuery, address),
+            updateNftBalances("image", imageIdsToQuery, address),
+        ]);
     };
 
     useEffect(() => {

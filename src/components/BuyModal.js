@@ -10,6 +10,7 @@ import { tokenAllowancesState } from "../common/user";
 import config from "../config";
 import { useTransactionHelper } from "../common/transaction_status";
 import { formatTokenAmount, parseTokenAmount } from "../common/utils";
+import BridgeShortcut from "./BridgeShortcut";
 
 const styles = {
     modalCard: {
@@ -60,7 +61,9 @@ export default function BuyModal({
 
     const validAmount = () => watchAmount <= Math.min(maxAmount, sellerBalance);
     const validPaymentTokenBalance = () =>
-        total() && parseFloat(paymentTokenBalance) >= parseFloat(total());
+        total() &&
+        paymentTokenBalance !== null &&
+        parseFloat(paymentTokenBalance) >= parseFloat(total());
 
     const closeModal = (data) => {
         if (data) {
@@ -140,6 +143,17 @@ export default function BuyModal({
 
     if (!isOpen) return <></>;
 
+    const totalAmount = total();
+    const paymentTokenSymbol = config.tokens[paymentToken].symbol;
+    const hasValidTotal = totalAmount && errors.amount === undefined;
+    const parsedTotal = totalAmount
+        ? parseTokenAmount(totalAmount, paymentToken)
+        : null;
+    const hasEnoughAllowance =
+        allowance && parsedTotal && allowance.gte(parsedTotal);
+    const disableAction =
+        (!isValid && isDirty) || !validAmount() || !validPaymentTokenBalance();
+
     return (
         <div className="modal is-active">
             <div
@@ -172,28 +186,42 @@ export default function BuyModal({
                         errors={errors}
                         register={register}
                     />
-                    {total() && errors.amount === undefined ? (
+                    {hasValidTotal ? (
                         <>
                             <p>
-                                Total: {total()}{" "}
-                                {config.tokens[paymentToken].symbol}
+                                Total: {totalAmount} {paymentTokenSymbol}
                             </p>
                             <p>
-                                Your balance: {paymentTokenBalance.toString()}{" "}
-                                {config.tokens[paymentToken].symbol}
+                                Your balance:{" "}
+                                {paymentTokenBalance === null
+                                    ? "Loading..."
+                                    : paymentTokenBalance}{" "}
+                                {paymentTokenSymbol}
                             </p>
+                            <BridgeShortcut
+                                token={paymentTokenSymbol}
+                                direction="into"
+                                variant="quiet"
+                            />
                         </>
                     ) : (
                         <p>Total: </p>
                     )}
-                    {total() && errors.amount === undefined ? (
-                        <></>
-                    ) : validPaymentTokenBalance() ? (
-                        <></>
-                    ) : (
+                    {hasValidTotal &&
+                    paymentTokenBalance !== null &&
+                    !validPaymentTokenBalance() ? (
                         <p className="notification is-danger">
-                            <b>Error</b>: Insufficient balance.
+                            <b>Error</b>: Insufficient balance.{" "}
+                            <BridgeShortcut
+                                token={paymentTokenSymbol}
+                                direction="into"
+                                variant="danger"
+                            >
+                                Bridge {paymentTokenSymbol} to VinuChain
+                            </BridgeShortcut>
                         </p>
+                    ) : (
+                        <></>
                     )}
                     {validAmount() ? (
                         <></>
@@ -207,15 +235,10 @@ export default function BuyModal({
                     )}
                 </section>
                 <footer className="modal-card-foot">
-                    {allowance &&
-                    allowance.gte(parseTokenAmount(total(), paymentToken)) ? (
+                    {hasEnoughAllowance ? (
                         <button
                             className="button is-black"
-                            disabled={
-                                (!isValid && isDirty) ||
-                                !validAmount() ||
-                                !validPaymentTokenBalance()
-                            }
+                            disabled={disableAction}
                             onClick={handleSubmit(closeModal)}
                         >
                             Buy
@@ -223,14 +246,10 @@ export default function BuyModal({
                     ) : (
                         <button
                             className="button is-black"
-                            disabled={
-                                (!isValid && isDirty) ||
-                                !validAmount() ||
-                                !validPaymentTokenBalance()
-                            }
+                            disabled={disableAction}
                             onClick={approve}
                         >
-                            Approve {total()}{" "}
+                            Approve {totalAmount || ""}{" "}
                             {config.tokens[paymentToken].symbol}
                         </button>
                     )}
