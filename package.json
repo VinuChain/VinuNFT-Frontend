@@ -18,7 +18,7 @@
         "start": "gatsby develop",
         "build": "gatsby build && yarn add-csp",
         "lint": "eslint --ext .js src gatsby-browser.js gatsby-config.js gatsby-node.js gatsby-ssr.js add_csp.js",
-        "test": "node --test test/*.test.js",
+        "test": "node --import tsx --test test/*.test.js test/*.test.mjs",
         "audit:triage": "node scripts/audit-triage.js",
         "verify": "yarn lint && yarn test",
         "serve": "gatsby serve",
@@ -97,7 +97,8 @@
         "eslint": "^7.32.0",
         "eslint-plugin-react": "^7.26.0",
         "htmlparser2": "^9.1.0",
-        "prettier": "2.6.1"
+        "prettier": "2.6.1",
+        "tsx": "^4.22.4"
     },
     "packageManager": "yarn@1.22.22"
 }
