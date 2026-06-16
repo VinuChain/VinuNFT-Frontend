@@ -8,7 +8,6 @@ module.exports = {
         title: "vinu-nft",
     },
     plugins: [
-        "gatsby-plugin-mdx",
         {
             resolve: "gatsby-source-filesystem",
             options: {

@@ -1,11 +1,6 @@
 import { atom, useRecoilState } from "recoil";
 import { formatError } from "./error";
 
-const transactionCountState = atom({
-    key: "transactionCount",
-    default: 0,
-});
-
 const transactionStatusState = atom({
     key: "transactionStatus",
     default: {},
@@ -75,16 +70,11 @@ const useTransactionStatus = () => {
     };
 };
 
+let nextTransactionId = 0;
+
 const useTransactionHelper = () => {
     const { updateTransactionStatus } = useTransactionStatus();
-    const [transactionCount, setTransactionCount] = useRecoilState(
-        transactionCountState
-    );
-
-    const newId = () => {
-        setTransactionCount((transactionCount) => transactionCount + 1);
-        return transactionCount;
-    };
+    const newId = () => nextTransactionId++;
 
     const handleTransaction = async (
         transactionFunction,

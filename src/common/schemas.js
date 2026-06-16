@@ -62,7 +62,7 @@ const etherValidator = (label) => (value, helpers) => {
     }
 
     if (value.endsWith(".")) {
-        return value.splice(-1);
+        return value.slice(0, -1);
     }
 
     return value;
