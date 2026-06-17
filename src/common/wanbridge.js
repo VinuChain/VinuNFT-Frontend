@@ -100,6 +100,26 @@ const BRIDGE_EVM_CHAIN_MAP = new Map(
 
 const ZERO_QUOTA_RE = /^0(?:\.0+)?(?:e\+?0+)?$/i;
 
+// Known WanBridge cross-chain router/escrow contract addresses per chainType.
+// TODO: populate from WanBridge's published cross-chain contract registry
+// (https://bridge.wanchain.org). Left empty pending authoritative source —
+// all chains degrade to the display-and-confirm path until populated.
+export const WANBRIDGE_CONTRACTS = {
+    // chainType: ["0x<lowercased known bridge contract>", ...]
+    // Example once sourced: VC: ["0x<router>"]
+};
+
+// Returns true if toAddress is a known WanBridge contract for chainType,
+// false if the chain is catalogued but the address is not on the list,
+// or null if the chain has no entries yet (caller decides — degrade to display).
+export function isKnownBridgeTarget(chainType, toAddress) {
+    const list = WANBRIDGE_CONTRACTS[chainType];
+    if (!list || list.length === 0) return null; // unknown — caller decides
+    return list
+        .map((a) => a.toLowerCase())
+        .includes(String(toAddress).toLowerCase());
+}
+
 export function isEvmBridgeChain(chainType) {
     return BRIDGE_EVM_CHAIN_MAP.has(chainType);
 }

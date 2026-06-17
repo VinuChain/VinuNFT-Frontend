@@ -9,6 +9,8 @@ const {
     isAmountWithinQuota,
     priorityRank,
     toHexChainId,
+    isKnownBridgeTarget,
+    WANBRIDGE_CONTRACTS,
 } = _mod.default || _mod;
 
 // decimalAmountToRaw
@@ -98,4 +100,47 @@ test("isAmountWithinQuota: zero max quota returns false", () => {
         isAmountWithinQuota("5", 0, { minQuota: "1", maxQuota: "0" }),
         false
     );
+});
+
+// isKnownBridgeTarget
+test("isKnownBridgeTarget: known address on a catalogued chain returns true", () => {
+    // Temporarily populate the map for this test
+    const addr = "0xabcdef1234567890abcdef1234567890abcdef12";
+    WANBRIDGE_CONTRACTS["TEST"] = [addr];
+    assert.equal(isKnownBridgeTarget("TEST", addr), true);
+    delete WANBRIDGE_CONTRACTS["TEST"];
+});
+
+test("isKnownBridgeTarget: known address comparison is case-insensitive", () => {
+    const addr = "0xABCDEF1234567890abcdef1234567890abcdef12";
+    WANBRIDGE_CONTRACTS["TEST"] = [addr.toLowerCase()];
+    assert.equal(isKnownBridgeTarget("TEST", addr), true);
+    delete WANBRIDGE_CONTRACTS["TEST"];
+});
+
+test("isKnownBridgeTarget: unknown address on a catalogued chain returns false", () => {
+    WANBRIDGE_CONTRACTS["TEST"] = ["0x1111111111111111111111111111111111111111"];
+    assert.equal(
+        isKnownBridgeTarget("TEST", "0x2222222222222222222222222222222222222222"),
+        false
+    );
+    delete WANBRIDGE_CONTRACTS["TEST"];
+});
+
+test("isKnownBridgeTarget: uncatalogued chain returns null", () => {
+    // Ensure no entry exists for UNCATALOGUED
+    delete WANBRIDGE_CONTRACTS["UNCATALOGUED"];
+    assert.equal(
+        isKnownBridgeTarget("UNCATALOGUED", "0x1234567890123456789012345678901234567890"),
+        null
+    );
+});
+
+test("isKnownBridgeTarget: empty list for chain returns null", () => {
+    WANBRIDGE_CONTRACTS["EMPTY"] = [];
+    assert.equal(
+        isKnownBridgeTarget("EMPTY", "0x1234567890123456789012345678901234567890"),
+        null
+    );
+    delete WANBRIDGE_CONTRACTS["EMPTY"];
 });
