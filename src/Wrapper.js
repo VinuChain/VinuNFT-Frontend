@@ -74,6 +74,12 @@ export default function Wrapper({ children, props }) {
             </Helmet>
             {process.env.NODE_ENV !== "development" ? (
                 <Helmet>
+                    {/* CSP seed: add_csp.js replaces the script-src value at
+                        build time with the full expanded policy (default-src,
+                        object-src, base-uri, frame-ancestors, img-src,
+                        style-src, frame-src, connect-src) plus sha256 hashes
+                        for every inline script. Keep this value as the exact
+                        template string that add_csp.js targets. */}
                     <meta
                         httpEquiv="Content-Security-Policy"
                         content="script-src 'self'"

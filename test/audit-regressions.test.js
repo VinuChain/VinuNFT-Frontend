@@ -235,3 +235,16 @@ test("WanBridge port uses VinuNFT proxies and validated transaction creation", (
     assert.equal(listModal.includes("BridgeShortcut"), true);
     assert.equal(listModal.includes("Buyers can bridge"), true);
 });
+test("CSP policy in add_csp.js includes required restrictive directives", () => {
+    const cspScript = read("add_csp.js");
+
+    // These directives must be present to provide meaningful CSP protection.
+    // If any of these regress, the app's Content Security Policy is weakened.
+    assert.equal(cspScript.includes("object-src 'none'"), true);
+    assert.equal(cspScript.includes("base-uri 'self'"), true);
+    assert.equal(cspScript.includes("default-src 'self'"), true);
+    assert.equal(cspScript.includes("frame-ancestors 'self'"), true);
+    // connect-src must cover the VinuChain RPC and IPFS gateway at minimum
+    assert.equal(cspScript.includes("https://rpc.vinuchain.org"), true);
+    assert.equal(cspScript.includes("https://gateway.pinata.cloud"), true);
+});
