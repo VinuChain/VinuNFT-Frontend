@@ -28,15 +28,6 @@ function getHtmlFiles() {
     return walk(TARGET_FOLDER);
 }
 
-// The list of all hashes for inserting later via `gatsby-plugin-csp` settings
-let scriptHashes = [];
-// Iterates through the list of HTML files to calculate all hashes
-// Note, I omitted the body of `getHtmlFiles()` method
-getHtmlFiles(TARGET_FOLDER).forEach((file) => {
-    const hashes = getShaFromTags(file, "script");
-    addHashesToHtmlFile(file, hashes);
-});
-
 function computeHash(text) {
     return `'sha256-${createHash("sha256").update(text).digest("base64")}'`;
 }
@@ -82,6 +73,23 @@ function getShaFromTags(inputFilePath, tagName) {
     }
 }
 
+// Bridge RPC endpoints and IPFS gateway required for connect-src.
+// Update this list when new chains are added to BRIDGE_EVM_CHAINS in
+// src/common/wanbridge.js, or when the IPFS gateway changes in src/config.js.
+const CONNECT_SRC_ORIGINS = [
+    "https://rpc.vinuchain.org",           // VinuChain mainnet RPC (src/config.js)
+    "https://gateway.pinata.cloud",        // IPFS image gateway (src/config.js)
+    "https://bridge-api.wanchain.org",     // WanBridge API (src/common/wanbridge.js)
+    "https://bsc-dataseed.binance.org",    // BNB Chain RPC
+    "https://ethereum-rpc.publicnode.com", // Ethereum RPC
+    "https://polygon-rpc.com",             // Polygon RPC
+    "https://arb1.arbitrum.io",            // Arbitrum RPC
+    "https://api.avax.network",            // Avalanche C-Chain RPC
+    "https://mainnet.base.org",            // Base RPC
+    "https://mainnet.optimism.io",         // OP Mainnet RPC
+    "https://gwan-ssl.wandevs.org:56891",  // Wanchain RPC
+];
+
 function addHashesToHtmlFile(inputFilePath, hashes) {
     // Add the hashes to the file's Content Security tag
 
@@ -91,9 +99,19 @@ function addHashesToHtmlFile(inputFilePath, hashes) {
     let fileContents = fs.readFileSync(inputFilePath, { encoding: "utf-8" });
 
     const newHashes = hashes.join(" ");
-    //console.log(newHashes)
-    // Replace the existing CSP tag with the new one
-    const newCsp = `script-src 'self' ${newHashes}`;
+    const connectSrc = `'self' ${CONNECT_SRC_ORIGINS.join(" ")}`;
+    // Replace the bare script-src placeholder with the full expanded policy.
+    // All other directives are prepended; sha256 hashes are appended to script-src.
+    const newCsp =
+        `default-src 'self'; ` +
+        `object-src 'none'; ` +
+        `base-uri 'self'; ` +
+        `frame-ancestors 'self'; ` +
+        `img-src 'self' data: https:; ` +
+        `style-src 'self' 'unsafe-inline'; ` +
+        `frame-src 'self'; ` +
+        `connect-src ${connectSrc}; ` +
+        `script-src 'self' ${newHashes}`;
 
     // Replace the CSP tag
     fileContents = fileContents.replace(template, newCsp);
@@ -105,5 +123,14 @@ function addHashesToHtmlFile(inputFilePath, hashes) {
     // Write the file back
     fs.writeFileSync(inputFilePath, fileContents, { encoding: "utf-8" });
 }
+
+// The list of all hashes for inserting later via `gatsby-plugin-csp` settings
+let scriptHashes = [];
+// Iterates through the list of HTML files to calculate all hashes
+// Note, I omitted the body of `getHtmlFiles()` method
+getHtmlFiles(TARGET_FOLDER).forEach((file) => {
+    const hashes = getShaFromTags(file, "script");
+    addHashesToHtmlFile(file, hashes);
+});
 
 console.log("Done!");
