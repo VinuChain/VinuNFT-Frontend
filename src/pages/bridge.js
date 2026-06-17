@@ -9,6 +9,7 @@ import {
     getBridgeEvmChain,
     isAmountWithinQuota,
     isEvmBridgeChain,
+    isKnownBridgeTarget,
     isPositiveDecimalAmount,
     nativeFeeDecimalsForChain,
     nativeFeeSymbolForChain,
@@ -79,7 +80,7 @@ async function switchToBridgeChain(walletProvider, chain) {
                     nativeCurrency: {
                         name: chain.currency,
                         symbol: chain.currency,
-                        decimals: 18,
+                        decimals: 18, // TODO: derive from chain when a non-18-decimal EVM chain is added
                     },
                     rpcUrls: [chain.rpcUrl],
                     blockExplorerUrls: [chain.explorerUrl],
@@ -454,6 +455,15 @@ export default function Bridge({ location }) {
         try {
             await switchToBridgeChain(walletProvider, sourceChain);
 
+            // Re-read the active chain after the switch to guard against the
+            // wallet ignoring or rejecting the switch request silently.
+            const activeNetwork = await walletProvider.getNetwork();
+            if (Number(activeNetwork.chainId) !== Number(sourceChain.chainId)) {
+                throw new Error(
+                    `Wallet is on chain ${activeNetwork.chainId}, expected ${sourceChain.chainId} (${sourceChain.name}). Switch networks and retry.`
+                );
+            }
+
             const createResponse = await fetch("/api/wanbridge-create-tx", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -523,6 +533,23 @@ export default function Bridge({ location }) {
                     );
                     await approveTx.wait();
                 }
+            }
+
+            const known = isKnownBridgeTarget(
+                sourceChain.chainType,
+                txData.tx.to
+            );
+            if (known === false) {
+                throw new Error(
+                    "Bridge target address not recognized — aborting for safety."
+                );
+            }
+            if (known === null) {
+                // Chain not yet in the allowlist; surface the resolved target
+                // and value so the user can verify before the wallet prompt.
+                setActionMessage(
+                    `Bridge target: ${txData.tx.to} · Value: ${ethers.BigNumber.from(txData.tx.value || "0").toString()} wei. Confirm in your wallet.`
+                );
             }
 
             setActionMessage("Sending bridge transaction...");

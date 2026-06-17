@@ -39,3 +39,12 @@ test("schemas.list: 19-decimal price sets error (over-18-decimals)", () => {
     });
     assert.ok(result.error !== undefined, "expected a validation error");
 });
+
+test("schemas.validMarkdown.protocols.src does not include data URIs", () => {
+    const src = schemas.validMarkdown?.protocols?.src ?? [];
+    assert.equal(
+        src.includes("data"),
+        false,
+        "validMarkdown must not allow data: URIs in src to prevent data-URI XSS"
+    );
+});

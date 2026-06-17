@@ -235,6 +235,7 @@ test("WanBridge port uses VinuNFT proxies and validated transaction creation", (
     assert.equal(listModal.includes("BridgeShortcut"), true);
     assert.equal(listModal.includes("Buyers can bridge"), true);
 });
+
 test("CSP policy in add_csp.js includes required restrictive directives", () => {
     const cspScript = read("add_csp.js");
 
@@ -247,4 +248,32 @@ test("CSP policy in add_csp.js includes required restrictive directives", () => 
     // connect-src must cover the VinuChain RPC and IPFS gateway at minimum
     assert.equal(cspScript.includes("https://rpc.vinuchain.org"), true);
     assert.equal(cspScript.includes("https://gateway.pinata.cloud"), true);
+});
+
+test("markdown NFT rendering is sandboxed via MarkdownViewer, not bare MDEditor", () => {
+    const nftCard = read("src/components/NFTCard.js");
+    const nftPage = read("src/pages/nft/index.js");
+    const schemas = read("src/common/schemas.js");
+
+    // Both render sites must reference MarkdownViewer (sandboxed iframe)
+    assert.equal(nftCard.includes("MarkdownViewer"), true);
+    assert.equal(nftPage.includes("MarkdownViewer"), true);
+
+    // Neither render site may use bare MDEditor.Markdown for third-party content
+    // (bare MDEditor.Markdown with rehypeSanitize(schemas.validMarkdown) is the old unsandboxed pattern)
+    assert.equal(
+        nftCard.includes("rehypeSanitize(schemas.validMarkdown)"),
+        false
+    );
+    assert.equal(
+        nftPage.includes("rehypeSanitize(schemas.validMarkdown)"),
+        false
+    );
+
+    // validMarkdown must no longer add "data" to protocols.src
+    const validMarkdownSection = schemas.slice(schemas.indexOf("const validMarkdown"));
+    assert.equal(
+        validMarkdownSection.slice(0, validMarkdownSection.indexOf("const validHTML")).includes('"data"'),
+        false
+    );
 });
