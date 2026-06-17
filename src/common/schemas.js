@@ -135,13 +135,7 @@ const editRoyalty = Joi.object().keys({
         .label("Royalty percentage"),
 });
 
-const validMarkdown = {
-    ...rehypeDefaultSchema,
-    protocols: {
-        ...rehypeDefaultSchema.protocols,
-        src: [...rehypeDefaultSchema.protocols.src, "data"],
-    },
-};
+const validMarkdown = { ...rehypeDefaultSchema };
 
 const validHTML = {
     ...rehypeDefaultSchema,

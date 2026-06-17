@@ -9,12 +9,10 @@ import {
 import config from "../../config";
 import { ethers } from "ethers";
 import { v1 } from "../../common/abi";
-import rehypeSanitize from "rehype-sanitize";
-import schemas from "../../common/schemas";
 import * as queryString from "query-string";
 
-import MDEditor from "@uiw/react-md-editor";
 import HTMLViewer from "../../components/HTMLViewer";
+import MarkdownViewer from "../../components/MarkdownViewer";
 import { navigate } from "gatsby-link";
 import { Helmet } from "react-helmet";
 import { Header } from "../../components";
@@ -731,14 +729,8 @@ export default function NFTPage({ location }) {
                                                     />
                                                 ) : tokenType ==
                                                   "text/markdown" ? (
-                                                    <MDEditor.Markdown
+                                                    <MarkdownViewer
                                                         source={tokenContent}
-                                                        rehypePlugins={[
-                                                            () =>
-                                                                rehypeSanitize(
-                                                                    schemas.validMarkdown
-                                                                ),
-                                                        ]}
                                                     />
                                                 ) : (
                                                     <pre className="nft-plain">
