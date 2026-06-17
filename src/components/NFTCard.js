@@ -14,6 +14,7 @@ import { isTokenExistenceError } from "../common/error";
 import { useRecoilState } from "recoil";
 import { formatError, standardErrorState } from "../common/error";
 import HTMLViewer from "./HTMLViewer";
+import MarkdownViewer from "./MarkdownViewer";
 import Address from "./Address";
 import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
@@ -172,12 +173,7 @@ export default function NFTCard({ id, type }) {
                     tokenType == "text/html" ? (
                         <HTMLViewer source={tokenContent} />
                     ) : tokenType == "text/markdown" ? (
-                        <MDEditor.Markdown
-                            source={tokenContent}
-                            rehypePlugins={[
-                                () => rehypeSanitize(schemas.validMarkdown),
-                            ]}
-                        />
+                        <MarkdownViewer source={tokenContent} />
                     ) : (
                         <pre
                             className="nft-plain"
