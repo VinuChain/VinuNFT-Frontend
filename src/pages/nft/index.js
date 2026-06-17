@@ -9,11 +9,8 @@ import {
 import config from "../../config";
 import { ethers } from "ethers";
 import { v1 } from "../../common/abi";
-import rehypeSanitize from "rehype-sanitize";
-import schemas from "../../common/schemas";
 import * as queryString from "query-string";
 
-import MDEditor from "@uiw/react-md-editor";
 import HTMLViewer from "../../components/HTMLViewer";
 import MarkdownViewer from "../../components/MarkdownViewer";
 import { navigate } from "gatsby-link";
