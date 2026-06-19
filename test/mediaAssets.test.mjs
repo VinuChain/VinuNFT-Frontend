@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mediaAssets, mediaGroups } from "../src/common/mediaAssets.js";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { mediaAssets, mediaGroups } = require("../src/common/mediaAssets.js");
 
 test("media kit exposes the VinuNFT brand asset group", () => {
     assert.equal(mediaGroups.length, 1);
