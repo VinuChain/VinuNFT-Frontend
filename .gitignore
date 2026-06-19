@@ -11,9 +11,4 @@ known_hosts
 
 # Local-only OMC state and advisory improve-plans (kept out of the public repo)
 .omc/
-plans/007-correctness-and-dead-deps.md
-plans/008-unit-test-baseline.md
-plans/009-bridge-tx-safety.md
-plans/010-markdown-render-hardening.md
-plans/011-content-security-policy.md
-plans/012-marketplace-discovery-perf.md
+plans/
