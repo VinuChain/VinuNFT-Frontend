@@ -19,6 +19,17 @@ const mediaAssets = [
         preview: "transparent",
     },
     {
+        id: "vinunft-logo-svg",
+        title: "VinuNFT Logo - Compact SVG",
+        description:
+            "Compact SVG wrapper of the official transparent VinuNFT logo PNG for lighter partner embeds and thumbnails.",
+        format: "SVG",
+        dimensions: "384x492",
+        href: "/vinunft.svg",
+        group: "vinunft",
+        preview: "transparent",
+    },
+    {
         id: "vinunft-favicon",
         title: "VinuNFT Favicon",
         description:

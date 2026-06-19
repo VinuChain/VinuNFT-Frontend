@@ -15,10 +15,16 @@ test("media kit includes downloadable VinuNFT logo assets", () => {
     const ids = mediaAssets.map((asset) => asset.id);
 
     assert.ok(ids.includes("vinunft-logo-png"));
+    assert.ok(ids.includes("vinunft-logo-svg"));
     assert.ok(ids.includes("vinunft-favicon"));
 
     const png = mediaAssets.find((asset) => asset.id === "vinunft-logo-png");
     assert.equal(png.href, "/vinunft.png");
     assert.equal(png.format, "PNG");
     assert.equal(png.dimensions, "1430x1613");
+
+    const svg = mediaAssets.find((asset) => asset.id === "vinunft-logo-svg");
+    assert.equal(svg.href, "/vinunft.svg");
+    assert.equal(svg.format, "SVG");
+    assert.equal(svg.dimensions, "384x492");
 });
