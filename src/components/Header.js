@@ -21,6 +21,10 @@ const NAV_LINKS = [
         label: "Bridge",
     },
     {
+        href: "/media",
+        label: "Media",
+    },
+    {
         href: "/activity",
         label: "Activity",
     },

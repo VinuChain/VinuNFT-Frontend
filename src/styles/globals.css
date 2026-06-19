@@ -682,6 +682,205 @@ button {
     font-weight: 900;
 }
 
+.media-kit-page {
+    background: #f7faf8;
+    color: #07100d;
+    margin: 0 auto;
+    max-width: 72rem;
+    padding: 2rem 1rem 4rem;
+}
+
+.media-kit-hero {
+    background: #07100d;
+    border: 1px solid rgba(121, 235, 198, 0.28);
+    border-radius: 8px;
+    color: #f5f1e8;
+    display: grid;
+    gap: 0.8rem;
+    margin-bottom: 2rem;
+    padding: 2rem;
+}
+
+.media-kit-hero__eyebrow {
+    color: #79ebc6;
+    font-size: 0.78rem;
+    font-weight: 900;
+    line-height: 1.35;
+    margin: 0;
+    text-transform: uppercase;
+}
+
+.media-kit-hero h1 {
+    color: inherit;
+    font-size: 3rem;
+    font-weight: 900;
+    line-height: 1;
+    margin: 0;
+}
+
+.media-kit-hero p:last-child {
+    color: #cbd8d1;
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 1.55;
+    margin: 0;
+    max-width: 42rem;
+}
+
+.media-kit-sections {
+    display: grid;
+    gap: 2rem;
+}
+
+.media-kit-section {
+    display: grid;
+    gap: 1rem;
+}
+
+.media-kit-section__header {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.media-kit-section__header h2 {
+    color: #07100d;
+    font-size: 1.85rem;
+    font-weight: 900;
+    line-height: 1.1;
+    margin: 0;
+}
+
+.media-kit-section__header p {
+    color: #5a6d64;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.5;
+    margin: 0;
+    max-width: 40rem;
+}
+
+.media-kit-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+}
+
+.media-kit-card {
+    background: #ffffff;
+    border: 1px solid #dce5df;
+    border-radius: 8px;
+    display: grid;
+    gap: 0.75rem;
+    grid-template-rows: auto auto auto 1fr auto auto;
+    min-width: 0;
+    padding: 1rem;
+}
+
+.media-kit-card__preview {
+    align-items: center;
+    aspect-ratio: 16 / 9;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.media-kit-card__preview--dark {
+    background: #07100d;
+}
+
+.media-kit-card__preview--light {
+    background: #ffffff;
+    border: 1px solid #dce5df;
+}
+
+.media-kit-card__preview--transparent {
+    background: repeating-conic-gradient(#e6eee9 0% 25%, #f7faf8 0% 50%) 0 0 /
+        1rem 1rem;
+}
+
+.media-kit-card__preview img {
+    display: block;
+    max-height: 82%;
+    max-width: 82%;
+    object-fit: contain;
+}
+
+.media-kit-card__title {
+    color: #07100d;
+    font-size: 1.12rem;
+    font-weight: 900;
+    line-height: 1.2;
+    margin: 0;
+}
+
+.media-kit-card__pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.media-kit-card__pills span {
+    background: #edf8f4;
+    border-radius: 999px;
+    color: #095843;
+    font-size: 0.75rem;
+    font-weight: 900;
+    line-height: 1;
+    padding: 0.35rem 0.55rem;
+    text-transform: uppercase;
+}
+
+.media-kit-card__description {
+    color: #5a6d64;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.45;
+    margin: 0;
+}
+
+.media-kit-card__actions {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.media-kit-card__actions input {
+    border: 1px solid #cbd8d1;
+    border-radius: 6px;
+    color: #32443c;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    min-width: 0;
+    padding: 0.58rem 0.65rem;
+}
+
+.media-kit-card__actions button {
+    background: #07100d;
+    border: 0;
+    border-radius: 6px;
+    color: #f5f1e8;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 900;
+    line-height: 1;
+    min-height: 2.35rem;
+    padding: 0.55rem 0.8rem;
+}
+
+.media-kit-card__actions button:hover,
+.media-kit-card__actions button:focus {
+    background: #095843;
+}
+
+.media-kit-card__download {
+    color: #095843;
+    font-size: 0.95rem;
+    font-weight: 900;
+    justify-self: start;
+    text-decoration: underline;
+}
+
 @media screen and (max-width: 1023px) {
     .vinunft-header {
         padding: 0.6rem 0.85rem;
@@ -784,7 +983,8 @@ button {
     .bridge-featured,
     .bridge-grid,
     .bridge-metrics,
-    .bridge-preview dl {
+    .bridge-preview dl,
+    .media-kit-card__actions {
         grid-template-columns: 1fr;
     }
 
@@ -807,6 +1007,18 @@ button {
 
     .vinunft-footer__copy {
         font-size: 1rem;
+    }
+
+    .media-kit-page {
+        padding: 1.25rem 1rem 3rem;
+    }
+
+    .media-kit-hero {
+        padding: 1.5rem;
+    }
+
+    .media-kit-hero h1 {
+        font-size: 2.35rem;
     }
 }
 
