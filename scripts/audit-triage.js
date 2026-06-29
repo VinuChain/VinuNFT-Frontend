@@ -1,4 +1,5 @@
 const { spawnSync } = require("node:child_process");
+const path = require("node:path");
 
 const baseline = {
     info: 0,
@@ -8,10 +9,25 @@ const baseline = {
     critical: 65,
 };
 
+const yarnCli = process.env.npm_execpath;
+const yarnCliName = yarnCli ? path.basename(yarnCli).toLowerCase() : "";
+const auditCommand =
+    yarnCliName === "yarn.js" || yarnCliName === "yarnpkg"
+        ? { command: process.execPath, args: [yarnCli, "audit"], shell: false }
+        : {
+              command: process.platform === "win32" ? "yarn.cmd" : "yarn",
+              args: ["audit"],
+              shell: process.platform === "win32",
+          };
+
 const result = spawnSync(
-    "yarn",
-    ["audit", "--json", "--groups", "dependencies"],
-    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+    auditCommand.command,
+    [...auditCommand.args, "--json", "--groups", "dependencies"],
+    {
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+        shell: auditCommand.shell,
+    }
 );
 
 const output = `${result.stdout || ""}\n${result.stderr || ""}`;
@@ -29,6 +45,9 @@ const metadataLine = output
 
 if (!metadataLine) {
     console.error("Could not parse yarn audit summary.");
+    if (result.error) {
+        console.error(result.error.message);
+    }
     process.exit(1);
 }
 
