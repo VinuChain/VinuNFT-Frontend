@@ -76,6 +76,12 @@ See `docs/marketplace-discovery.md`, `docs/address-profiles.md`, and `docs/vinus
 ## Verification
 
 ```bash
+yarn verify:ci
+```
+
+`yarn verify:ci` matches the GitHub Actions quality gate:
+
+```bash
 yarn lint
 yarn test
 yarn audit:triage
