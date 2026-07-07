@@ -271,9 +271,30 @@ test("markdown NFT rendering is sandboxed via MarkdownViewer, not bare MDEditor"
     );
 
     // validMarkdown must no longer add "data" to protocols.src
-    const validMarkdownSection = schemas.slice(schemas.indexOf("const validMarkdown"));
+    const validMarkdownSection = schemas.slice(
+        schemas.indexOf("const validMarkdown")
+    );
     assert.equal(
-        validMarkdownSection.slice(0, validMarkdownSection.indexOf("const validHTML")).includes('"data"'),
+        validMarkdownSection
+            .slice(0, validMarkdownSection.indexOf("const validHTML"))
+            .includes('"data"'),
         false
     );
+});
+
+test("NFT preview cards and image detail views stay keyboard and screen-reader accessible", () => {
+    const nftCard = read("src/components/NFTCard.js");
+    const nftPage = read("src/pages/nft/index.js");
+
+    assert.equal(nftCard.includes("RoutingLink"), false);
+    assert.equal(nftCard.includes('role="link"'), true);
+    assert.equal(nftCard.includes("tabIndex={0}"), true);
+    assert.equal(nftCard.includes("onKeyDown={handleCardKeyDown}"), true);
+    assert.equal(nftCard.includes('event.key === "Enter"'), true);
+    assert.equal(nftCard.includes('event.key === " "'), true);
+    assert.equal(nftCard.includes("aria-label={`View ${tokenLabel}`}"), true);
+    assert.equal(nftCard.includes("imageAltText"), true);
+    assert.equal(nftCard.includes("alt={imageAltText}"), true);
+    assert.equal(nftPage.includes("imageAltText"), true);
+    assert.equal(nftPage.includes("alt={imageAltText}"), true);
 });
