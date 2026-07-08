@@ -149,6 +149,15 @@ export default function NFTCard({ id, type }) {
     }, [id, type, readProvider]);
 
     const effectiveTokenAuthor = tokenAuthor || null;
+    const nftPath = `/nft?type=${type}&id=${id}`;
+    const tokenLabel = tokenData?.name || `${type} NFT #${id}`;
+    const imageAltText = `${tokenLabel} image preview`;
+    const handleCardKeyDown = (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            navigate(nftPath);
+        }
+    };
 
     if (!exists) {
         return <></>;
@@ -158,12 +167,17 @@ export default function NFTCard({ id, type }) {
         <div
             className="card m-3 cursor-pointer"
             style={styles.card}
-            onClick={() => navigate(`/nft?type=${type}&id=${id}`)}
+            onClick={() => navigate(nftPath)}
+            onKeyDown={handleCardKeyDown}
+            role="link"
+            tabIndex={0}
+            aria-label={`View ${tokenLabel}`}
         >
             <div style={styles.cardPreview}>
                 {type === "image" ? (
                     <img
                         src={tokenContent}
+                        alt={imageAltText}
                         style={{ objectFit: "contain", width: "100%" }}
                     />
                 ) : tokenType && tokenContent !== null ? (

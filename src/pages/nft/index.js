@@ -681,6 +681,12 @@ export default function NFTPage({ location }) {
     const socialUrl = safeSocialId
         ? `/nft?type=${encodeURIComponent(safeSocialType)}&id=${safeSocialId}`
         : "/nft";
+    const imageAltText =
+        tokenData?.name && safeSocialId
+            ? `${tokenData.name} image NFT #${safeSocialId}`
+            : safeSocialId
+            ? `Image NFT #${safeSocialId}`
+            : "VinuNFT image";
 
     return (
         <div>
@@ -713,6 +719,7 @@ export default function NFTPage({ location }) {
                                     {macroNftType === "image" ? (
                                         <img
                                             src={tokenContent}
+                                            alt={imageAltText}
                                             style={{
                                                 objectFit: "contain",
                                             }}
