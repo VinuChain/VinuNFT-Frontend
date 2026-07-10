@@ -47,10 +47,10 @@ abuse-control system.
 -   Error messages are safe to show to users and do not include secrets.
 -   Upload attempts emit one structured `vinunft.ipfs_upload` audit event with
     fixed `outcome`, `reason`, `uploadType`, and status fields.
--   Upload audit events may include hashed wallet/IP identifiers and coarse file
-    metadata, but must not include Pinata JWTs, wallet signatures, raw IP
-    addresses, uploaded file bytes, metadata payloads, or provider response
-    bodies.
+-   Upload audit events may include hashed wallet identifiers and bounded,
+    coarse file metadata. They must not include per-IP identifiers, Pinata
+    JWTs, wallet signatures, raw IP addresses, uploaded file bytes, metadata
+    payloads, or provider response bodies.
 
 ## Rollout
 

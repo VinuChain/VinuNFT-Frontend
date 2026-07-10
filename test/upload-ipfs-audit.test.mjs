@@ -90,7 +90,7 @@ function assertRedacted(event, forbiddenValues) {
     const serialized = JSON.stringify(event);
 
     assert.equal(event.event, "vinunft.ipfs_upload");
-    assert.match(event.clientIpHash, /^[a-f0-9]{16}$/);
+    assert.equal("clientIpHash" in event, false);
     assert.ok(!("signature" in event));
     assert.ok(!("jwt" in event));
 
@@ -210,4 +210,67 @@ test("upload audit logs Pinata non-OK responses without provider payloads", asyn
         "provider body should stay out of audit logs",
         "private draft text",
     ]);
+});
+
+test("upload audit bounds attacker-controlled file content types", async () => {
+    process.env.PINATA_API_JWT = "pinata.jwt.secret";
+    process.env.PINATA_ALLOWED_UPLOAD_ADDRESSES =
+        ethers.Wallet.createRandom().address;
+    const attackerContentType = `image/${"x".repeat(4096)}`;
+    const res = response();
+    const events = await captureAuditEvents(() =>
+        handler(
+            request({
+                type: "file",
+                contentType: attackerContentType,
+                metadata: { description: "must stay private" },
+            }),
+            res
+        )
+    );
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].reason, "missing_signature");
+    assert.ok(events[0].fileContentType.length <= 128);
+    assert.equal(
+        JSON.stringify(events[0]).includes(attackerContentType),
+        false
+    );
+});
+
+test("upload audit omits reversible client IP identifiers", async () => {
+    delete process.env.PINATA_API_JWT;
+    const res = response();
+    const events = await captureAuditEvents(() =>
+        handler(request(jsonPayload(null), "203.0.113.99"), res)
+    );
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(events.length, 1);
+    assert.equal("clientIpHash" in events[0], false);
+});
+
+test("upload audit reasons ignore attacker-controlled error text", async () => {
+    process.env.PINATA_API_JWT = "pinata.jwt.secret";
+    process.env.PINATA_ALLOWED_UPLOAD_ADDRESSES =
+        ethers.Wallet.createRandom().address;
+    const res = response();
+    const events = await captureAuditEvents(() =>
+        handler(
+            request(
+                jsonPayload({
+                    address: "PINATA_API_JWT",
+                    issuedAt: new Date().toISOString(),
+                    signature: "attacker-controlled",
+                }),
+                "203.0.113.100"
+            ),
+            res
+        )
+    );
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].reason, "upload_rejected");
 });

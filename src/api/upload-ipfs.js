@@ -3,6 +3,15 @@ import { ethers } from "ethers";
 const PINATA_PIN_FILE_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";
 const PINATA_PIN_JSON_URL = "https://api.pinata.cloud/pinning/pinJSONToIPFS";
 const UPLOAD_AUDIT_EVENT = "vinunft.ipfs_upload";
+const MAX_AUDIT_CONTENT_TYPE_LENGTH = 128;
+
+class UploadRejection extends Error {
+    constructor(reason, message) {
+        super(message);
+        this.name = "UploadRejection";
+        this.auditReason = reason;
+    }
+}
 
 function envValue(name) {
     return process.env[name];
@@ -67,6 +76,24 @@ function uploadTypeForAudit(payload) {
     return payload?.type ? "unsupported" : "unknown";
 }
 
+function fileContentTypeForAudit(payload) {
+    if (typeof payload?.contentType !== "string") {
+        return null;
+    }
+
+    const contentType = payload.contentType.trim().toLowerCase();
+    if (
+        contentType.length <= MAX_AUDIT_CONTENT_TYPE_LENGTH &&
+        /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/.test(
+            contentType
+        )
+    ) {
+        return contentType;
+    }
+
+    return "other";
+}
+
 function uploadAuditContext(req, payload) {
     const auth = payload?.auth || {};
     const context = {
@@ -75,12 +102,11 @@ function uploadAuditContext(req, payload) {
         hasAuth: Boolean(payload?.auth),
         hasSignature: Boolean(auth.signature),
         walletHash: walletAuditHash(auth),
-        clientIpHash: hashAuditValue(clientIp(req)),
         metadataPresent: Boolean(payload?.metadata),
     };
 
     if (payload?.type === "file") {
-        context.fileContentType = payload.contentType || null;
+        context.fileContentType = fileContentTypeForAudit(payload);
         context.declaredFileSizeBytes = Number.isFinite(Number(payload.size))
             ? Number(payload.size)
             : null;
@@ -90,23 +116,9 @@ function uploadAuditContext(req, payload) {
 }
 
 function uploadAuditReason(error) {
-    const message = error?.message || "";
-
-    if (message.includes("PINATA_API_JWT")) return "missing_pinata_jwt";
-    if (message.includes("PINATA_ALLOWED_UPLOAD_ADDRESSES")) {
-        return "missing_upload_allowlist";
-    }
-    if (message.includes("not authorized")) return "wallet_not_allowed";
-    if (message.includes("rate limit")) return "rate_limited";
-    if (message.includes("wallet signature")) return "missing_signature";
-    if (message.includes("expired or not yet valid")) return "stale_signature";
-    if (message.includes("does not match")) return "invalid_signature";
-    if (message.includes("exceeds the upload limit"))
-        return "payload_too_large";
-    if (message.includes("Unsupported upload type")) return "unsupported_type";
-    if (message.includes("File uploads require")) return "invalid_file_payload";
-
-    return "upload_rejected";
+    return error instanceof UploadRejection
+        ? error.auditReason
+        : "upload_rejected";
 }
 
 function recordUploadAudit(req, payload, event) {
@@ -122,7 +134,10 @@ function recordUploadAudit(req, payload, event) {
 
 function assertPinataJwt() {
     if (!envValue("PINATA_API_JWT")) {
-        throw new Error("PINATA_API_JWT is not configured on the server.");
+        throw new UploadRejection(
+            "missing_pinata_jwt",
+            "PINATA_API_JWT is not configured on the server."
+        );
     }
 }
 
@@ -155,7 +170,10 @@ function checkRateLimitBucket(key, maxUploads) {
     );
 
     if (recent.length >= maxUploads) {
-        throw new Error("Upload rate limit exceeded.");
+        throw new UploadRejection(
+            "rate_limited",
+            "Upload rate limit exceeded."
+        );
     }
 
     recent.push(now);
@@ -180,19 +198,26 @@ function assertAllowedUploader(address) {
         .map((value) => ethers.utils.getAddress(value).toLowerCase());
 
     if (allowedAddresses.length === 0) {
-        throw new Error(
+        throw new UploadRejection(
+            "missing_upload_allowlist",
             "PINATA_ALLOWED_UPLOAD_ADDRESSES must be configured before uploads are enabled."
         );
     }
 
     if (!allowedAddresses.includes(address.toLowerCase())) {
-        throw new Error("Wallet is not authorized to upload IPFS content.");
+        throw new UploadRejection(
+            "wallet_not_allowed",
+            "Wallet is not authorized to upload IPFS content."
+        );
     }
 }
 
 function assertUploadAuth(req, auth) {
     if (!auth?.address || !auth?.issuedAt || !auth?.signature) {
-        throw new Error("Upload requires a wallet signature.");
+        throw new UploadRejection(
+            "missing_signature",
+            "Upload requires a wallet signature."
+        );
     }
 
     const address = ethers.utils.getAddress(auth.address);
@@ -203,7 +228,10 @@ function assertUploadAuth(req, auth) {
         !Number.isFinite(issuedAtMs) ||
         Math.abs(now - issuedAtMs) > 10 * 60 * 1000
     ) {
-        throw new Error("Upload signature is expired or not yet valid.");
+        throw new UploadRejection(
+            "stale_signature",
+            "Upload signature is expired or not yet valid."
+        );
     }
 
     const recoveredAddress = ethers.utils.verifyMessage(
@@ -212,7 +240,8 @@ function assertUploadAuth(req, auth) {
     );
 
     if (ethers.utils.getAddress(recoveredAddress) !== address) {
-        throw new Error(
+        throw new UploadRejection(
+            "invalid_signature",
             "Upload signature does not match the supplied address."
         );
     }
@@ -224,7 +253,10 @@ function assertUploadAuth(req, auth) {
 async function pinJson(metadata) {
     const serialized = JSON.stringify(metadata);
     if (Buffer.byteLength(serialized, "utf8") > MAX_UPLOAD_BYTES) {
-        throw new Error("Metadata payload exceeds the upload limit.");
+        throw new UploadRejection(
+            "payload_too_large",
+            "Metadata payload exceeds the upload limit."
+        );
     }
 
     const response = await fetch(PINATA_PIN_JSON_URL, {
@@ -241,7 +273,10 @@ async function pinJson(metadata) {
 
 async function pinFile(payload) {
     if (!payload.name || !payload.contentType || !payload.data) {
-        throw new Error("File uploads require name, contentType, and data.");
+        throw new UploadRejection(
+            "invalid_file_payload",
+            "File uploads require name, contentType, and data."
+        );
     }
 
     const fileBytes = Buffer.from(payload.data, "base64");
@@ -249,7 +284,10 @@ async function pinFile(payload) {
         fileBytes.length > MAX_UPLOAD_BYTES ||
         Number(payload.size || 0) > MAX_UPLOAD_BYTES
     ) {
-        throw new Error("File payload exceeds the upload limit.");
+        throw new UploadRejection(
+            "payload_too_large",
+            "File payload exceeds the upload limit."
+        );
     }
 
     const formData = new FormData();
@@ -287,7 +325,10 @@ export default async function handler(req, res) {
                 : null;
 
         if (!response) {
-            throw new Error("Unsupported upload type.");
+            throw new UploadRejection(
+                "unsupported_type",
+                "Unsupported upload type."
+            );
         }
 
         const text = await response.text();
