@@ -39,12 +39,18 @@ abuse-control system.
 
 ## Non-negotiable invariants
 
-- `PINATA_API_JWT` remains server-only and never uses a `GATSBY_` prefix.
-  Plain marker for regression tests: PINATA_API_JWT remains server-only.
-- Uploads require a recent wallet signature.
-- Uploads have a byte limit.
-- Uploads have per-wallet and global throttling.
-- Error messages are safe to show to users and do not include secrets.
+-   `PINATA_API_JWT` remains server-only and never uses a `GATSBY_` prefix.
+    Plain marker for regression tests: PINATA_API_JWT remains server-only.
+-   Uploads require a recent wallet signature.
+-   Uploads have a byte limit.
+-   Uploads have per-wallet and global throttling.
+-   Error messages are safe to show to users and do not include secrets.
+-   Upload attempts emit one structured `vinunft.ipfs_upload` audit event with
+    fixed `outcome`, `reason`, `uploadType`, and status fields.
+-   Upload audit events may include hashed wallet identifiers and bounded,
+    coarse file metadata. They must not include per-IP identifiers, Pinata
+    JWTs, wallet signatures, raw IP addresses, uploaded file bytes, metadata
+    payloads, or provider response bodies.
 
 ## Rollout
 
