@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 
 const PINATA_PIN_FILE_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";
 const PINATA_PIN_JSON_URL = "https://api.pinata.cloud/pinning/pinJSONToIPFS";
+const UPLOAD_AUDIT_EVENT = "vinunft.ipfs_upload";
 
 function envValue(name) {
     return process.env[name];
@@ -40,6 +41,83 @@ function sendJson(res, statusCode, body) {
     res.status(statusCode);
     res.setHeader("Content-Type", "application/json");
     res.send(JSON.stringify(body));
+}
+
+function hashAuditValue(value) {
+    return ethers.utils.id(`vinunft-upload-audit:${value}`).slice(2, 18);
+}
+
+function walletAuditHash(auth) {
+    if (!auth?.address) {
+        return null;
+    }
+
+    try {
+        return hashAuditValue(ethers.utils.getAddress(auth.address));
+    } catch {
+        return "invalid";
+    }
+}
+
+function uploadTypeForAudit(payload) {
+    if (payload?.type === "json" || payload?.type === "file") {
+        return payload.type;
+    }
+
+    return payload?.type ? "unsupported" : "unknown";
+}
+
+function uploadAuditContext(req, payload) {
+    const auth = payload?.auth || {};
+    const context = {
+        event: UPLOAD_AUDIT_EVENT,
+        uploadType: uploadTypeForAudit(payload),
+        hasAuth: Boolean(payload?.auth),
+        hasSignature: Boolean(auth.signature),
+        walletHash: walletAuditHash(auth),
+        clientIpHash: hashAuditValue(clientIp(req)),
+        metadataPresent: Boolean(payload?.metadata),
+    };
+
+    if (payload?.type === "file") {
+        context.fileContentType = payload.contentType || null;
+        context.declaredFileSizeBytes = Number.isFinite(Number(payload.size))
+            ? Number(payload.size)
+            : null;
+    }
+
+    return context;
+}
+
+function uploadAuditReason(error) {
+    const message = error?.message || "";
+
+    if (message.includes("PINATA_API_JWT")) return "missing_pinata_jwt";
+    if (message.includes("PINATA_ALLOWED_UPLOAD_ADDRESSES")) {
+        return "missing_upload_allowlist";
+    }
+    if (message.includes("not authorized")) return "wallet_not_allowed";
+    if (message.includes("rate limit")) return "rate_limited";
+    if (message.includes("wallet signature")) return "missing_signature";
+    if (message.includes("expired or not yet valid")) return "stale_signature";
+    if (message.includes("does not match")) return "invalid_signature";
+    if (message.includes("exceeds the upload limit"))
+        return "payload_too_large";
+    if (message.includes("Unsupported upload type")) return "unsupported_type";
+    if (message.includes("File uploads require")) return "invalid_file_payload";
+
+    return "upload_rejected";
+}
+
+function recordUploadAudit(req, payload, event) {
+    const auditEvent = {
+        ...uploadAuditContext(req, payload),
+        ...event,
+        recordedAt: new Date().toISOString(),
+    };
+    const logger = event.outcome === "success" ? console.info : console.warn;
+
+    logger(JSON.stringify(auditEvent));
 }
 
 function assertPinataJwt() {
@@ -195,9 +273,11 @@ export default async function handler(req, res) {
         return sendJson(res, 405, { error: "Method not allowed" });
     }
 
+    let payload = {};
+
     try {
         assertPinataJwt();
-        const payload = parseBody(req);
+        payload = parseBody(req);
         assertUploadAuth(req, payload.auth);
         const response =
             payload.type === "json"
@@ -212,14 +292,31 @@ export default async function handler(req, res) {
 
         const text = await response.text();
         if (!response.ok) {
+            recordUploadAudit(req, payload, {
+                outcome: "pinata_rejected",
+                reason: "pinata_non_ok",
+                statusCode: response.status,
+                pinataStatus: response.status,
+            });
             res.status(response.status);
             return res.send(text);
         }
 
+        recordUploadAudit(req, payload, {
+            outcome: "success",
+            reason: "pinata_ok",
+            statusCode: 200,
+            pinataStatus: response.status,
+        });
         res.status(200);
         res.setHeader("Content-Type", "application/json");
         res.send(text);
     } catch (error) {
+        recordUploadAudit(req, payload, {
+            outcome: "rejected",
+            reason: uploadAuditReason(error),
+            statusCode: 400,
+        });
         return sendJson(res, 400, { error: error.message });
     }
 }
