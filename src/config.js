@@ -40,8 +40,8 @@ const config = {
         cacheExpiration: 1000 * 60 * 2, // 2 minutes
     },
     blockExplorer: {
-        name: "VinuScan",
-        url: "https://mainnet.vinuscan.com",
+        name: "VinuExplorer",
+        url: "https://vinuexplorer.org",
     },
     tokens: {
         wvc: {
