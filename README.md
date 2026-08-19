@@ -28,7 +28,7 @@ The app is configured for VinuChain mainnet:
 - Chain ID: `207`
 - Native currency: `VC`
 - RPC: `https://rpc.vinuchain.org`
-- Explorer: `https://mainnet.vinuscan.com`
+- Explorer: `https://vinuexplorer.org`
 
 Contract addresses and deployment first blocks live in `src/config.js`. When backend contracts are redeployed, update `src/config.js` and the matching ABI files under `src/abis`.
 
