@@ -77,7 +77,16 @@ test("event scans and author lookups are bounded/direct", () => {
     );
     assert.equal(history.includes("return await contract.authorOf(id);"), true);
     assert.equal(nftPage.includes('["totalSupply(uint256)"]'), false);
-    assert.equal(nftPage.includes('"latest"'), true);
+
+    // Every historical scan must go through queryFilterChunked. A raw
+    // queryFilter spans millions of blocks and the node rejects it outright
+    // ("too wide blocks range"), which silently emptied all history.
+    assert.equal(/\.queryFilter\(/.test(history), false);
+    assert.equal(history.includes("queryFilterChunked("), true);
+
+    // Total supply is a direct contract read, not a chain-wide mint scan.
+    assert.equal(/\.queryFilter\(/.test(nftPage), false);
+    assert.equal(nftPage.includes("nftContract.totalSupply(id)"), true);
 });
 
 test("buy modal handles loading balances and insufficient funds", () => {
@@ -101,8 +110,36 @@ test("VinuChain config is normalized", () => {
     const nativeCurrencyCount = config.match(/nativeCurrency:/g)?.length || 0;
 
     assert.equal(config.includes("iamge"), false);
-    assert.equal(config.includes("image: 467700"), true);
     assert.equal(nativeCurrencyCount, 1);
+
+    // Contract creation blocks, each verified on VinuChain by locating the
+    // creation transaction. They were previously all pinned to 467700, which
+    // predates every deployment by ~1.76M blocks. scripts/verify-deployed-truth.mjs
+    // re-checks these against the chain.
+    assert.equal(config.includes("text: 2234593"), true);
+    assert.equal(config.includes("marketplace: 2232125"), true);
+    assert.equal(config.includes("image: 2232056"), true);
+    assert.equal(config.includes("467700"), false);
+});
+
+test("NFT ABIs describe the deployed contracts, not newer source", () => {
+    // ethers resolves `.totalSupply(id)` by name; a zero-arg overload in the
+    // ABI would make that call ambiguous and throw. The deployed contracts do
+    // not implement one, so it must not appear in the ABI either.
+    for (const name of ["TextNFT", "ImageNFT"]) {
+        const abiFile = JSON.parse(read(`src/abis/${name}.json`));
+        const abi = abiFile.abi ?? abiFile;
+        const supplyFns = abi.filter(
+            (x) => x.type === "function" && x.name === "totalSupply"
+        );
+        assert.equal(
+            supplyFns.length,
+            1,
+            `${name} must declare one totalSupply`
+        );
+        assert.equal(supplyFns[0].inputs.length, 1);
+        assert.equal(supplyFns[0].inputs[0].type, "uint256");
+    }
 });
 
 test("footer links to the VinuChain ecosystem socials", () => {

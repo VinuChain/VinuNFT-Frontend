@@ -6,11 +6,15 @@ const config = {
             image: "0xDE63a95387b89679869591351f5bFD897Dc87DFB",
         },
     },
+    // Contract creation blocks, verified against VinuChain by locating each
+    // contract's creation transaction (see scripts/verify-deployed-truth.mjs).
+    // These bound every historical event scan; a value that is too low costs
+    // ~18 extra RPC pages per scan, one that is too high silently loses history.
     firstBlocks: {
         v1: {
-            text: 467700,
-            marketplace: 467700,
-            image: 467700,
+            text: 2234593,
+            marketplace: 2232125,
+            image: 2232056,
         },
     },
     nativeCurrency: {
@@ -29,6 +33,9 @@ const config = {
         },
     },
     rpc: "https://rpc.vinuchain.org",
+    // Largest `toBlock - fromBlock` the RPC will accept for eth_getLogs.
+    // Exceeding it fails the whole call with "too wide blocks range".
+    maxLogBlockRange: 100000,
     api_keys: {
         alchemy: process.env.GATSBY_ALCHEMY_API_KEY,
         alchemy_mainnet: process.env.GATSBY_ALCHEMY_MAINNET_API_KEY,

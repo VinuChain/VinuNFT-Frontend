@@ -56,6 +56,7 @@ import {
 } from "../../common/user";
 import { maybeFetchIpfs } from "../../common/ipfs";
 import { getTokenContent } from "../../common/nftInfo";
+import { queryFilterChunked } from "../../common/eventScan";
 
 const burnedIdsState = atom({
     key: "burnedIds",
@@ -367,26 +368,12 @@ export default function NFTPage({ location }) {
             readProvider
         );
         try {
-            const transferFromFilter = nftContract.filters.TransferSingle(
-                null,
-                ethers.constants.AddressZero,
-                null
-            );
-            const events = await nftContract.queryFilter(
-                transferFromFilter,
-                config.firstBlocks.v1[macroNftType],
-                "latest"
-            );
-            const matchingEvents = events.filter(
-                (event) => event.args.id == id
-            );
-
-            if (matchingEvents.length == 1) {
-                setTotalSupply(matchingEvents[0].args.value);
-            } else {
-                console.log("No total supply found");
-                setTotalSupply(null);
-            }
+            // ERC1155Supply tracks this on-chain. Reading it directly is one
+            // call instead of scanning every mint event on the chain, and it
+            // stays correct when a token is minted more than once or burned —
+            // the previous event scan returned nothing in the first case and a
+            // stale pre-burn figure in the second.
+            setTotalSupply(await nftContract.totalSupply(id));
         } catch (e) {
             setStandardError(formatError(e));
         }

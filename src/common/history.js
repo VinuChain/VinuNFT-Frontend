@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import { atom } from "recoil";
 import { formatTokenAmount } from "./utils";
 import { tokenAddressToId } from "./user";
+import { queryFilterChunked } from "./eventScan";
 
 const blockToDateState = atom({
     key: "blockToDateState",
@@ -59,7 +60,8 @@ const getTransferEvents = async (
             if (address === null) {
                 const allTransfersFilter = nftContract.filters.TransferSingle();
                 eventPromises.push(
-                    nftContract.queryFilter(
+                    queryFilterChunked(
+                        nftContract,
                         allTransfersFilter,
                         firstNftBlock,
                         "latest"
@@ -80,17 +82,20 @@ const getTransferEvents = async (
                 );
 
                 eventPromises.push(
-                    nftContract.queryFilter(
+                    queryFilterChunked(
+                        nftContract,
                         transferOperatorFilter,
                         firstNftBlock,
                         "latest"
                     ),
-                    nftContract.queryFilter(
+                    queryFilterChunked(
+                        nftContract,
                         transferFromFilter,
                         firstNftBlock,
                         "latest"
                     ),
-                    nftContract.queryFilter(
+                    queryFilterChunked(
+                        nftContract,
                         transferToFilter,
                         firstNftBlock,
                         "latest"
@@ -149,17 +154,20 @@ const getEvents = async (
 
     const [tokenListedEvents, tokenDelistedEvents, tokenPurchasedEvents] =
         await Promise.all([
-            marketplaceContract.queryFilter(
+            queryFilterChunked(
+                marketplaceContract,
                 tokenListedFilter,
                 firstMarketplaceBlock,
                 "latest"
             ),
-            marketplaceContract.queryFilter(
+            queryFilterChunked(
+                marketplaceContract,
                 tokenDelistedFilter,
                 firstMarketplaceBlock,
                 "latest"
             ),
-            marketplaceContract.queryFilter(
+            queryFilterChunked(
+                marketplaceContract,
                 tokenPurchasedFilter,
                 firstMarketplaceBlock,
                 "latest"

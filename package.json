@@ -21,6 +21,7 @@
         "test": "node --import tsx --test test/*.test.js test/*.test.mjs",
         "audit:triage": "node scripts/audit-triage.js",
         "verify": "yarn lint && yarn test",
+        "verify:deployed": "node scripts/verify-deployed-truth.mjs",
         "verify:ci": "yarn lint && yarn test && yarn audit:triage && yarn build",
         "serve": "gatsby serve",
         "clean": "gatsby clean",
