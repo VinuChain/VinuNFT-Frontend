@@ -152,6 +152,19 @@ export default function NFTHistory({ history, hideId }) {
                                     {config.tokens[event.paymentToken]
                                         ?.symbol || "N/A"}
                                 </tt>
+                            ) : event.type === "list" ||
+                              event.type === "purchase" ? (
+                                // A priced event whose ERC-20 this app does not
+                                // recognise. Its decimals are unknown, so any
+                                // figure shown would be a guess; say so rather
+                                // than omit the row and imply there was no price.
+                                <tt
+                                    className="is-size-7"
+                                    title="This listing uses a token VinuNFT does not recognise, so its amount cannot be displayed accurately."
+                                >
+                                    PRICE: &nbsp;unavailable (unrecognised
+                                    token)
+                                </tt>
                             ) : (
                                 <></>
                             )}

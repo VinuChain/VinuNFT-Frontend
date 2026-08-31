@@ -21,6 +21,10 @@ const shortenAddress = (address, nChar) => {
 function parseTokenAmount(amount, tokenId) {
     const token = config.tokens[tokenId];
 
+    if (token === undefined) {
+        throw new Error(`Token ${tokenId} not found in config.`);
+    }
+
     return ethers.utils.parseUnits(amount, token.decimals);
 }
 

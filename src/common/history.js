@@ -292,15 +292,24 @@ const parseHistory = (events) => {
                     "Parsing TokenListed event with payment token:",
                     event.args._paymentToken
                 );*/
+                const listPaymentToken =
+                    tokenAddressToId[event.args._paymentToken] ?? null;
                 parsedEvents.push({
                     id: parseInt(event.args._tokenId),
                     type: "list",
                     seller: event.args._seller,
-                    paymentToken: tokenAddressToId[event.args._paymentToken],
-                    price: formatTokenAmount(
-                        event.args._price.toString(),
-                        tokenAddressToId[event.args._paymentToken]
-                    ),
+                    paymentToken: listPaymentToken,
+                    // listToken accepts any ERC-20, so a listing may be
+                    // denominated in a token this app does not know. Its
+                    // decimals are unknown, so no price can be shown honestly —
+                    // but one such listing must not take down history for
+                    // every other token, which is what throwing here did.
+                    price: listPaymentToken
+                        ? formatTokenAmount(
+                              event.args._price.toString(),
+                              listPaymentToken
+                          )
+                        : null,
                     amount: event.args.amount.toNumber(), // Note the lack of _
                     transactionHash: event.transactionHash,
                     blockNumber: event.blockNumber,
@@ -339,7 +348,7 @@ const parseHistory = (events) => {
                 break;
             case "TokenPurchased":
                 const purchasePaymentToken =
-                    tokenAddressToId[event.args._paymentToken];
+                    tokenAddressToId[event.args._paymentToken] ?? null;
                 parsedEvents.push({
                     id: parseInt(event.args._tokenId),
                     type: "purchase",
@@ -347,10 +356,12 @@ const parseHistory = (events) => {
                     seller: event.args._seller,
                     amount: event.args._amount.toNumber(),
                     paymentToken: purchasePaymentToken,
-                    price: formatTokenAmount(
-                        event.args._price.toString(),
-                        purchasePaymentToken
-                    ).toString(),
+                    price: purchasePaymentToken
+                        ? formatTokenAmount(
+                              event.args._price.toString(),
+                              purchasePaymentToken
+                          ).toString()
+                        : null,
                     transactionHash: event.transactionHash,
                     blockNumber: event.blockNumber,
                     nftType: event.nftType,

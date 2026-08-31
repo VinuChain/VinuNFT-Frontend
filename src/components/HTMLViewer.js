@@ -1,11 +1,6 @@
 import React from "react";
-import { createElement, Fragment, useState, useRef } from "react";
-import { unified } from "unified";
-import rehypeParse from "rehype-parse";
-import rehypeReact from "rehype-react";
-import rehypeSanitize from "rehype-sanitize";
-import { schemas } from "../common";
-import rehypeStringify from "rehype-stringify/lib";
+import { useState, useRef } from "react";
+import { sanitizeHtml } from "../common/sanitize";
 
 export default function HTMLViewer({ source }) {
     const [height, setHeight] = useState("0px");
@@ -32,25 +27,13 @@ export default function HTMLViewer({ source }) {
         }
     };
 
-    const sanitize = (html) => {
-        const sanitized = unified()
-            .use(rehypeParse, { fragment: true })
-            .use(rehypeReact, { createElement, Fragment })
-            .use(rehypeSanitize, schemas.validHTML)
-            .use(rehypeStringify)
-            .processSync(html);
-        // console.log(sanitized.value);
-        return sanitized.value;
-    };
-    console.log("Source:", source);
-
     return (
         <iframe
             ref={ref}
             onLoad={onLoad}
             height={height}
             style={{ width: "100%", overflow: "auto" }}
-            srcDoc={sanitize(source)}
+            srcDoc={sanitizeHtml(source)}
             sandbox
         />
     );

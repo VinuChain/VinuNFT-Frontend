@@ -42,10 +42,17 @@ export default function HTMLEditor({ value, setValue }) {
                 <article className="message is-info is-small mt-2">
                     <div className="message-body">
                         <p>
-                            <strong>Note</strong>: Most HTML tags are supported,
-                            with the notable exception of <tt>{"<script>"}</tt>.
-                            A full list of the allowed tags will be released
-                            soon.
+                            <strong>Note</strong>: content is sanitised with the
+                            GitHub-flavoured allowlist. Ordinary formatting,
+                            headings, lists, tables, images, links and{" "}
+                            <tt>class</tt> attributes are kept. Anything that
+                            could run code is removed: <tt>{"<script>"}</tt>,{" "}
+                            <tt>{"<iframe>"}</tt>, <tt>{"<style>"}</tt>,{" "}
+                            <tt>{"<form>"}</tt>, event handlers such as{" "}
+                            <tt>onclick</tt>, and <tt>javascript:</tt> or{" "}
+                            <tt>data:</tt> URLs. The preview above applies
+                            exactly the same rules as the published NFT, so what
+                            you see here is what buyers see.
                         </p>
                     </div>
                 </article>
