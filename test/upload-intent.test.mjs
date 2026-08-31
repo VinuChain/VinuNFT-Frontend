@@ -115,14 +115,16 @@ test("a signature bound to different file bytes is rejected", async () => {
     assert.match(res.body, /does not authorise this payload/);
 });
 
-test("a file-upload signature cannot authorise a metadata upload", async () => {
+test("action binding alone rejects a cross-action signature", async () => {
     const wallet = ethers.Wallet.createRandom();
-    const file = fileBody();
-    // Reuse the file's signature against a JSON payload carrying the same digest
-    // input, so only the bound action can distinguish them.
-    const auth = await authFor(wallet, file);
-    const res = await post(wallet, { ...jsonBody(), _digestSource: file }, auth);
+    const payload = jsonBody();
+    // Identical payload and therefore an identical digest; the *only*
+    // difference is the action signed. The server derives the expected action
+    // from payload.type, so this isolates action binding from digest binding.
+    const auth = await authFor(wallet, payload, { action: "mint-image" });
+    const res = await post(wallet, payload, auth);
     assert.equal(res.statusCode, 400);
+    assert.match(res.body, /does not authorise this payload/);
 });
 
 test("a version-1 signature (address and timestamp only) is rejected", async () => {
@@ -162,4 +164,83 @@ test("an unsupported upload type is rejected before any pinning", async () => {
     } finally { console.warn = warn; console.info = info; }
     assert.equal(res.statusCode, 400);
     assert.equal(pinned, false);
+});
+
+// --- media type enforcement at the endpoint ---------------------------------
+
+function pngBytes(width = 8, height = 8) {
+    const b = Buffer.alloc(24);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b, 0);
+    b.writeUInt32BE(13, 8);
+    b.write("IHDR", 12, "ascii");
+    b.writeUInt32BE(width, 16);
+    b.writeUInt32BE(height, 20);
+    return b;
+}
+
+function filePayloadOf(bytes, contentType = "image/png", name = "art.png") {
+    return {
+        type: "file",
+        name,
+        contentType,
+        size: bytes.length,
+        data: bytes.toString("base64"),
+    };
+}
+
+async function postFile(bytes, contentType, name) {
+    const wallet = ethers.Wallet.createRandom();
+    const payload = filePayloadOf(bytes, contentType, name);
+    return post(wallet, payload, await authFor(wallet, payload));
+}
+
+test("a genuine PNG declared as image/png is accepted", async () => {
+    const res = await postFile(pngBytes(), "image/png");
+    assert.equal(res.statusCode, 200);
+});
+
+test("an SVG is rejected even when declared as an allowed type", async () => {
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+    const res = await postFile(svg, "image/png", "art.png");
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body, /not a recognised image/);
+});
+
+test("image/svg+xml is not an accepted media type", async () => {
+    const res = await postFile(pngBytes(), "image/svg+xml", "art.svg");
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body, /not an accepted image format/);
+});
+
+test("a GIF mislabelled as PNG is rejected as a type mismatch", async () => {
+    const gif = Buffer.alloc(10);
+    gif.write("GIF89a", 0, "ascii");
+    gif.writeUInt16LE(1, 6);
+    gif.writeUInt16LE(1, 8);
+    const res = await postFile(gif, "image/png");
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body, /do not match the declared file type/);
+});
+
+test("an HTML polyglot named .png is rejected before pinning", async () => {
+    let pinned = false;
+    const wallet = ethers.Wallet.createRandom();
+    const payload = filePayloadOf(Buffer.from("<!DOCTYPE html><script>alert(1)</script>"), "image/png");
+    process.env.PINATA_API_JWT = "pinata.jwt.secret";
+    process.env.PINATA_ALLOWED_UPLOAD_ADDRESSES = wallet.address;
+    globalThis.fetch = async () => { pinned = true; return { ok: true, status: 200, text: async () => "{}" }; };
+    const res = response();
+    const warn = console.warn, info = console.info;
+    console.warn = () => {}; console.info = () => {};
+    try {
+        await handler(request({ ...payload, auth: await authFor(wallet, payload) }), res);
+    } finally { console.warn = warn; console.info = info; }
+    assert.equal(res.statusCode, 400);
+    assert.equal(pinned, false, "nothing may reach Pinata");
+});
+
+test("an image whose declared geometry is a decompression bomb is rejected", async () => {
+    const res = await postFile(pngBytes(60000, 60000), "image/png");
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body, /dimensions exceed/);
 });

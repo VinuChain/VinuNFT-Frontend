@@ -3,6 +3,7 @@ import {
     createUploadMessage,
     uploadPayloadDigest,
 } from "../common/uploadIntent";
+import { sniffImage } from "../common/imageSniff";
 
 const PINATA_PIN_FILE_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";
 const PINATA_PIN_JSON_URL = "https://api.pinata.cloud/pinning/pinJSONToIPFS";
@@ -33,6 +34,23 @@ const MAX_GLOBAL_UPLOADS_PER_WINDOW = Number(
     envValue("PINATA_MAX_GLOBAL_UPLOADS_PER_WINDOW") || 200
 );
 const UPLOAD_CHAIN_ID = Number(envValue("UPLOAD_CHAIN_ID") || 207);
+
+// Raster formats only. SVG is deliberately excluded: it is script bearing, and
+// a gateway serving it as image/svg+xml executes that script on the gateway
+// origin. The declared content type must also match the bytes, which is what
+// stops a polyglot or a renamed script being pinned as an image.
+const ALLOWED_MEDIA_TYPES = (
+    envValue("PINATA_ALLOWED_MEDIA_TYPES") ||
+    "image/png,image/jpeg,image/gif,image/webp"
+)
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+// Guards a decompression bomb on its declared geometry, without decoding it.
+const MAX_IMAGE_PIXELS = Number(
+    envValue("PINATA_MAX_IMAGE_PIXELS") || 40000000
+);
 
 // ponytail: process-memory rate limit, resets on cold start and is not shared
 // between instances. Documented as a burst guard, not distributed abuse
@@ -306,6 +324,14 @@ async function pinFile(payload) {
         );
     }
 
+    const declaredType = String(payload.contentType).trim().toLowerCase();
+    if (!ALLOWED_MEDIA_TYPES.includes(declaredType)) {
+        throw new UploadRejection(
+            "media_type_not_allowed",
+            "File type is not an accepted image format."
+        );
+    }
+
     const fileBytes = Buffer.from(payload.data, "base64");
     if (
         fileBytes.length > MAX_UPLOAD_BYTES ||
@@ -317,10 +343,32 @@ async function pinFile(payload) {
         );
     }
 
+    // The bytes decide the type, not the client. A mismatch means the payload
+    // was mislabelled — a polyglot, a renamed script, or an SVG.
+    const sniffed = sniffImage(fileBytes);
+    if (!sniffed) {
+        throw new UploadRejection(
+            "unrecognised_image",
+            "File is not a recognised image."
+        );
+    }
+    if (sniffed.mediaType !== declaredType) {
+        throw new UploadRejection(
+            "media_type_mismatch",
+            "File contents do not match the declared file type."
+        );
+    }
+    if (sniffed.width * sniffed.height > MAX_IMAGE_PIXELS) {
+        throw new UploadRejection(
+            "image_too_large",
+            "Image dimensions exceed the upload limit."
+        );
+    }
+
     const formData = new FormData();
     formData.append(
         "file",
-        new Blob([fileBytes], { type: payload.contentType }),
+        new Blob([fileBytes], { type: declaredType }),
         payload.name
     );
 

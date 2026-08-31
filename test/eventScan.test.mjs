@@ -3,8 +3,14 @@ import assert from "node:assert/strict";
 import * as _mod from "../src/common/eventScan.js";
 
 // tsx CJS-interop: named exports land on the .default namespace object
-const { blockRanges, queryFilterChunked, MAX_LOG_BLOCK_RANGE, SCAN_CONCURRENCY } =
-    _mod.default || _mod;
+const {
+    blockRanges,
+    queryFilterChunked,
+    topicsMatch,
+    _resetLogCache,
+    MAX_LOG_BLOCK_RANGE,
+    SCAN_CONCURRENCY,
+} = _mod.default || _mod;
 
 // Verified against VinuChain: the node rejects eth_getLogs when
 // toBlock - fromBlock > 100000 ("too wide blocks range, the limit is 100000").
@@ -64,29 +70,75 @@ test("blockRanges: rejects non-integer and non-positive inputs", () => {
     assert.throws(() => blockRanges(0, 10, 0), RangeError);
 });
 
-// --- queryFilterChunked ----------------------------------------------------
+// --- topic matching ---------------------------------------------------------
+
+test("topicsMatch: absent or empty filter matches everything", () => {
+    assert.equal(topicsMatch(["0xaa"], undefined), true);
+    assert.equal(topicsMatch(["0xaa"], []), true);
+});
+
+test("topicsMatch: null positions are wildcards, others must match", () => {
+    const log = ["0xaa", "0xbb", "0xcc"];
+    assert.equal(topicsMatch(log, ["0xaa", null, "0xcc"]), true);
+    assert.equal(topicsMatch(log, ["0xaa", "0xzz"]), false);
+    assert.equal(topicsMatch(log, [null, null, null]), true);
+});
+
+test("topicsMatch: is case insensitive and supports alternatives", () => {
+    assert.equal(topicsMatch(["0xAA"], ["0xaa"]), true);
+    assert.equal(topicsMatch(["0xaa"], [["0xbb", "0xaa"]]), true);
+    assert.equal(topicsMatch(["0xaa"], [["0xbb", "0xcc"]]), false);
+});
+
+test("topicsMatch: a filter deeper than the log's topics does not match", () => {
+    assert.equal(topicsMatch(["0xaa"], ["0xaa", "0xbb"]), false);
+});
+
+// --- queryFilterChunked -----------------------------------------------------
+
+const SIG_A = "0x" + "a".repeat(64);
+const SIG_B = "0x" + "b".repeat(64);
 
 /** Stands in for an ethers Contract, rejecting over-wide ranges like the node. */
-function fakeContract(head, eventsByBlock = {}) {
+function fakeContract(head, logs = [], address = "0xCafe") {
     const asked = [];
     return {
+        address,
         asked,
-        provider: { getBlockNumber: async () => head },
-        queryFilter: async (_filter, from, to) => {
-            asked.push([from, to]);
-            if (to - from > NODE_LIMIT) {
-                throw new Error("too wide blocks range, the limit is 100000");
-            }
-            return Object.entries(eventsByBlock)
-                .filter(([b]) => Number(b) >= from && Number(b) <= to)
-                .map(([b, v]) => ({ blockNumber: Number(b), tag: v }));
+        interface: {
+            parseLog: (log) => {
+                if (log.topics[0] === SIG_A) return { name: "Alpha", args: ["a"] };
+                if (log.topics[0] === SIG_B) return { name: "Beta", args: ["b"] };
+                throw new Error("unknown event");
+            },
+        },
+        provider: {
+            getBlockNumber: async () => head,
+            getLogs: async ({ fromBlock, toBlock }) => {
+                asked.push([fromBlock, toBlock]);
+                if (toBlock - fromBlock > NODE_LIMIT) {
+                    throw new Error("too wide blocks range, the limit is 100000");
+                }
+                return logs.filter(
+                    (l) => l.blockNumber >= fromBlock && l.blockNumber <= toBlock
+                );
+            },
         },
     };
 }
 
+const log = (blockNumber, topic, logIndex = 0) => ({
+    blockNumber,
+    transactionIndex: 0,
+    logIndex,
+    transactionHash: `0x${blockNumber}`,
+    topics: [topic],
+});
+
 test("queryFilterChunked: never asks the node for an over-wide range", async () => {
+    _resetLogCache();
     const c = fakeContract(HEAD_AT_AUDIT);
-    await queryFilterChunked(c, {}, MARKETPLACE_FIRST_BLOCK, "latest");
+    await queryFilterChunked(c, { topics: [SIG_A] }, MARKETPLACE_FIRST_BLOCK, "latest");
     assert.ok(c.asked.length > 1);
     for (const [from, to] of c.asked) {
         assert.ok(to - from <= NODE_LIMIT, `asked for ${from}..${to}`);
@@ -94,36 +146,70 @@ test("queryFilterChunked: never asks the node for an over-wide range", async () 
 });
 
 test("queryFilterChunked: resolves 'latest' and covers up to the head block", async () => {
+    _resetLogCache();
     const c = fakeContract(250000);
-    await queryFilterChunked(c, {}, 0, "latest");
+    await queryFilterChunked(c, { topics: [SIG_A] }, 0, "latest");
     assert.equal(Math.max(...c.asked.map(([, to]) => to)), 250000);
 });
 
-test("queryFilterChunked: returns every event in ascending block order", async () => {
-    const c = fakeContract(300000, { 10: "a", 150000: "b", 275000: "c" });
-    const events = await queryFilterChunked(c, {}, 0, "latest");
-    assert.deepEqual(events.map((e) => e.tag), ["a", "b", "c"]);
-    assert.deepEqual(events.map((e) => e.blockNumber), [10, 150000, 275000]);
+test("queryFilterChunked: returns matching events in ascending block order", async () => {
+    _resetLogCache();
+    const c = fakeContract(300000, [log(275000, SIG_A), log(10, SIG_A), log(150000, SIG_B)]);
+    const events = await queryFilterChunked(c, { topics: [SIG_A] }, 0, "latest");
+    assert.deepEqual(events.map((e) => e.blockNumber), [10, 275000]);
+    assert.deepEqual(events.map((e) => e.event), ["Alpha", "Alpha"]);
+});
+
+test("queryFilterChunked: a second filter reuses the cached pass, costing no requests", async () => {
+    _resetLogCache();
+    const c = fakeContract(300000, [log(10, SIG_A), log(20, SIG_B)]);
+    await queryFilterChunked(c, { topics: [SIG_A] }, 0, "latest");
+    const afterFirst = c.asked.length;
+    const beta = await queryFilterChunked(c, { topics: [SIG_B] }, 0, "latest");
+    assert.equal(c.asked.length, afterFirst, "second filter must not re-scan");
+    assert.deepEqual(beta.map((e) => e.event), ["Beta"]);
+});
+
+test("queryFilterChunked: concurrent filters share one pass", async () => {
+    _resetLogCache();
+    const c = fakeContract(300000, [log(10, SIG_A), log(20, SIG_B)]);
+    // History fires its filters together; without in-flight caching each one
+    // starts its own full pass, which is what cost 1500 requests per page.
+    await Promise.all([
+        queryFilterChunked(c, { topics: [SIG_A] }, 0, "latest"),
+        queryFilterChunked(c, { topics: [SIG_B] }, 0, "latest"),
+        queryFilterChunked(c, { topics: [SIG_A] }, 0, "latest"),
+    ]);
+    assert.equal(c.asked.length, blockRanges(0, 300000).length);
+});
+
+test("queryFilterChunked: an undecodable log does not break the scan", async () => {
+    _resetLogCache();
+    const c = fakeContract(300000, [log(10, SIG_A), log(15, "0x" + "f".repeat(64))]);
+    const events = await queryFilterChunked(c, { topics: [SIG_A] }, 0, "latest");
+    assert.deepEqual(events.map((e) => e.blockNumber), [10]);
 });
 
 test("queryFilterChunked: a failing sub-range rejects rather than returning partial history", async () => {
-    const c = fakeContract(500000, { 10: "a" });
-    const realQuery = c.queryFilter;
-    c.queryFilter = async (f, from, to) => {
-        if (from > 200000) throw new Error("node unavailable");
-        return realQuery(f, from, to);
+    _resetLogCache();
+    const c = fakeContract(500000, [log(10, SIG_A)]);
+    const real = c.provider.getLogs;
+    c.provider.getLogs = async (args) => {
+        if (args.fromBlock > 200000) throw new Error("node unavailable");
+        return real(args);
     };
     await assert.rejects(
-        () => queryFilterChunked(c, {}, 0, "latest"),
+        () => queryFilterChunked(c, { topics: [SIG_A] }, 0, "latest"),
         /node unavailable/,
         "partial history must never be presented as complete"
     );
 });
 
 test("queryFilterChunked: honours an explicit numeric toBlock", async () => {
-    const c = fakeContract(9999999, { 10: "a", 500000: "toolate" });
-    const events = await queryFilterChunked(c, {}, 0, 100000);
-    assert.deepEqual(events.map((e) => e.tag), ["a"]);
+    _resetLogCache();
+    const c = fakeContract(9999999, [log(10, SIG_A), log(500000, SIG_A)]);
+    const events = await queryFilterChunked(c, { topics: [SIG_A] }, 0, 100000);
+    assert.deepEqual(events.map((e) => e.blockNumber), [10]);
     assert.deepEqual(c.asked, [[0, 100000]]);
 });
 

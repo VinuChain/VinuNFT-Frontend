@@ -174,6 +174,11 @@ export default function Mint() {
                                         <input
                                             className="file-input"
                                             type="file"
+                                            // Mirrors the media types the
+                                            // upload endpoint accepts, so an
+                                            // unsupported file is caught before
+                                            // the wallet signature prompt.
+                                            accept="image/png,image/jpeg,image/gif,image/webp"
                                             onChange={(e) =>
                                                 setFile(e.target.files[0])
                                             }

@@ -9,8 +9,7 @@ import config from "../config";
  */
 export const MAX_LOG_BLOCK_RANGE = config.maxLogBlockRange;
 
-/** How many range requests are in flight at once. Matches the concurrency
- *  cap used for marketplace discovery reads against the same single node. */
+/** Range requests in flight at once, per contract pass. */
 export const SCAN_CONCURRENCY = 8;
 
 /**
@@ -39,6 +38,111 @@ export function blockRanges(fromBlock, toBlock, maxSpan = MAX_LOG_BLOCK_RANGE) {
 }
 
 /**
+ * Does `log` satisfy an ethers topic filter? Each filter position is either
+ * absent/null (wildcard), a single topic, or an array of alternatives.
+ */
+export function topicsMatch(logTopics, filterTopics) {
+    if (!filterTopics || filterTopics.length === 0) return true;
+
+    return filterTopics.every((want, i) => {
+        if (want === null || want === undefined) return true;
+        const got = logTopics[i];
+        if (got === undefined) return false;
+        const candidates = Array.isArray(want) ? want : [want];
+        return candidates.some((c) => c.toLowerCase() === got.toLowerCase());
+    });
+}
+
+/**
+ * One decoded, cached pass over every log a contract has emitted.
+ *
+ * History is built by repeatedly filtering the same events: a token page
+ * discovers involved addresses, then re-scans for each of them. Issuing a
+ * separate topic-filtered scan per filter multiplied the range requests by the
+ * number of filters — measured at 1500 `eth_getLogs` calls and ~20s to render
+ * one token's 13 events. Fetching the contract's logs once and filtering in
+ * memory makes every additional filter free.
+ *
+ * Cached per contract address and start block; a later call covering more
+ * blocks fetches only the delta.
+ */
+const logCache = new Map();
+
+export function _resetLogCache() {
+    logCache.clear();
+}
+
+function allContractEvents(contract, fromBlock, toBlock, maxSpan) {
+    const key = `${contract.address.toLowerCase()}:${fromBlock}`;
+    const pending = logCache.get(key);
+
+    // The cache holds the in-flight promise, not just the settled result.
+    // History fires many filters concurrently; without this every one of them
+    // misses simultaneously and starts its own full pass.
+    if (pending && pending.toBlock >= toBlock) {
+        return pending.promise;
+    }
+
+    const entry = {
+        toBlock,
+        promise: fetchContractEvents(
+            contract,
+            fromBlock,
+            toBlock,
+            maxSpan,
+            pending
+        ),
+    };
+    logCache.set(key, entry);
+    return entry.promise;
+}
+
+async function fetchContractEvents(
+    contract,
+    fromBlock,
+    toBlock,
+    maxSpan,
+    pending
+) {
+    const address = contract.address;
+    const previous = pending ? await pending.promise : [];
+    const scanFrom = pending ? pending.toBlock + 1 : fromBlock;
+    const ranges = blockRanges(scanFrom, toBlock, maxSpan);
+    const fetched = new Array(ranges.length);
+
+    for (let i = 0; i < ranges.length; i += SCAN_CONCURRENCY) {
+        const wave = ranges.slice(i, i + SCAN_CONCURRENCY);
+        const settled = await Promise.all(
+            wave.map(([from, to]) =>
+                contract.provider.getLogs({
+                    address,
+                    fromBlock: from,
+                    toBlock: to,
+                })
+            )
+        );
+        settled.forEach((logs, offset) => {
+            fetched[i + offset] = logs;
+        });
+    }
+
+    const decoded = [];
+    for (const log of fetched.flat()) {
+        let parsed;
+        try {
+            parsed = contract.interface.parseLog(log);
+        } catch {
+            // An event this ABI does not describe. Skipping keeps an ABI that
+            // trails the deployed contract from breaking the whole history.
+            continue;
+        }
+        decoded.push({ ...log, event: parsed.name, args: parsed.args });
+    }
+
+    return previous.concat(decoded);
+}
+
+/**
  * `contract.queryFilter` that survives the node's block-range limit.
  *
  * Returns events in ascending block order, matching a single unbounded
@@ -57,18 +161,24 @@ export async function queryFilterChunked(
             ? await contract.provider.getBlockNumber()
             : toBlock;
 
-    const ranges = blockRanges(fromBlock, resolvedTo, maxSpan);
-    const results = new Array(ranges.length);
+    const events = await allContractEvents(
+        contract,
+        fromBlock,
+        resolvedTo,
+        maxSpan
+    );
 
-    for (let i = 0; i < ranges.length; i += SCAN_CONCURRENCY) {
-        const wave = ranges.slice(i, i + SCAN_CONCURRENCY);
-        const settled = await Promise.all(
-            wave.map(([from, to]) => contract.queryFilter(filter, from, to))
+    return events
+        .filter(
+            (e) =>
+                e.blockNumber >= fromBlock &&
+                e.blockNumber <= resolvedTo &&
+                topicsMatch(e.topics, filter?.topics)
+        )
+        .sort(
+            (a, b) =>
+                a.blockNumber - b.blockNumber ||
+                a.transactionIndex - b.transactionIndex ||
+                a.logIndex - b.logIndex
         );
-        settled.forEach((events, offset) => {
-            results[i + offset] = events;
-        });
-    }
-
-    return results.flat();
 }

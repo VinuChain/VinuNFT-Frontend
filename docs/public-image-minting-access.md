@@ -58,6 +58,13 @@ from uploading repeatedly.
     the image CID is only known after the image is pinned, a mint signs twice:
     once for the image and once for the metadata.
 -   Uploads have a byte limit.
+-   File uploads are raster images only. The declared media type must be on the
+    allowlist (`PINATA_ALLOWED_MEDIA_TYPES`, default PNG/JPEG/GIF/WebP) *and*
+    match what the leading bytes actually are (`src/common/imageSniff.js`), so a
+    polyglot, a renamed script, or an SVG cannot be pinned as an image. SVG is
+    excluded deliberately: it is script bearing, and a gateway serving it
+    executes that script on the gateway origin. Declared geometry above
+    `PINATA_MAX_IMAGE_PIXELS` is rejected from the header, without decoding.
 -   Uploads have per-wallet and global throttling.
 -   Error messages are safe to show to users and do not include secrets.
 -   Upload attempts emit one structured `vinunft.ipfs_upload` audit event with
