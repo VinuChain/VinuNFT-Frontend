@@ -22,3 +22,8 @@ jobs:
       - name: Verify deployed contract truth (addresses, first blocks, ABI/deployment agreement)
         run: yarn verify:deployed
       - run: yarn build
+      # Must run after the build: the policy is injected into public/ by
+      # add_csp.js, so before it there is nothing to check and the CSP tests
+      # skip themselves.
+      - name: Verify the injected Content-Security-Policy
+        run: yarn verify:csp

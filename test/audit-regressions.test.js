@@ -301,9 +301,20 @@ test("CSP policy in add_csp.js includes required restrictive directives", () => 
     assert.equal(cspScript.includes("base-uri 'self'"), true);
     assert.equal(cspScript.includes("default-src 'self'"), true);
     assert.equal(cspScript.includes("frame-ancestors 'self'"), true);
-    // connect-src must cover the VinuChain RPC and IPFS gateway at minimum
+    // img-src must permit blob:, which is how token images reach <img> after
+    // being fetched with a byte cap via URL.createObjectURL.
+    assert.equal(cspScript.includes("blob:"), true);
+
+    // connect-src must cover the VinuChain RPC, which is still listed here.
     assert.equal(cspScript.includes("https://rpc.vinuchain.org"), true);
-    assert.equal(cspScript.includes("https://gateway.pinata.cloud"), true);
+
+    // IPFS gateway origins are no longer duplicated here: they are read from
+    // src/config.js, because a hard-coded copy silently blocked whichever
+    // gateways config added later. test/csp.test.mjs asserts the *built*
+    // policy actually allows every configured gateway, which is stronger than
+    // matching a literal in this file.
+    assert.equal(cspScript.includes("ipfsGatewayOrigins()"), true);
+    assert.equal(cspScript.includes('"https://gateway.pinata.cloud"'), false);
 });
 
 test("markdown NFT rendering is sandboxed via MarkdownViewer, not bare MDEditor", () => {

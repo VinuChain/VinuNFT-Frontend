@@ -73,21 +73,44 @@ function getShaFromTags(inputFilePath, tagName) {
     }
 }
 
-// Bridge RPC endpoints and IPFS gateway required for connect-src.
-// Update this list when new chains are added to BRIDGE_EVM_CHAINS in
-// src/common/wanbridge.js, or when the IPFS gateway changes in src/config.js.
+// IPFS gateway origins are read out of src/config.js rather than repeated here.
+// The app falls back through every configured gateway, so a hard-coded list
+// that trails config silently blocks the fallbacks it is meant to permit —
+// which is exactly what happened when the fallback gateways were added.
+function ipfsGatewayOrigins() {
+    const config = fs.readFileSync(
+        path.join(path.resolve(), "src", "config.js"),
+        { encoding: "utf-8" }
+    );
+    const block = config.match(/ipfsGateways:\s*\[([\s\S]*?)\]/);
+    if (!block) {
+        throw new Error(
+            "add_csp: could not read ipfsGateways from src/config.js"
+        );
+    }
+    const origins = [...block[1].matchAll(/"(https:\/\/[^"]+)"/g)].map(
+        (match) => new URL(match[1]).origin
+    );
+    if (origins.length === 0) {
+        throw new Error("add_csp: ipfsGateways in src/config.js is empty");
+    }
+    return [...new Set(origins)];
+}
+
+// Bridge RPC endpoints required for connect-src. IPFS gateways are appended
+// from src/config.js by ipfsGatewayOrigins(). Update this list when new chains
+// are added to BRIDGE_EVM_CHAINS in src/common/wanbridge.js.
 const CONNECT_SRC_ORIGINS = [
-    "https://rpc.vinuchain.org",           // VinuChain mainnet RPC (src/config.js)
-    "https://gateway.pinata.cloud",        // IPFS image gateway (src/config.js)
-    "https://bridge-api.wanchain.org",     // WanBridge API (src/common/wanbridge.js)
-    "https://bsc-dataseed.binance.org",    // BNB Chain RPC
+    "https://rpc.vinuchain.org", // VinuChain mainnet RPC (src/config.js)
+    "https://bridge-api.wanchain.org", // WanBridge API (src/common/wanbridge.js)
+    "https://bsc-dataseed.binance.org", // BNB Chain RPC
     "https://ethereum-rpc.publicnode.com", // Ethereum RPC
-    "https://polygon-rpc.com",             // Polygon RPC
-    "https://arb1.arbitrum.io",            // Arbitrum RPC
-    "https://api.avax.network",            // Avalanche C-Chain RPC
-    "https://mainnet.base.org",            // Base RPC
-    "https://mainnet.optimism.io",         // OP Mainnet RPC
-    "https://gwan-ssl.wandevs.org:56891",  // Wanchain RPC
+    "https://polygon-rpc.com", // Polygon RPC
+    "https://arb1.arbitrum.io", // Arbitrum RPC
+    "https://api.avax.network", // Avalanche C-Chain RPC
+    "https://mainnet.base.org", // Base RPC
+    "https://mainnet.optimism.io", // OP Mainnet RPC
+    "https://gwan-ssl.wandevs.org:56891", // Wanchain RPC
 ];
 
 function addHashesToHtmlFile(inputFilePath, hashes) {
@@ -99,7 +122,10 @@ function addHashesToHtmlFile(inputFilePath, hashes) {
     let fileContents = fs.readFileSync(inputFilePath, { encoding: "utf-8" });
 
     const newHashes = hashes.join(" ");
-    const connectSrc = `'self' ${CONNECT_SRC_ORIGINS.join(" ")}`;
+    const connectSrc = `'self' ${[
+        ...CONNECT_SRC_ORIGINS,
+        ...ipfsGatewayOrigins(),
+    ].join(" ")}`;
     // Replace the bare script-src placeholder with the full expanded policy.
     // All other directives are prepended; sha256 hashes are appended to script-src.
     const newCsp =
@@ -107,7 +133,10 @@ function addHashesToHtmlFile(inputFilePath, hashes) {
         `object-src 'none'; ` +
         `base-uri 'self'; ` +
         `frame-ancestors 'self'; ` +
-        `img-src 'self' data: https:; ` +
+        // blob: is required: token images are fetched with a byte cap and
+        // handed to <img> via URL.createObjectURL, so without it every image
+        // NFT is blocked by the policy.
+        `img-src 'self' data: blob: https:; ` +
         `style-src 'self' 'unsafe-inline'; ` +
         `frame-src 'self'; ` +
         `connect-src ${connectSrc}; ` +

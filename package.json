@@ -22,6 +22,7 @@
         "audit:triage": "node scripts/audit-triage.js",
         "verify": "yarn lint && yarn test",
         "verify:deployed": "node scripts/verify-deployed-truth.mjs",
+        "verify:csp": "node --import tsx --test test/csp.test.mjs",
         "verify:ci": "yarn lint && yarn test && yarn audit:triage && yarn build",
         "serve": "gatsby serve",
         "clean": "gatsby clean",
@@ -97,6 +98,7 @@
         "zlib-browserify": "^0.0.3"
     },
     "devDependencies": {
+        "@playwright/test": "^1.62.1",
         "eslint": "^7.32.0",
         "eslint-plugin-react": "^7.26.0",
         "htmlparser2": "^9.1.0",
