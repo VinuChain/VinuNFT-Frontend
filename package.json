@@ -23,6 +23,7 @@
         "verify": "yarn lint && yarn test",
         "verify:deployed": "node scripts/verify-deployed-truth.mjs",
         "verify:csp": "node --import tsx --test test/csp.test.mjs",
+        "verify:rendered": "node --import tsx --test test/rendered.test.mjs",
         "verify:ci": "yarn lint && yarn test && yarn audit:triage && yarn build",
         "serve": "gatsby serve",
         "clean": "gatsby clean",

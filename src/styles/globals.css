@@ -1030,3 +1030,23 @@ button {
         margin: auto;
     }
 }
+
+/*
+ * Long unbroken strings must not widen the page.
+ *
+ * Wallet and RPC errors embed JSON with no spaces — an ethers "bad result from
+ * backend" message carries the full call parameters — and contract addresses,
+ * token ids and transaction hashes are similarly unbreakable. On a 375px phone
+ * one such message forced the document to 868px and made every page scroll
+ * sideways. Breaking anywhere is the right trade for these: they are reference
+ * strings, not prose.
+ */
+/* `body` prefix only to outrank Bulma's own .notification/.message-body rules,
+ * which land after this file in the bundled CSS. */
+body .message-body,
+body .standard-error-body,
+body .notification,
+body .help {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}

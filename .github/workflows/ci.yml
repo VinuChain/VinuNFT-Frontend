@@ -27,3 +27,9 @@ jobs:
       # skip themselves.
       - name: Verify the injected Content-Security-Policy
         run: yarn verify:csp
+      # Rendered checks drive the real production build in Chromium, so they
+      # also need the build to exist and skip themselves without it.
+      - name: Install Chromium for rendered checks
+        run: npx playwright install --with-deps chromium
+      - name: Verify rendered pages, mobile layout and accessibility basics
+        run: yarn verify:rendered

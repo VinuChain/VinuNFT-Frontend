@@ -3,6 +3,9 @@ import { Helmet } from "react-helmet";
 import { useTransactionStatus } from "./common/transaction_status";
 import { ToastContainer, toast } from "react-toastify";
 import TransactionNotifications from "./components/TransactionNotifications";
+// Imported here so every page gets it: 404 and activity did not import it
+// individually, so global rules silently did not apply there.
+import "./styles/globals.css";
 
 const VINUCHAIN_SOCIAL_LINKS = [
     {
