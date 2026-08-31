@@ -19,6 +19,18 @@ import schemas from "./schemas";
  * result into an `<iframe sandbox>` with no allow-list, so even a bypass here
  * lands in a context with scripts, forms, and same-origin access disabled.
  */
+/**
+ * The rehype plugin list for the Markdown editor's live preview.
+ *
+ * `@uiw/react-md-editor` renders its own preview, so it cannot call
+ * `sanitizeMarkdown` directly. Exporting the plugin list keeps the preview and
+ * the published render on one schema by construction rather than by two places
+ * happening to name the same one.
+ */
+export function markdownRehypePlugins() {
+    return [() => rehypeSanitize(schemas.validMarkdown)];
+}
+
 export function sanitizeMarkdown(source) {
     return String(
         unified()

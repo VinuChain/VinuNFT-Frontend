@@ -186,10 +186,29 @@ test("HTML sanitization does not allow style or data URL expansion", () => {
     assert.equal(mint.includes('value="text/markdown"'), true);
     assert.equal(mint.includes('value="text/html"'), false);
     assert.equal(mint.includes("Markdown is sanitized"), true);
-    assert.equal(
-        multiEditor.includes("rehypeSanitize(schemas.validMarkdown)"),
-        true
-    );
+    // The editor preview and the published render now share one plugin list
+    // (src/common/sanitize.js) rather than each naming the schema separately.
+    // test/sanitize.test.mjs proves they produce byte-identical output and that
+    // both neutralise every adversarial fixture.
+    assert.equal(multiEditor.includes("markdownRehypePlugins()"), true);
+    assert.equal(multiEditor.includes("rehypeSanitize"), false);
+
+    const sanitize = read("src/common/sanitize.js");
+    assert.equal(sanitize.includes("schemas.validMarkdown"), true);
+    assert.equal(sanitize.includes("schemas.validHTML"), true);
+
+    // Both viewers must go through that module, not build their own pipeline.
+    for (const viewer of ["MarkdownViewer", "HTMLViewer"]) {
+        const source = read(`src/components/${viewer}.js`);
+        assert.equal(
+            source.includes("unified()"),
+            false,
+            `${viewer} must not build its own pipeline`
+        );
+        assert.equal(source.includes("common/sanitize"), true);
+        // Sanitised output is still rendered into a sandboxed iframe.
+        assert.equal(source.includes("sandbox"), true);
+    }
 });
 
 test("marketplace discovery stays bounded and linked", () => {

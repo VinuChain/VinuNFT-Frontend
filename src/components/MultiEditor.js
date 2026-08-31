@@ -1,9 +1,7 @@
 import React from "react";
-import rehypeSanitize from "rehype-sanitize";
-
 import MDEditor from "@uiw/react-md-editor";
 import { defaultCommands } from "../common/commands";
-import schemas from "../common/schemas";
+import { markdownRehypePlugins } from "../common/sanitize";
 
 import HTMLEditor from "./HTMLEditor";
 
@@ -25,10 +23,11 @@ export default function MultiEditor({ dataType, value, setValue }) {
                         value={value}
                         onChange={setValue}
                         highlightEnable={false}
+                        // Same plugin list the published render uses, so
+                        // the preview cannot become more permissive than what
+                        // buyers eventually see.
                         previewOptions={{
-                            rehypePlugins: [
-                                () => rehypeSanitize(schemas.validMarkdown),
-                            ],
+                            rehypePlugins: markdownRehypePlugins(),
                         }}
                         commands={defaultCommands}
                     />

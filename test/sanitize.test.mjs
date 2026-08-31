@@ -167,3 +167,44 @@ test("the inertness guard itself rejects unsanitised hostile input", () => {
         );
     }
 });
+
+// --- the markdown editor preview must be no weaker than the published render
+
+test("the markdown editor preview plugins neutralise every hostile fixture", async () => {
+    const { unified } = await import("unified");
+    const { default: remarkParse } = await import("remark-parse");
+    const { default: remarkRehype } = await import("remark-rehype");
+    const { default: rehypeStringify } = await import("rehype-stringify");
+    const mod = await import("../src/common/sanitize.js");
+    const { markdownRehypePlugins } = mod.default || mod;
+
+    // Drive the exact plugin list handed to @uiw/react-md-editor. If the
+    // preview were more permissive than the published render, a creator could
+    // approve content that behaves differently for buyers.
+    const previewPipeline = unified().use(remarkParse).use(remarkRehype);
+    for (const plugin of markdownRehypePlugins()) {
+        previewPipeline.use(plugin);
+    }
+    previewPipeline.use(rehypeStringify);
+
+    for (const [label, payload] of HOSTILE) {
+        const out = String(previewPipeline.processSync(`text\n\n${payload}\n`));
+        assertInert(out, `preview/${label}`);
+    }
+});
+
+test("the editor preview and the published render agree on the same source", async () => {
+    const mod = await import("../src/common/sanitize.js");
+    const { markdownRehypePlugins } = mod.default || mod;
+    const { unified } = await import("unified");
+    const { default: remarkParse } = await import("remark-parse");
+    const { default: remarkRehype } = await import("remark-rehype");
+    const { default: rehypeStringify } = await import("rehype-stringify");
+
+    const pipeline = unified().use(remarkParse).use(remarkRehype);
+    for (const plugin of markdownRehypePlugins()) pipeline.use(plugin);
+    pipeline.use(rehypeStringify);
+
+    const source = "# Hi\n\n**bold** [ok](https://vinuchain.org)\n\n<img src=x onerror=alert(1)>\n";
+    assert.equal(String(pipeline.processSync(source)), sanitizeMarkdown(source));
+});
