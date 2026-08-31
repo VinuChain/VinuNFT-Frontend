@@ -6,6 +6,7 @@ import TransactionNotifications from "./components/TransactionNotifications";
 // Imported here so every page gets it: 404 and activity did not import it
 // individually, so global rules silently did not apply there.
 import "./styles/globals.css";
+import config from "./config";
 
 const VINUCHAIN_SOCIAL_LINKS = [
     {
@@ -42,8 +43,10 @@ const FOOTER_LINKS = [
         external: false,
     },
     {
-        label: "VinuExplorer",
-        href: "https://mainnet.vinuexplorer.org",
+        // From the one registry, so the footer cannot drift from the explorer
+        // links the rest of the app builds.
+        label: config.blockExplorer.name,
+        href: config.blockExplorer.url,
         external: true,
     },
     {

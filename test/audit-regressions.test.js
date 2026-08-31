@@ -156,10 +156,16 @@ test("footer links to the VinuChain ecosystem socials", () => {
         "https://discord.gg/vinu",
         "https://t.me/vitainu",
         "https://medium.com/vinuchain",
-        "https://mainnet.vinuexplorer.org",
     ].forEach((url) => {
         assert.equal(wrapper.includes(url), true);
     });
+
+    // The explorer link comes from the registry rather than a literal: the
+    // footer previously pointed at a different host from every other explorer
+    // link in the app. test/ecosystem.test.mjs asserts no source file outside
+    // src/config.js hard-codes an ecosystem identifier.
+    assert.equal(wrapper.includes("config.blockExplorer.url"), true);
+    assert.equal(wrapper.includes("vinuexplorer.org"), false);
 });
 
 test("header exposes branded navigation and accessible mobile menu state", () => {

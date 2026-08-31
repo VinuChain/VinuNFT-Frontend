@@ -48,7 +48,9 @@ const config = {
     },
     blockExplorer: {
         name: "VinuExplorer",
-        url: "https://vinuexplorer.org",
+        // Canonical host: https://vinuexplorer.org 301s here, so linking the
+        // apex added a redirect to every explorer link the app emits.
+        url: "https://mainnet.vinuexplorer.org",
     },
     tokens: {
         wvc: {
