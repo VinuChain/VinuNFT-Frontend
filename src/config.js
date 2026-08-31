@@ -77,6 +77,19 @@ const config = {
         },
     },
     standardIpfsGateway: "https://gateway.pinata.cloud/ipfs",
+    // Tried in order when resolving an ipfs:// URI, so one gateway being down
+    // degrades rather than blanks every image. Also the allowlist of https
+    // hosts the app will fetch token media from at all: an NFT URI is
+    // attacker-controlled (ImageNFT.mint accepts any string), so fetching
+    // arbitrary hosts would turn every viewer's browser into a probe.
+    ipfsGateways: [
+        "https://gateway.pinata.cloud/ipfs",
+        "https://ipfs.io/ipfs",
+        "https://cloudflare-ipfs.com/ipfs",
+    ],
+    // Caps on fetching token media: an unbounded response can exhaust the tab.
+    mediaFetchTimeoutMs: 10000,
+    maxMediaFetchBytes: 10 * 1024 * 1024,
     ipfsUploadEndpoint:
         process.env.GATSBY_IPFS_UPLOAD_ENDPOINT || "/api/upload-ipfs",
     maxIpfsUploadBytes: 10 * 1024 * 1024,

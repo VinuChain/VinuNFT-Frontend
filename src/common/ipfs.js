@@ -94,17 +94,163 @@ async function uploadJSONToIpfs(json, walletProvider) {
     );
 }
 
-async function maybeFetchIpfs(url) {
-    if (url.startsWith("ipfs://")) {
-        const hash = url.split("ipfs://")[1];
-        const response = await fetch(`${config.standardIpfsGateway}/${hash}`);
-        return response;
-    } else {
-        return await fetch(url);
+/** Thrown when a token points somewhere this app will not fetch from. */
+class UnsupportedMediaSource extends Error {
+    constructor(url) {
+        super(
+            "This NFT's media is hosted somewhere VinuNFT does not fetch from, so it cannot be displayed."
+        );
+        this.name = "UnsupportedMediaSource";
+        this.url = url;
     }
 }
 
+/** Thrown when a response exceeds the media size cap. */
+class MediaTooLarge extends Error {
+    constructor(bytes) {
+        super("This NFT's media is too large to display.");
+        this.name = "MediaTooLarge";
+        this.bytes = bytes;
+    }
+}
+
+const gatewayOrigins = () =>
+    config.ipfsGateways.map((gateway) => new URL(gateway).origin);
+
+/**
+ * Is this an https URL served by a gateway we trust?
+ *
+ * A token URI is attacker-controlled — ImageNFT.mint stores any string — and
+ * this runs in the viewer's browser. Fetching arbitrary hosts would let a
+ * minted NFT probe every viewer's private network and log their address, and
+ * would make image availability depend on a host nobody vetted.
+ */
+function isAllowedHttpsUrl(url) {
+    let parsed;
+    try {
+        parsed = new URL(url);
+    } catch {
+        return false;
+    }
+    return (
+        parsed.protocol === "https:" && gatewayOrigins().includes(parsed.origin)
+    );
+}
+
+async function fetchWithLimits(url) {
+    const controller = new AbortController();
+    const timer = setTimeout(
+        () => controller.abort(),
+        config.mediaFetchTimeoutMs
+    );
+
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) {
+            throw new Error(
+                `Media request failed with status ${response.status}`
+            );
+        }
+
+        const declared = Number(response.headers.get("content-length"));
+        if (Number.isFinite(declared) && declared > config.maxMediaFetchBytes) {
+            throw new MediaTooLarge(declared);
+        }
+
+        // Cap while streaming, so an undeclared or lying Content-Length cannot
+        // still pull an unbounded body into memory.
+        const body = await readCapped(response, config.maxMediaFetchBytes);
+
+        return new Response(body, {
+            status: response.status,
+            headers: {
+                "content-type":
+                    response.headers.get("content-type") ||
+                    "application/octet-stream",
+            },
+        });
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function readCapped(response, maxBytes) {
+    if (!response.body?.getReader) {
+        const buffer = await response.arrayBuffer();
+        if (buffer.byteLength > maxBytes) {
+            throw new MediaTooLarge(buffer.byteLength);
+        }
+        return buffer;
+    }
+
+    const reader = response.body.getReader();
+    const chunks = [];
+    let received = 0;
+
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        received += value.byteLength;
+        if (received > maxBytes) {
+            await reader.cancel();
+            throw new MediaTooLarge(received);
+        }
+        chunks.push(value);
+    }
+
+    const merged = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) {
+        merged.set(chunk, offset);
+        offset += chunk.byteLength;
+    }
+    return merged;
+}
+
+/**
+ * Fetch token media, restricted to sources this app is willing to reach.
+ *
+ * `data:` is served inline by the browser with no network egress, and carries
+ * the on-chain metadata for text NFTs. `ipfs://` is resolved through the
+ * configured gateways in order, so one gateway failing degrades instead of
+ * blanking every image. A plain https URL is only fetched when it is already
+ * one of those gateways. Anything else is refused, and callers surface that
+ * honestly rather than silently showing nothing.
+ */
+async function maybeFetchIpfs(url) {
+    if (typeof url !== "string" || url.length === 0) {
+        throw new UnsupportedMediaSource(url);
+    }
+
+    if (url.startsWith("data:")) {
+        return fetch(url);
+    }
+
+    if (url.startsWith("ipfs://")) {
+        const path = url.slice("ipfs://".length).replace(/^ipfs\//, "");
+        let lastError;
+        for (const gateway of config.ipfsGateways) {
+            try {
+                return await fetchWithLimits(`${gateway}/${path}`);
+            } catch (error) {
+                if (error instanceof MediaTooLarge) throw error;
+                lastError = error;
+            }
+        }
+        throw lastError ?? new UnsupportedMediaSource(url);
+    }
+
+    if (isAllowedHttpsUrl(url)) {
+        return fetchWithLimits(url);
+    }
+
+    throw new UnsupportedMediaSource(url);
+}
+
 export {
+    UnsupportedMediaSource,
+    MediaTooLarge,
+    isAllowedHttpsUrl,
     createIpfsUploadAuth,
     uploadFileToIpfs,
     uploadJSONToIpfs,
