@@ -11,6 +11,7 @@ import config from "../config";
 import { useTransactionHelper } from "../common/transaction_status";
 import { formatTokenAmount, parseTokenAmount } from "../common/utils";
 import BridgeShortcut from "./BridgeShortcut";
+import { settlementBreakdown, bpsToPercent } from "../common/settlement";
 
 const styles = {
     modalCard: {
@@ -27,6 +28,7 @@ const defaultValues = {
 };
 
 export default function BuyModal({
+    nftType,
     nftId,
     isOpen,
     setIsOpen,
@@ -45,6 +47,11 @@ export default function BuyModal({
     const allowance = tokenAllowances[paymentToken];
 
     const [paymentTokenBalance, setPaymentTokenBalance] = useState(null);
+    // Settlement terms, read from the same contracts that will perform the
+    // split. null until loaded, so a breakdown is never shown as a guess.
+    const [platformFeeBps, setPlatformFeeBps] = useState(null);
+    const [royaltyBps, setRoyaltyBps] = useState(null);
+    const [royaltyReceiver, setRoyaltyReceiver] = useState(null);
 
     const {
         register,
@@ -114,6 +121,42 @@ export default function BuyModal({
         queryPaymentTokenBalance();
     }, [walletProvider, paymentToken]);
 
+    async function querySettlementTerms() {
+        if (!nftType) return;
+        try {
+            const marketplace = new ethers.Contract(
+                config.contractAddresses.v1.marketplace,
+                ["function platformFeePercentage() view returns (uint16)"],
+                defaultReadProvider
+            );
+            const nft = new ethers.Contract(
+                config.contractAddresses.v1[nftType],
+                [
+                    "function royaltyInfo(uint256,uint256) view returns (address,uint256)",
+                ],
+                defaultReadProvider
+            );
+
+            const fee = await marketplace.platformFeePercentage();
+            // Quote the royalty against a round denominator so the rate can be
+            // reapplied to whatever quantity the buyer picks. The contract
+            // quotes it against the post-fee remainder at settlement time.
+            const [receiver, quoted] = await nft.royaltyInfo(nftId, 10000);
+
+            setPlatformFeeBps(Number(fee));
+            setRoyaltyBps(Number(quoted.toString()));
+            setRoyaltyReceiver(receiver);
+        } catch (e) {
+            // Leaving these null hides the breakdown rather than showing a
+            // figure that may not match settlement.
+            setPlatformFeeBps(null);
+            setRoyaltyBps(null);
+        }
+    }
+    useEffect(() => {
+        querySettlementTerms();
+    }, [nftType, nftId]);
+
     async function approve() {
         const tokenContract = new ethers.Contract(
             config.tokens[paymentToken].address,
@@ -146,6 +189,23 @@ export default function BuyModal({
     const totalAmount = total();
     const paymentTokenSymbol = config.tokens[paymentToken].symbol;
     const hasValidTotal = totalAmount && errors.amount === undefined;
+    // Mirrors Marketplace._handleFunds exactly; parity with 128 executed
+    // purchases is asserted in test/settlementParity.test.mjs.
+    const feeBreakdown =
+        hasValidTotal && platformFeeBps !== null && royaltyBps !== null
+            ? (() => {
+                  const total = parseTokenAmount(totalAmount, paymentToken);
+                  const remainder = total.sub(
+                      total.mul(platformFeeBps).div(10000)
+                  );
+                  return settlementBreakdown({
+                      total,
+                      platformFeeBps,
+                      royaltyAmount: remainder.mul(royaltyBps).div(10000),
+                      royaltyReceiver,
+                  });
+              })()
+            : null;
     const parsedTotal = totalAmount
         ? parseTokenAmount(totalAmount, paymentToken)
         : null;
@@ -198,6 +258,52 @@ export default function BuyModal({
                                     : paymentTokenBalance}{" "}
                                 {paymentTokenSymbol}
                             </p>
+                            {feeBreakdown ? (
+                                <div
+                                    className="content is-small mt-2"
+                                    data-testid="fee-breakdown"
+                                >
+                                    <p className="mb-1">
+                                        <strong>Where your payment goes</strong>
+                                    </p>
+                                    <ul className="mb-1">
+                                        <li>
+                                            Creator royalty (
+                                            {bpsToPercent(royaltyBps)}%):{" "}
+                                            {formatTokenAmount(
+                                                feeBreakdown.creatorFee.toString(),
+                                                paymentToken
+                                            )}{" "}
+                                            {paymentTokenSymbol}
+                                        </li>
+                                        <li>
+                                            Platform fee (
+                                            {bpsToPercent(platformFeeBps)}%):{" "}
+                                            {formatTokenAmount(
+                                                feeBreakdown.platformFee.toString(),
+                                                paymentToken
+                                            )}{" "}
+                                            {paymentTokenSymbol}
+                                        </li>
+                                        <li>
+                                            Seller receives:{" "}
+                                            {formatTokenAmount(
+                                                feeBreakdown.sellerProceeds.toString(),
+                                                paymentToken
+                                            )}{" "}
+                                            {paymentTokenSymbol}
+                                        </li>
+                                    </ul>
+                                    <p className="is-italic">
+                                        You pay {totalAmount}{" "}
+                                        {paymentTokenSymbol} in total. The
+                                        royalty is taken from the amount left
+                                        after the platform fee.
+                                    </p>
+                                </div>
+                            ) : (
+                                <></>
+                            )}
                             <BridgeShortcut
                                 token={paymentTokenSymbol}
                                 direction="into"

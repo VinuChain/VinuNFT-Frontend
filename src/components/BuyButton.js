@@ -92,6 +92,7 @@ export default function BuyButton({
                 Buy
             </button>
             <BuyModal
+                nftType={nftType}
                 nftId={nftId}
                 isOpen={buyModalOpen}
                 setIsOpen={setBuyModalOpen}

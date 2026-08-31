@@ -1,0 +1,1541 @@
+{
+  "generatedFrom": "VinuNFT-Backend Marketplace._handleFunds",
+  "cases": [
+    {
+      "total": "1",
+      "platformFeeBps": 0,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "1"
+      }
+    },
+    {
+      "total": "1",
+      "platformFeeBps": 0,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "1"
+      }
+    },
+    {
+      "total": "1",
+      "platformFeeBps": 0,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "1"
+      }
+    },
+    {
+      "total": "1",
+      "platformFeeBps": 0,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "1",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "1",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "1",
+      "platformFeeBps": 250,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "1"
+      }
+    },
+    {
+      "total": "1",
+      "platformFeeBps": 250,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "1"
+      }
+    },
+    {
+      "total": "1",
+      "platformFeeBps": 250,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "1"
+      }
+    },
+    {
+      "total": "1",
+      "platformFeeBps": 250,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "1",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "1",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "1",
+      "platformFeeBps": 500,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "1"
+      }
+    },
+    {
+      "total": "1",
+      "platformFeeBps": 500,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "1"
+      }
+    },
+    {
+      "total": "1",
+      "platformFeeBps": 500,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "1"
+      }
+    },
+    {
+      "total": "1",
+      "platformFeeBps": 500,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "1",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "1",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "1",
+      "platformFeeBps": 1000,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "1"
+      }
+    },
+    {
+      "total": "1",
+      "platformFeeBps": 1000,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "1"
+      }
+    },
+    {
+      "total": "1",
+      "platformFeeBps": 1000,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "1"
+      }
+    },
+    {
+      "total": "1",
+      "platformFeeBps": 1000,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "1",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "1",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 0,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "3"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 0,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "3"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 0,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "3"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 0,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "3",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "3",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 250,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "3"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 250,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "3"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 250,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "3"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 250,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "3",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "3",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 500,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "3"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 500,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "3"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 500,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "3"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 500,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "3",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "3",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 1000,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "3"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 1000,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "3"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 1000,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "3"
+      }
+    },
+    {
+      "total": "3",
+      "platformFeeBps": 1000,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "3",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "3",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 0,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "7"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 0,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "7"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 0,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "7"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 0,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "7",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "7",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 250,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "7"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 250,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "7"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 250,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "7"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 250,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "7",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "7",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 500,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "7"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 500,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "7"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 500,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "7"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 500,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "7",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "7",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 1000,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "7"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 1000,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "7"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 1000,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "7"
+      }
+    },
+    {
+      "total": "7",
+      "platformFeeBps": 1000,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "7",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "7",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 0,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "19"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 0,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "19"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 0,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "1",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "1",
+        "sellerProceeds": "18"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 0,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "19",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "19",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 250,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "19"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 250,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "19"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 250,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "1",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "1",
+        "sellerProceeds": "18"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 250,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "19",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "19",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 500,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "19"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 500,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "19"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 500,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "1",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "1",
+        "sellerProceeds": "18"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 500,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "19",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "19",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 1000,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "1",
+        "creatorFee": "0",
+        "sellerProceeds": "18"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 1000,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "1",
+        "creatorFee": "0",
+        "sellerProceeds": "18"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 1000,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "1",
+      "actual": {
+        "platformFee": "1",
+        "creatorFee": "1",
+        "sellerProceeds": "17"
+      }
+    },
+    {
+      "total": "19",
+      "platformFeeBps": 1000,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "18",
+      "actual": {
+        "platformFee": "1",
+        "creatorFee": "18",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 0,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "100"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 0,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "2",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "2",
+        "sellerProceeds": "98"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 0,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "10",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "10",
+        "sellerProceeds": "90"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 0,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "100",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "100",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 250,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "2",
+        "creatorFee": "0",
+        "sellerProceeds": "98"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 250,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "2",
+      "actual": {
+        "platformFee": "2",
+        "creatorFee": "2",
+        "sellerProceeds": "96"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 250,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "9",
+      "actual": {
+        "platformFee": "2",
+        "creatorFee": "9",
+        "sellerProceeds": "89"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 250,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "98",
+      "actual": {
+        "platformFee": "2",
+        "creatorFee": "98",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 500,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "5",
+        "creatorFee": "0",
+        "sellerProceeds": "95"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 500,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "2",
+      "actual": {
+        "platformFee": "5",
+        "creatorFee": "2",
+        "sellerProceeds": "93"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 500,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "9",
+      "actual": {
+        "platformFee": "5",
+        "creatorFee": "9",
+        "sellerProceeds": "86"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 500,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "95",
+      "actual": {
+        "platformFee": "5",
+        "creatorFee": "95",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 1000,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "10",
+        "creatorFee": "0",
+        "sellerProceeds": "90"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 1000,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "2",
+      "actual": {
+        "platformFee": "10",
+        "creatorFee": "2",
+        "sellerProceeds": "88"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 1000,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "9",
+      "actual": {
+        "platformFee": "10",
+        "creatorFee": "9",
+        "sellerProceeds": "81"
+      }
+    },
+    {
+      "total": "100",
+      "platformFeeBps": 1000,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "90",
+      "actual": {
+        "platformFee": "10",
+        "creatorFee": "90",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 0,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "333"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 0,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "8",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "8",
+        "sellerProceeds": "325"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 0,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "33",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "33",
+        "sellerProceeds": "300"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 0,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "333",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "333",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 250,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "8",
+        "creatorFee": "0",
+        "sellerProceeds": "325"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 250,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "8",
+      "actual": {
+        "platformFee": "8",
+        "creatorFee": "8",
+        "sellerProceeds": "317"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 250,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "32",
+      "actual": {
+        "platformFee": "8",
+        "creatorFee": "32",
+        "sellerProceeds": "293"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 250,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "325",
+      "actual": {
+        "platformFee": "8",
+        "creatorFee": "325",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 500,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "16",
+        "creatorFee": "0",
+        "sellerProceeds": "317"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 500,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "7",
+      "actual": {
+        "platformFee": "16",
+        "creatorFee": "7",
+        "sellerProceeds": "310"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 500,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "31",
+      "actual": {
+        "platformFee": "16",
+        "creatorFee": "31",
+        "sellerProceeds": "286"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 500,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "317",
+      "actual": {
+        "platformFee": "16",
+        "creatorFee": "317",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 1000,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "33",
+        "creatorFee": "0",
+        "sellerProceeds": "300"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 1000,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "7",
+      "actual": {
+        "platformFee": "33",
+        "creatorFee": "7",
+        "sellerProceeds": "293"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 1000,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "30",
+      "actual": {
+        "platformFee": "33",
+        "creatorFee": "30",
+        "sellerProceeds": "270"
+      }
+    },
+    {
+      "total": "333",
+      "platformFeeBps": 1000,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "300",
+      "actual": {
+        "platformFee": "33",
+        "creatorFee": "300",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 0,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "1001"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 0,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "25",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "25",
+        "sellerProceeds": "976"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 0,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "100",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "100",
+        "sellerProceeds": "901"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 0,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "1001",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "1001",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 250,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "25",
+        "creatorFee": "0",
+        "sellerProceeds": "976"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 250,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "24",
+      "actual": {
+        "platformFee": "25",
+        "creatorFee": "24",
+        "sellerProceeds": "952"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 250,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "97",
+      "actual": {
+        "platformFee": "25",
+        "creatorFee": "97",
+        "sellerProceeds": "879"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 250,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "976",
+      "actual": {
+        "platformFee": "25",
+        "creatorFee": "976",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 500,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "50",
+        "creatorFee": "0",
+        "sellerProceeds": "951"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 500,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "23",
+      "actual": {
+        "platformFee": "50",
+        "creatorFee": "23",
+        "sellerProceeds": "928"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 500,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "95",
+      "actual": {
+        "platformFee": "50",
+        "creatorFee": "95",
+        "sellerProceeds": "856"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 500,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "951",
+      "actual": {
+        "platformFee": "50",
+        "creatorFee": "951",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 1000,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "100",
+        "creatorFee": "0",
+        "sellerProceeds": "901"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 1000,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "22",
+      "actual": {
+        "platformFee": "100",
+        "creatorFee": "22",
+        "sellerProceeds": "879"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 1000,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "90",
+      "actual": {
+        "platformFee": "100",
+        "creatorFee": "90",
+        "sellerProceeds": "811"
+      }
+    },
+    {
+      "total": "1001",
+      "platformFeeBps": 1000,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "901",
+      "actual": {
+        "platformFee": "100",
+        "creatorFee": "901",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 0,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "0",
+        "sellerProceeds": "999999"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 0,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "24999",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "24999",
+        "sellerProceeds": "975000"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 0,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "99999",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "99999",
+        "sellerProceeds": "900000"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 0,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "999999",
+      "actual": {
+        "platformFee": "0",
+        "creatorFee": "999999",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 250,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "24999",
+        "creatorFee": "0",
+        "sellerProceeds": "975000"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 250,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "24375",
+      "actual": {
+        "platformFee": "24999",
+        "creatorFee": "24375",
+        "sellerProceeds": "950625"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 250,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "97500",
+      "actual": {
+        "platformFee": "24999",
+        "creatorFee": "97500",
+        "sellerProceeds": "877500"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 250,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "975000",
+      "actual": {
+        "platformFee": "24999",
+        "creatorFee": "975000",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 500,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "49999",
+        "creatorFee": "0",
+        "sellerProceeds": "950000"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 500,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "23750",
+      "actual": {
+        "platformFee": "49999",
+        "creatorFee": "23750",
+        "sellerProceeds": "926250"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 500,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "95000",
+      "actual": {
+        "platformFee": "49999",
+        "creatorFee": "95000",
+        "sellerProceeds": "855000"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 500,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "950000",
+      "actual": {
+        "platformFee": "49999",
+        "creatorFee": "950000",
+        "sellerProceeds": "0"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 1000,
+      "royaltyBps": 0,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "0",
+      "actual": {
+        "platformFee": "99999",
+        "creatorFee": "0",
+        "sellerProceeds": "900000"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 1000,
+      "royaltyBps": 250,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "22500",
+      "actual": {
+        "platformFee": "99999",
+        "creatorFee": "22500",
+        "sellerProceeds": "877500"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 1000,
+      "royaltyBps": 1000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "90000",
+      "actual": {
+        "platformFee": "99999",
+        "creatorFee": "90000",
+        "sellerProceeds": "810000"
+      }
+    },
+    {
+      "total": "999999",
+      "platformFeeBps": 1000,
+      "royaltyBps": 10000,
+      "royaltyReceiver": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "quotedRoyaltyOnRemainder": "900000",
+      "actual": {
+        "platformFee": "99999",
+        "creatorFee": "900000",
+        "sellerProceeds": "0"
+      }
+    }
+  ]
+}

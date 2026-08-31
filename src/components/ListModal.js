@@ -8,7 +8,13 @@ import { useTransactionHelper } from "../common/transaction_status";
 import { useRecoilState } from "recoil";
 import { formatError, standardErrorState } from "../common/error";
 import config from "../config";
-import { useReadProvider, useWalletProvider } from "../common/provider";
+import { settlementBreakdown, bpsToPercent } from "../common/settlement";
+import { formatTokenAmount, parseTokenAmount } from "../common/utils";
+import {
+    defaultReadProvider,
+    useReadProvider,
+    useWalletProvider,
+} from "../common/provider";
 import { ethers } from "ethers";
 import { v1 } from "../common/abi";
 import BridgeShortcut from "./BridgeShortcut";
@@ -65,6 +71,12 @@ export default function ListModal({
     walletAddress,
     onUpdate,
 }) {
+    // Settlement terms read from the contracts that will perform the split, so
+    // a seller sees what they will actually receive before they list.
+    const [platformFeeBps, setPlatformFeeBps] = useState(null);
+    const [royaltyBps, setRoyaltyBps] = useState(null);
+    const [royaltyReceiver, setRoyaltyReceiver] = useState(null);
+
     const nftAddress = config.contractAddresses.v1[nftType];
     const nftABI = v1[nftType];
     const marketplaceAddress = config.contractAddresses.v1.marketplace;
@@ -82,11 +94,71 @@ export default function ListModal({
     });
 
     const watchAmount = watch("amount");
+    const watchPrice = watch("price");
     const watchPaymentToken = watch("paymentToken");
     const selectedPaymentToken =
         watchPaymentToken || Object.keys(config.tokens)[0];
     const selectedPaymentTokenSymbol =
         config.tokens[selectedPaymentToken]?.symbol;
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            if (!nftType || id === undefined || id === null) return;
+            try {
+                const marketplace = new ethers.Contract(
+                    config.contractAddresses.v1.marketplace,
+                    ["function platformFeePercentage() view returns (uint16)"],
+                    defaultReadProvider
+                );
+                const nft = new ethers.Contract(
+                    nftAddress,
+                    [
+                        "function royaltyInfo(uint256,uint256) view returns (address,uint256)",
+                    ],
+                    defaultReadProvider
+                );
+                const fee = await marketplace.platformFeePercentage();
+                const [receiver, quoted] = await nft.royaltyInfo(id, 10000);
+                if (cancelled) return;
+                setPlatformFeeBps(Number(fee));
+                setRoyaltyBps(Number(quoted.toString()));
+                setRoyaltyReceiver(receiver);
+            } catch (e) {
+                if (!cancelled) {
+                    // Hide the preview rather than show a figure that may not
+                    // match settlement.
+                    setPlatformFeeBps(null);
+                    setRoyaltyBps(null);
+                }
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [nftType, id, nftAddress]);
+
+    const proceeds = (() => {
+        if (platformFeeBps === null || royaltyBps === null) return null;
+        if (!watchPrice || !watchAmount || errors.price || errors.amount)
+            return null;
+        try {
+            const unit = parseTokenAmount(
+                String(watchPrice),
+                selectedPaymentToken
+            );
+            const total = unit.mul(ethers.BigNumber.from(String(watchAmount)));
+            const remainder = total.sub(total.mul(platformFeeBps).div(10000));
+            return settlementBreakdown({
+                total,
+                platformFeeBps,
+                royaltyAmount: remainder.mul(royaltyBps).div(10000),
+                royaltyReceiver,
+            });
+        } catch {
+            return null;
+        }
+    })();
 
     const closeModal = (data) => {
         setIsOpen(false);
@@ -249,6 +321,57 @@ export default function ListModal({
                         errors={errors}
                         register={register}
                     />
+
+                    {proceeds ? (
+                        <div
+                            className="content is-small mt-2"
+                            data-testid="listing-proceeds"
+                        >
+                            <p className="mb-1">
+                                <strong>If it sells at this price</strong>
+                            </p>
+                            <ul className="mb-1">
+                                <li>
+                                    Buyer pays:{" "}
+                                    {formatTokenAmount(
+                                        proceeds.total.toString(),
+                                        selectedPaymentToken
+                                    )}{" "}
+                                    {selectedPaymentTokenSymbol}
+                                </li>
+                                <li>
+                                    Platform fee ({bpsToPercent(platformFeeBps)}
+                                    %):{" "}
+                                    {formatTokenAmount(
+                                        proceeds.platformFee.toString(),
+                                        selectedPaymentToken
+                                    )}{" "}
+                                    {selectedPaymentTokenSymbol}
+                                </li>
+                                <li>
+                                    Creator royalty ({bpsToPercent(royaltyBps)}
+                                    %):{" "}
+                                    {formatTokenAmount(
+                                        proceeds.creatorFee.toString(),
+                                        selectedPaymentToken
+                                    )}{" "}
+                                    {selectedPaymentTokenSymbol}
+                                </li>
+                                <li>
+                                    <strong>
+                                        You receive:{" "}
+                                        {formatTokenAmount(
+                                            proceeds.sellerProceeds.toString(),
+                                            selectedPaymentToken
+                                        )}{" "}
+                                        {selectedPaymentTokenSymbol}
+                                    </strong>
+                                </li>
+                            </ul>
+                        </div>
+                    ) : (
+                        <></>
+                    )}
 
                     {watchAmount > Math.min(balance, availableAmount) ? (
                         watchAmount <= balance ? (
