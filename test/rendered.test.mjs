@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import test, { before, after } from "node:test";
-import { createServer } from "node:http";
-import { readFile, stat } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { extname, join, normalize } from "node:path";
-
-const PUBLIC_DIR = "public";
-const hasBuild = existsSync(join(PUBLIC_DIR, "index.html"));
+import {
+    hasBuild,
+    startStaticServer,
+    routeOffline,
+} from "./helpers/browserHarness.mjs";
 
 const ROUTES = [
     ["/", "Home"],
@@ -18,20 +16,6 @@ const ROUTES = [
     ["/media/", "Media"],
 ];
 
-const MIME = {
-    ".html": "text/html; charset=utf-8",
-    ".js": "text/javascript",
-    ".css": "text/css",
-    ".json": "application/json",
-    ".svg": "image/svg+xml",
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".webp": "image/webp",
-    ".ico": "image/x-icon",
-    ".map": "application/json",
-    ".txt": "text/plain",
-};
-
 let server;
 let browser;
 let origin;
@@ -39,30 +23,7 @@ let origin;
 before(async () => {
     if (!hasBuild) return;
     const { chromium } = await import("playwright");
-
-    // Serve the real production build, so the CSP meta tag, bundle splitting
-    // and hashed assets are exactly what ships.
-    server = createServer(async (req, res) => {
-        try {
-            const url = new URL(req.url, "http://localhost");
-            let filePath = join(PUBLIC_DIR, normalize(decodeURIComponent(url.pathname)));
-            if (!filePath.startsWith(PUBLIC_DIR)) {
-                res.writeHead(403).end();
-                return;
-            }
-            const info = await stat(filePath).catch(() => null);
-            if (info?.isDirectory()) filePath = join(filePath, "index.html");
-            const body = await readFile(filePath);
-            res.writeHead(200, {
-                "content-type": MIME[extname(filePath)] ?? "application/octet-stream",
-            });
-            res.end(body);
-        } catch {
-            res.writeHead(404, { "content-type": "text/html" }).end("not found");
-        }
-    });
-    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-    origin = `http://127.0.0.1:${server.address().port}`;
+    ({ server, origin } = await startStaticServer());
     browser = await chromium.launch();
 });
 
@@ -83,20 +44,7 @@ async function open(path, { viewport } = {}) {
         if (m.type() === "error") errors.push(`console: ${m.text()}`);
     });
 
-    // Keep the run offline and deterministic: no real RPC, IPFS or bridge calls.
-    await page.route("**://**", (route) => {
-        const url = route.request().url();
-        if (url.startsWith(origin)) return route.continue();
-        if (url.includes("rpc.vinuchain.org")) {
-            return route.fulfill({
-                status: 200,
-                contentType: "application/json",
-                body: JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x0" }),
-            });
-        }
-        return route.abort();
-    });
-
+    await routeOffline(page, origin);
     await page.goto(`${origin}${path}`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(700);
     return { page, context, errors };
