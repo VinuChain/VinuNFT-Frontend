@@ -88,3 +88,26 @@ test("the placeholder is fully expanded, leaving no bare script-src", { skip: !h
         "an unexpanded placeholder means add_csp did not run"
     );
 });
+
+test("the built HTML references a stylesheet that exists in the build", { skip: !hasBuild }, async () => {
+    // Gatsby's incremental build can leave HTML referencing a stylesheet hash
+    // from an earlier run. Every rendered assertion then measures stale CSS and
+    // silently reports the previous build's behaviour — which is exactly what
+    // happened while chasing accessibility fixes that had in fact applied.
+    const { readdirSync } = await import("node:fs");
+    const built = new Set(
+        readdirSync("public").filter((f) => /^styles\..*\.css$/.test(f))
+    );
+    const html = readFileSync(BUILT_PAGE, "utf8");
+    const referenced = [...new Set(html.match(/styles\.[a-f0-9]+\.css/g) ?? [])];
+
+    assert.ok(referenced.length > 0, "the page references no stylesheet");
+    for (const name of referenced) {
+        assert.ok(built.has(name), `${name} is referenced but not present in public/`);
+    }
+    assert.equal(
+        built.size,
+        referenced.length,
+        `public/ holds ${built.size} stylesheets for ${referenced.length} referenced — stale output from an earlier build; run 'yarn clean' before building`
+    );
+});

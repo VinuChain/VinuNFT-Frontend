@@ -1050,3 +1050,36 @@ body .help {
     overflow-wrap: anywhere;
     word-break: break-word;
 }
+
+/*
+ * Accessibility corrections found by the rendered checks.
+ */
+
+/* Bulma styles <strong> as #363636, which overrode the light colour on this
+ * dark panel and rendered the status word at 1.60:1 — effectively invisible. */
+.bridge-hero__status strong {
+    color: inherit;
+}
+
+/* Bulma's danger red gives white text 3.61:1, under the 4.5:1 AA floor. Error
+ * text is the text a user most needs to be able to read. This shade keeps the
+ * same signal while clearing AA. */
+.notification.is-danger,
+.message.is-danger .message-body {
+    background-color: #c8203f;
+}
+
+/* WCAG 2.5.8: pointer targets need 24x24 CSS px. Native checkboxes render at
+ * 13x13, which is a difficult tap on a phone. */
+input[type="checkbox"],
+input[type="radio"] {
+    min-width: 24px;
+    min-height: 24px;
+}
+
+/* An inline download link measured 73x23, one pixel under the target size. */
+.media-kit-card__download {
+    align-items: center;
+    display: inline-flex;
+    min-height: 24px;
+}

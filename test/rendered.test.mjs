@@ -187,3 +187,108 @@ test("keyboard focus reaches the primary navigation", { skip: !hasBuild }, async
         await context.close();
     }
 });
+
+// --- accessibility: contrast, target size, motion -------------------------
+
+/** WCAG relative luminance and contrast ratio, computed in the page. */
+const CONTRAST_HELPERS = `
+    const parse = (c) => (c.match(/[\\d.]+/g) || []).map(Number);
+    const lum = ([r, g, b]) => {
+        const f = (v) => {
+            v /= 255;
+            return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const ratio = (a, b) => {
+        const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+        return (hi + 0.05) / (lo + 0.05);
+    };
+    const backdrop = (el) => {
+        for (let n = el; n; n = n.parentElement) {
+            const bg = parse(getComputedStyle(n).backgroundColor);
+            const alpha = bg.length === 4 ? bg[3] : 1;
+            if (alpha > 0) return bg.slice(0, 3);
+        }
+        return [255, 255, 255];
+    };
+`;
+
+for (const [path, label] of ROUTES) {
+    test(`${label}: visible text meets WCAG AA contrast`, { skip: !hasBuild }, async () => {
+        const { page, context } = await open(path);
+        try {
+            const failures = await page.evaluate(`(() => {
+                ${CONTRAST_HELPERS}
+                const bad = [];
+                for (const el of document.querySelectorAll("p, span, a, button, h1, h2, h3, h4, li, td, th, label, strong, small, tt")) {
+                    if (!el.textContent.trim()) continue;
+                    if (el.querySelector("*")) continue;           // leaf text only
+                    const cs = getComputedStyle(el);
+                    if (cs.visibility === "hidden" || cs.display === "none") continue;
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width === 0 || rect.height === 0) continue;
+                    if (Number(cs.opacity) === 0) continue;
+                    const size = parseFloat(cs.fontSize);
+                    const bold = Number(cs.fontWeight) >= 700;
+                    // WCAG AA: 3.0 for large text (>=24px, or >=18.66px bold), else 4.5
+                    const required = size >= 24 || (bold && size >= 18.66) ? 3.0 : 4.5;
+                    const r = ratio(parse(cs.color).slice(0, 3), backdrop(el));
+                    if (r + 0.05 < required) {
+                        bad.push(el.tagName + " '" + el.textContent.trim().slice(0, 30) + "' " + r.toFixed(2) + ":1 < " + required);
+                    }
+                }
+                return [...new Set(bad)];
+            })()`);
+            assert.deepEqual(failures, [], `${path} has text below AA contrast`);
+        } finally {
+            await context.close();
+        }
+    });
+
+    test(`${label}: interactive targets are large enough to tap`, { skip: !hasBuild }, async () => {
+        const { page, context } = await open(path, { viewport: { width: 375, height: 667 } });
+        try {
+            // WCAG 2.5.8 AA: 24x24 CSS px minimum for pointer targets.
+            const small = await page.$$eval("button, a[href], input, select, textarea", (nodes) =>
+                nodes
+                    .filter((node) => {
+                        const cs = getComputedStyle(node);
+                        if (cs.display === "none" || cs.visibility === "hidden") return false;
+                        const r = node.getBoundingClientRect();
+                        if (r.width === 0 || r.height === 0) return false;
+                        return r.width < 24 || r.height < 24;
+                    })
+                    .map((node) => `${node.tagName} '${(node.textContent ?? "").trim().slice(0, 24)}' ${Math.round(node.getBoundingClientRect().width)}x${Math.round(node.getBoundingClientRect().height)}`)
+            );
+            assert.deepEqual([...new Set(small)], [], `${path} has targets under 24x24`);
+        } finally {
+            await context.close();
+        }
+    });
+}
+
+test("no element animates indefinitely when reduced motion is requested", { skip: !hasBuild }, async () => {
+    const context = await browser.newContext({ reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await routeOffline(page, origin);
+    await page.goto(`${origin}/`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(700);
+    try {
+        const animating = await page.$$eval("*", (nodes) =>
+            nodes
+                .filter((node) => {
+                    const cs = getComputedStyle(node);
+                    return (
+                        cs.animationIterationCount === "infinite" &&
+                        cs.animationName !== "none" &&
+                        cs.animationPlayState === "running"
+                    );
+                })
+                .map((node) => `${node.tagName}.${String(node.className).slice(0, 30)}`)
+        );
+        assert.deepEqual([...new Set(animating)], [], "infinite animation under prefers-reduced-motion");
+    } finally {
+        await context.close();
+    }
+});
