@@ -5,11 +5,7 @@ import ViewOnExplorer from "../components/ViewOnExplorer";
 import config from "../config";
 import { v1 } from "./abi";
 import Decimal from "decimal.js";
-import {
-    createIpfsUploadAuth,
-    uploadFileToIpfs,
-    uploadJSONToIpfs,
-} from "./ipfs";
+import { uploadFileToIpfs, uploadJSONToIpfs } from "./ipfs";
 
 async function getContentFunction(nftType) {
     function contentFunction(status, transaction, success, receipt) {
@@ -64,8 +60,7 @@ async function mintImageNft(
     walletProvider,
     handleTransaction
 ) {
-    const uploadAuth = await createIpfsUploadAuth(walletProvider);
-    const uploadedFileHash = await uploadFileToIpfs(image, uploadAuth);
+    const uploadedFileHash = await uploadFileToIpfs(image, walletProvider);
 
     const metadata = {
         name: title,
@@ -73,7 +68,10 @@ async function mintImageNft(
         image: `ipfs://${uploadedFileHash}`,
     };
 
-    const uploadedMetadataHash = await uploadJSONToIpfs(metadata, uploadAuth);
+    const uploadedMetadataHash = await uploadJSONToIpfs(
+        metadata,
+        walletProvider
+    );
 
     // console.log(uploadedFileHash);
     const contractAddress = config.contractAddresses.v1.image;

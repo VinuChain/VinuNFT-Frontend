@@ -1,4 +1,8 @@
 import { ethers } from "ethers";
+import {
+    createUploadMessage,
+    uploadPayloadDigest,
+} from "../common/uploadIntent";
 
 const PINATA_PIN_FILE_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";
 const PINATA_PIN_JSON_URL = "https://api.pinata.cloud/pinning/pinJSONToIPFS";
@@ -28,6 +32,11 @@ const MAX_UPLOADS_PER_WINDOW = Number(
 const MAX_GLOBAL_UPLOADS_PER_WINDOW = Number(
     envValue("PINATA_MAX_GLOBAL_UPLOADS_PER_WINDOW") || 200
 );
+const UPLOAD_CHAIN_ID = Number(envValue("UPLOAD_CHAIN_ID") || 207);
+
+// ponytail: process-memory rate limit, resets on cold start and is not shared
+// between instances. Documented as a burst guard, not distributed abuse
+// control; move to Redis/edge counters before removing the upload allowlist.
 const uploadRateLimit = new Map();
 
 export const config = {
@@ -141,15 +150,6 @@ function assertPinataJwt() {
     }
 }
 
-function createUploadMessage(address, issuedAt) {
-    return [
-        "VinuNFT IPFS upload",
-        `Address: ${address}`,
-        `Issued At: ${issuedAt}`,
-        "Purpose: mint-image",
-    ].join("\n");
-}
-
 function clientIp(req) {
     const trustedHeader = envValue("TRUSTED_CLIENT_IP_HEADER");
     if (
@@ -212,7 +212,17 @@ function assertAllowedUploader(address) {
     }
 }
 
-function assertUploadAuth(req, auth) {
+const UPLOAD_ACTION = { file: "mint-image", json: "mint-metadata" };
+
+/** The signed digest must cover the payload the server is about to pin, so
+ *  `auth` itself is excluded from the digested object. */
+function digestedPayload(payload) {
+    const { auth, ...rest } = payload ?? {};
+    return rest;
+}
+
+function assertUploadAuth(req, payload) {
+    const auth = payload?.auth;
     if (!auth?.address || !auth?.issuedAt || !auth?.signature) {
         throw new UploadRejection(
             "missing_signature",
@@ -234,15 +244,32 @@ function assertUploadAuth(req, auth) {
         );
     }
 
+    const action = UPLOAD_ACTION[payload?.type];
+    if (!action) {
+        throw new UploadRejection(
+            "unsupported_type",
+            "Unsupported upload type."
+        );
+    }
+
+    // Rebuild the message from the payload actually received. A signature
+    // captured for one upload cannot authorise different content, a different
+    // action, or a different chain.
     const recoveredAddress = ethers.utils.verifyMessage(
-        createUploadMessage(address, auth.issuedAt),
+        createUploadMessage({
+            address,
+            issuedAt: auth.issuedAt,
+            chainId: UPLOAD_CHAIN_ID,
+            action,
+            digest: uploadPayloadDigest(digestedPayload(payload)),
+        }),
         auth.signature
     );
 
     if (ethers.utils.getAddress(recoveredAddress) !== address) {
         throw new UploadRejection(
             "invalid_signature",
-            "Upload signature does not match the supplied address."
+            "Upload signature does not authorise this payload."
         );
     }
 
@@ -316,7 +343,7 @@ export default async function handler(req, res) {
     try {
         assertPinataJwt();
         payload = parseBody(req);
-        assertUploadAuth(req, payload.auth);
+        assertUploadAuth(req, payload);
         const response =
             payload.type === "json"
                 ? await pinJson(payload.metadata)

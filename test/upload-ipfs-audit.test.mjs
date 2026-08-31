@@ -7,23 +7,35 @@ process.env.PINATA_MAX_GLOBAL_UPLOADS_PER_WINDOW = "50";
 
 const { default: handler } = await import("../src/api/upload-ipfs.js");
 
-function uploadMessage(address, issuedAt) {
-    return [
-        "VinuNFT IPFS upload",
-        `Address: ${ethers.utils.getAddress(address)}`,
-        `Issued At: ${issuedAt}`,
-        "Purpose: mint-image",
-    ].join("\n");
+const { createUploadMessage, uploadPayloadDigest } = await import(
+    "../src/common/uploadIntent.js"
+);
+
+const UPLOAD_ACTION = { file: "mint-image", json: "mint-metadata" };
+
+/** Strip `auth` exactly as the server does before digesting. */
+function digested({ auth, ...rest }) {
+    return rest;
 }
 
-async function signedAuth(wallet) {
+/**
+ * Sign an intent bound to the payload the test actually sends. Signing
+ * anything else is precisely what the server must now reject.
+ */
+async function signedAuth(wallet, payload = jsonPayload(null)) {
     const issuedAt = new Date().toISOString();
 
     return {
         address: wallet.address,
         issuedAt,
         signature: await wallet.signMessage(
-            uploadMessage(wallet.address, issuedAt)
+            createUploadMessage({
+                address: ethers.utils.getAddress(wallet.address),
+                issuedAt,
+                chainId: 207,
+                action: UPLOAD_ACTION[payload.type],
+                digest: uploadPayloadDigest(digested(payload)),
+            })
         ),
     };
 }

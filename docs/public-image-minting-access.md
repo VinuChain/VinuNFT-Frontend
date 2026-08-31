@@ -35,13 +35,28 @@ then widen gradually.
 Keep the current allowlist-only model for production. Public image minting needs
 durable per-wallet and per-IP rate limiting before the upload surface is widened;
 the current process-memory limiter is a useful burst guard, not a distributed
-abuse-control system.
+abuse-control system. It resets on every cold start and is not shared between
+instances, so it must not be described as durable protection.
+
+Payload-bound upload intents (above) are a prerequisite for widening access and
+are now in place, but they do not replace durable rate limiting: they stop a
+captured signature being reused for *different* content, not a permitted wallet
+from uploading repeatedly.
 
 ## Non-negotiable invariants
 
 -   `PINATA_API_JWT` remains server-only and never uses a `GATSBY_` prefix.
     Plain marker for regression tests: PINATA_API_JWT remains server-only.
--   Uploads require a recent wallet signature.
+-   Uploads require a recent wallet signature, bound to the payload digest,
+    chain, and action (`src/common/uploadIntent.js`, intent version 2). The
+    browser and the upload endpoint build the signed message from that one
+    module, so they cannot drift apart. A captured signature therefore
+    authorises only the byte-for-byte identical upload it was made for;
+    re-sending it re-pins identical content to the same CID, which is a no-op.
+    Version 1 signed only address and timestamp, so any observer of a single
+    signature could pin arbitrary content for the rest of the window. Because
+    the image CID is only known after the image is pinned, a mint signs twice:
+    once for the image and once for the metadata.
 -   Uploads have a byte limit.
 -   Uploads have per-wallet and global throttling.
 -   Error messages are safe to show to users and do not include secrets.
