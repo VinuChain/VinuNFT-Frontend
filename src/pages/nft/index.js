@@ -10,6 +10,7 @@ import config from "../../config";
 import { ethers } from "ethers";
 import { v1 } from "../../common/abi";
 import * as queryString from "query-string";
+import { socialPreview } from "../../common/socialPreview";
 
 import HTMLViewer from "../../components/HTMLViewer";
 import MarkdownViewer from "../../components/MarkdownViewer";
@@ -654,20 +655,12 @@ export default function NFTPage({ location }) {
         setUpdateTracker(([_, counter]) => [updatedNFTId, counter + 1]);
     };
 
-    const safeSocialType =
-        macroNftType === "text" || macroNftType === "image"
-            ? macroNftType
-            : "NFT";
-    const safeSocialId = Number.isInteger(id) && id > 0 ? id : null;
-    const socialTitle = safeSocialId
-        ? `${safeSocialType} #${safeSocialId} - VinuNFT`
-        : "VinuNFT";
-    const socialDescription = safeSocialId
-        ? `View ${safeSocialType} NFT #${safeSocialId} on VinuNFT.`
-        : "VinuNFT on VinuChain mainnet.";
-    const socialUrl = safeSocialId
-        ? `/nft?type=${encodeURIComponent(safeSocialType)}&id=${safeSocialId}`
-        : "/nft";
+    // Derived only from validated route parameters, never from token metadata.
+    const social = socialPreview(parsedQuery);
+    const safeSocialId = social.url === "/nft" ? null : id;
+    const socialTitle = social.title;
+    const socialDescription = social.description;
+    const socialUrl = social.url;
     const imageAltText =
         tokenData?.name && safeSocialId
             ? `${tokenData.name} image NFT #${safeSocialId}`
@@ -678,11 +671,7 @@ export default function NFTPage({ location }) {
     return (
         <div>
             <Helmet>
-                <title>
-                    {id !== undefined && id !== null
-                        ? `#${id} - VinuNFT`
-                        : "VinuNFT"}
-                </title>
+                <title>{socialTitle}</title>
                 <meta name="description" content={socialDescription} />
                 <meta property="og:title" content={socialTitle} />
                 <meta property="og:description" content={socialDescription} />
