@@ -83,16 +83,22 @@ function allContractEvents(contract, fromBlock, toBlock, maxSpan) {
         return pending.promise;
     }
 
-    const entry = {
+    const entry = { toBlock };
+    entry.promise = fetchContractEvents(
+        contract,
+        fromBlock,
         toBlock,
-        promise: fetchContractEvents(
-            contract,
-            fromBlock,
-            toBlock,
-            maxSpan,
-            pending
-        ),
-    };
+        maxSpan,
+        pending
+    ).catch((error) => {
+        // Never leave a rejected promise cached. One throttled sub-range out of
+        // ~250 would otherwise be served to every later caller, bricking
+        // history until reload instead of failing a single attempt.
+        if (logCache.get(key) === entry) {
+            logCache.delete(key);
+        }
+        throw error;
+    });
     logCache.set(key, entry);
     return entry.promise;
 }

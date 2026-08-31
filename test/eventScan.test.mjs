@@ -216,3 +216,41 @@ test("queryFilterChunked: honours an explicit numeric toBlock", async () => {
 test("scan concurrency is bounded", () => {
     assert.ok(SCAN_CONCURRENCY >= 1 && SCAN_CONCURRENCY <= 16);
 });
+
+test("queryFilterChunked: a failed pass is not cached, so a retry can succeed", async () => {
+    _resetLogCache();
+    const c = fakeContract(300000, [log(10, SIG_A), log(250000, SIG_A)]);
+    const real = c.provider.getLogs;
+    let failing = true;
+    c.provider.getLogs = async (args) => {
+        if (failing && args.fromBlock > 200000) {
+            throw new Error("throttled");
+        }
+        return real(args);
+    };
+
+    await assert.rejects(
+        () => queryFilterChunked(c, { topics: [SIG_A] }, 0, "latest"),
+        /throttled/
+    );
+
+    // A transient node failure must not poison the cache for the page's life.
+    failing = false;
+    const events = await queryFilterChunked(c, { topics: [SIG_A] }, 0, "latest");
+    assert.deepEqual(events.map((e) => e.blockNumber), [10, 250000]);
+});
+
+test("queryFilterChunked: a failed wider pass does not poison an earlier range", async () => {
+    _resetLogCache();
+    const c = fakeContract(300000, [log(10, SIG_A)]);
+    const real = c.provider.getLogs;
+    let failing = true;
+    c.provider.getLogs = async (args) => {
+        if (failing && args.fromBlock > 100000) throw new Error("throttled");
+        return real(args);
+    };
+    await assert.rejects(() => queryFilterChunked(c, { topics: [SIG_A] }, 0, 300000), /throttled/);
+    failing = false;
+    const events = await queryFilterChunked(c, { topics: [SIG_A] }, 0, 100000);
+    assert.deepEqual(events.map((e) => e.blockNumber), [10]);
+});

@@ -55,7 +55,25 @@ Do not expose a Pinata JWT with a `GATSBY_` prefix. Gatsby embeds `GATSBY_*` val
 
 ## IPFS uploads
 
-Image minting asks the connected wallet to sign a short upload intent, then posts files and metadata to `src/api/upload-ipfs.js`. The function verifies the signature, requires the signer to be listed in `PINATA_ALLOWED_UPLOAD_ADDRESSES`, applies per-wallet/IP/global rate limits, enforces the upload size limit, and uploads to Pinata server-side with `PINATA_API_JWT`. Static-only hosts must provide an equivalent server endpoint and set `GATSBY_IPFS_UPLOAD_ENDPOINT` to that URL.
+Image minting asks the connected wallet to sign an upload intent bound to the
+payload digest, the chain, and the action, then posts files and metadata to
+`src/api/upload-ipfs.js`. The browser and the function build that message from
+one shared module, `src/common/uploadIntent.js`, so they cannot drift apart; a
+captured signature authorises only the byte-identical upload it was made for.
+A mint signs twice, because the metadata can only be built once the image CID
+is known.
+
+The function verifies the signature against the payload it actually received,
+requires the signer to be listed in `PINATA_ALLOWED_UPLOAD_ADDRESSES`, applies
+per-wallet/IP/global rate limits, enforces the upload size limit, requires file
+uploads to be a raster image whose declared media type matches its leading
+bytes (`PINATA_ALLOWED_MEDIA_TYPES`; SVG is excluded as script bearing) and
+whose declared geometry is under `PINATA_MAX_IMAGE_PIXELS`, and uploads to
+Pinata server-side with `PINATA_API_JWT`.
+
+The rate limiter lives in process memory. It resets on cold start and is not
+shared between instances, so it is a burst guard on top of the allowlist, not
+durable abuse control; see `docs/public-image-minting-access.md`. Static-only hosts must provide an equivalent server endpoint and set `GATSBY_IPFS_UPLOAD_ENDPOINT` to that URL.
 
 The recommended MVP remains allowlist-only. The upload endpoint is intentionally disabled until `PINATA_ALLOWED_UPLOAD_ADDRESSES` is configured. Public image minting requires durable per-wallet, per-IP, and global rate limiting before widening access; do not fake that with process memory. See `docs/public-image-minting-access.md`.
 
