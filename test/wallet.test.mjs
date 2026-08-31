@@ -151,3 +151,74 @@ test("the connected account is used for chain reads, not a hard-coded address", 
         await context.close();
     }
 });
+
+// --- lifecycle events the wallet can raise after connecting -----------------
+
+/** Fire an EIP-1193 event the way a wallet extension does. */
+const emit = (page, event, ...args) =>
+    page.evaluate(
+        ([event, args]) => {
+            for (const handler of window.ethereum._events?.[event] ?? []) {
+                handler(...args);
+            }
+        },
+        [event, args]
+    );
+
+test("a disconnect from the wallet returns the app to its unconnected state", { skip: !hasBuild }, async () => {
+    const { page, context, errors } = await openPage();
+    try {
+        await connectWallet(page);
+        assert.ok((await bodyText(page)).includes("Change Wallet"));
+
+        await emit(page, "disconnect");
+        await page.waitForTimeout(600);
+
+        const text = await bodyText(page);
+        assert.ok(text.includes("Connect Wallet"), "must offer to reconnect");
+        assert.ok(!text.includes("Vault"), "wallet-only navigation must disappear");
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("clearing the selected account is treated as a disconnection", { skip: !hasBuild }, async () => {
+    // MetaMask reports locking the wallet as accountsChanged with no accounts.
+    // Continuing to show a connected UI would misrepresent who is signed in.
+    const { page, context, errors } = await openPage();
+    try {
+        await connectWallet(page);
+        await page.evaluate(() => {
+            window.ethereum.selectedAddress = null;
+        });
+        await emit(page, "accountsChanged", []);
+        await page.waitForTimeout(600);
+
+        assert.ok((await bodyText(page)).includes("Connect Wallet"));
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("switching to another account keeps the session connected", { skip: !hasBuild }, async () => {
+    const { page, context, errors } = await openPage();
+    try {
+        await connectWallet(page);
+        const next = "0x000000000000000000000000000000000000BEEF";
+        await page.evaluate((account) => {
+            window.ethereum.selectedAddress = account;
+        }, next);
+        await emit(page, "accountsChanged", [next]);
+        await page.waitForTimeout(600);
+
+        assert.ok(
+            (await bodyText(page)).includes("Change Wallet"),
+            "an account switch is not a disconnection"
+        );
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
