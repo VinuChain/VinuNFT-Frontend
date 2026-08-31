@@ -89,6 +89,31 @@ test("a wallet on the wrong chain is reported rather than silently used", { skip
     }
 });
 
+test("the wrong-network alert offers a working switch, not just an instruction", { skip: !hasBuild }, async () => {
+    // VinuChain is not preconfigured in MetaMask, so "please switch" on its own
+    // is a dead end for a first-time visitor.
+    const { page, context, errors } = await openPage("/", { chainId: "0x1" });
+    try {
+        await connectWallet(page);
+        const button = page
+            .locator(".vinunft-header__network-alert button", { hasText: /switch to/i })
+            .first();
+        assert.equal(await button.count(), 1, "the alert must offer a switch control");
+
+        await button.click();
+        await page.waitForTimeout(400);
+
+        const methods = (await walletCalls(page)).map((c) => c.method);
+        assert.ok(
+            methods.includes("wallet_switchEthereumChain"),
+            `the wallet must be asked to switch, saw ${methods.join(", ")}`
+        );
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
 test("the wrong-network alert stays hidden on the correct chain", { skip: !hasBuild }, async () => {
     // The counterpart to the test above: an alert that is always present would
     // make that one meaningless.

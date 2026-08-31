@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { RoutingLink, WalletButton } from ".";
 import { useWalletProvider } from "../common/provider";
 import config from "../config";
+import { switchToVinuChain } from "../common/network";
 
 const NAV_LINKS = [
     {
@@ -150,6 +151,13 @@ export default function Header() {
                         Error: please switch to{" "}
                         <strong>{config.networks.main.name}</strong>.
                     </p>
+                    <button
+                        type="button"
+                        className="button is-small mt-2"
+                        onClick={() => switchToVinuChain(window.ethereum)}
+                    >
+                        Switch to {config.networks.main.name}
+                    </button>
                 </div>
             ) : null}
         </header>
