@@ -64,6 +64,36 @@ async function uploadToIpfs(payload, auth) {
     return result.IpfsHash;
 }
 
+/**
+ * CIDs of payloads already pinned in this page's lifetime.
+ *
+ * Identical bytes always pin to the same CID, so a retry after a rejected or
+ * reverted mint has nothing to gain from re-uploading: it would only spend a
+ * second wallet signature and another slot of the endpoint's rate limit on
+ * content that is already there.
+ */
+const uploadedCids = new Map();
+
+function clearUploadCache() {
+    uploadedCids.clear();
+}
+
+async function uploadPayload(payload, walletProvider) {
+    const digest = uploadPayloadDigest(payload);
+
+    if (!uploadedCids.has(digest)) {
+        uploadedCids.set(
+            digest,
+            await uploadToIpfs(
+                payload,
+                await createIpfsUploadAuth(walletProvider, payload)
+            )
+        );
+    }
+
+    return uploadedCids.get(digest);
+}
+
 async function uploadFileToIpfs(image, walletProvider) {
     if (image.size > config.maxIpfsUploadBytes) {
         throw new Error(
@@ -79,19 +109,13 @@ async function uploadFileToIpfs(image, walletProvider) {
         data: arrayBufferToBase64(await image.arrayBuffer()),
     };
 
-    return uploadToIpfs(
-        payload,
-        await createIpfsUploadAuth(walletProvider, payload)
-    );
+    return uploadPayload(payload, walletProvider);
 }
 
 async function uploadJSONToIpfs(json, walletProvider) {
     const payload = { type: "json", metadata: json };
 
-    return uploadToIpfs(
-        payload,
-        await createIpfsUploadAuth(walletProvider, payload)
-    );
+    return uploadPayload(payload, walletProvider);
 }
 
 /** Thrown when a token points somewhere this app will not fetch from. */
@@ -252,6 +276,7 @@ export {
     MediaTooLarge,
     isAllowedHttpsUrl,
     createIpfsUploadAuth,
+    clearUploadCache,
     uploadFileToIpfs,
     uploadJSONToIpfs,
     maybeFetchIpfs,

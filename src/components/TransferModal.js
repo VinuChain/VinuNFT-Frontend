@@ -64,6 +64,10 @@ export default function TransferModal({
                     </p>
                 </header>
                 <section className="modal-card-body">
+                    <p>
+                        A gift is final. Only the recipient can send these
+                        tokens back.
+                    </p>
                     <p>Balance: {balance}</p>
                     {balance != availableAmount ? (
                         <p>Available (not listed) balance: {availableAmount}</p>

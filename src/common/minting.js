@@ -5,7 +5,8 @@ import ViewOnExplorer from "../components/ViewOnExplorer";
 import config from "../config";
 import { v1 } from "./abi";
 import Decimal from "decimal.js";
-import { uploadFileToIpfs, uploadJSONToIpfs } from "./ipfs";
+import { clearUploadCache, uploadFileToIpfs, uploadJSONToIpfs } from "./ipfs";
+import { estimateFee } from "./utils";
 
 async function getContentFunction(nftType) {
     function contentFunction(status, transaction, success, receipt) {
@@ -95,7 +96,64 @@ async function mintImageNft(
         );
     }
 
-    return handleTransaction(transactionFunction, "Mint", contentFunction);
+    const result = await handleTransaction(
+        transactionFunction,
+        "Mint",
+        contentFunction
+    );
+
+    if (result.success) {
+        clearUploadCache();
+    }
+
+    return result;
+}
+
+function textTokenUri(dataType, text) {
+    const isUTF8 = [...text].some((char) => char.charCodeAt(0) > 127);
+
+    return (
+        "data:" +
+        dataType +
+        (isUTF8 && dataType === "text/plain" ? ",charset=UTF-8" : "") +
+        "," +
+        encodeURIComponent(text)
+    );
+}
+
+/**
+ * Estimated network fee for the text mint the form currently describes, so the
+ * page can quote a cost without knowing which contract it will call.
+ */
+async function estimateTextMintFee(
+    { dataType, title, description, editionSize, text, royaltyPercentage },
+    walletProvider
+) {
+    try {
+        const signer = walletProvider.getSigner();
+        const contract = new ethers.Contract(
+            config.contractAddresses.v1.text,
+            v1.text,
+            signer
+        );
+
+        const args = [
+            textTokenUri(dataType, text),
+            title,
+            description,
+            editionSize,
+            new Decimal(royaltyPercentage).mul("100").toNumber(),
+            await signer.getAddress(),
+            0,
+        ];
+
+        return await estimateFee(
+            () => contract.estimateGas.mint(...args),
+            contract.provider
+        );
+    } catch {
+        return null;
+    }
 }
 
 async function mintTextNft(
@@ -111,14 +169,7 @@ async function mintTextNft(
     walletProvider,
     handleTransaction
 ) {
-    const isUTF8 = [...text].some((char) => char.charCodeAt(0) > 127);
-
-    const uri =
-        "data:" +
-        dataType +
-        (isUTF8 && dataType === "text/plain" ? ",charset=UTF-8" : "") +
-        "," +
-        encodeURIComponent(text);
+    const uri = textTokenUri(dataType, text);
 
     const contractAddress = config.contractAddresses.v1.text;
 
@@ -231,4 +282,4 @@ async function mintNft(
     }
 }
 
-export { mintNft };
+export { mintNft, estimateTextMintFee };

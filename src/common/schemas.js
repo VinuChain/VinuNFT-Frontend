@@ -4,30 +4,29 @@ import { defaultSchema as rehypeDefaultSchema } from "rehype-sanitize";
 const ensDomain = Joi.string().domain({ tlds: { allow: ["eth"] } });
 const ethAddress = Joi.string().pattern(/^0x[a-fA-F0-9]{40}$/);
 
-const validateCustomRecipient = (value, helpers) => {
+const ADDRESS_MESSAGE = '"Address" must be a valid Ethereum name or address';
+
+const validateRecipient = (value, helpers) => {
     if (!value) {
         return helpers.error("any.required");
     }
-    if (value.includes(".eth")) {
-        const ensValidation = ensDomain.validate(value);
-        if (ensValidation.error) {
-            return helpers.error("custom.address");
-        }
-    } else {
-        const ethValidation = ethAddress.validate(value);
-        if (ethValidation.error) {
-            return helpers.error("custom.address");
-        }
+    const wellFormed = value.includes(".eth") ? ensDomain : ethAddress;
+    if (wellFormed.validate(value).error) {
+        return helpers.error("custom.address");
     }
     return value;
 };
 
+const recipient = Joi.string()
+    .custom(validateRecipient)
+    .messages({ "custom.address": ADDRESS_MESSAGE });
+
+// Only the mint form has a useCustomRecipient toggle; every other form must
+// apply `recipient` directly, or the "otherwise" branch accepts any string.
 const _customRecipient = Joi.when("useCustomRecipient", {
     is: true,
-    then: Joi.string().custom(validateCustomRecipient),
+    then: recipient,
     otherwise: Joi.string().empty(""),
-}).messages({
-    "custom.address": '"Address" must be a valid Ethereum name or address',
 });
 
 const maxDigits = (max) => (value, helpers) => {
@@ -95,7 +94,15 @@ const mint = Joi.object().keys({
 });
 
 const transfer = Joi.object().keys({
-    to: _customRecipient.label("Address"),
+    to: recipient
+        .required()
+        // A blank recipient is the same user mistake as a malformed one, so it
+        // gets the same actionable sentence rather than joi's default.
+        .messages({
+            "string.empty": ADDRESS_MESSAGE,
+            "any.required": ADDRESS_MESSAGE,
+        })
+        .label("Address"),
     amount: Joi.number().integer().min(1).empty("").required().label("Amount"),
 });
 

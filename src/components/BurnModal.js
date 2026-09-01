@@ -63,6 +63,11 @@ export default function BurnModal({
                     </p>
                 </header>
                 <section className="modal-card-body">
+                    <p>
+                        Burning destroys these tokens permanently. They cannot
+                        be recovered and the supply drops by the amount you
+                        burn.
+                    </p>
                     <p>Balance: {balance}</p>
                     {balance != availableAmount ? (
                         <p>Available (not listed) balance: {availableAmount}</p>

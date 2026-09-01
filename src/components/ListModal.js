@@ -9,7 +9,11 @@ import { useRecoilState } from "recoil";
 import { formatError, standardErrorState } from "../common/error";
 import config from "../config";
 import { settlementBreakdown, bpsToPercent } from "../common/settlement";
-import { formatTokenAmount, parseTokenAmount } from "../common/utils";
+import {
+    exceedsTokenDecimals,
+    formatTokenAmount,
+    parseTokenAmount,
+} from "../common/utils";
 import {
     defaultReadProvider,
     useReadProvider,
@@ -137,6 +141,16 @@ export default function ListModal({
             cancelled = true;
         };
     }, [nftType, id, nftAddress]);
+
+    // The price field's schema allows 18 decimal places for every token, but
+    // the selected token decides how many survive parseUnits. The schema
+    // cannot see the selection, so the check lives here, where it does.
+    const priceDecimals = config.tokens[selectedPaymentToken]?.decimals;
+    const priceTooPrecise =
+        watchPrice !== undefined &&
+        watchPrice !== null &&
+        watchPrice !== "" &&
+        exceedsTokenDecimals(watchPrice, selectedPaymentToken);
 
     const proceeds = (() => {
         if (platformFeeBps === null || royaltyBps === null) return null;
@@ -373,6 +387,16 @@ export default function ListModal({
                         <></>
                     )}
 
+                    {priceTooPrecise ? (
+                        <p className="notification is-danger">
+                            <b>Error</b>: {selectedPaymentTokenSymbol} prices
+                            must have at most {priceDecimals} decimal places
+                            after the decimal point.
+                        </p>
+                    ) : (
+                        <></>
+                    )}
+
                     {watchAmount > Math.min(balance, availableAmount) ? (
                         watchAmount <= balance ? (
                             <p className="notification is-warning">
@@ -400,7 +424,9 @@ export default function ListModal({
                         <button
                             className="button is-black"
                             disabled={
-                                (!isValid && isDirty) || watchAmount > balance
+                                (!isValid && isDirty) ||
+                                watchAmount > balance ||
+                                priceTooPrecise
                             }
                             onClick={handleSubmit(closeModal)}
                         >

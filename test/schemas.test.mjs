@@ -48,3 +48,68 @@ test("schemas.validMarkdown.protocols.src does not include data URIs", () => {
         "validMarkdown must not allow data: URIs in src to prevent data-URI XSS"
     );
 });
+
+// The transfer recipient used to reuse the mint form's conditional rule, whose
+// condition no other form sets, so every string was accepted.
+
+for (const bad of ["not-an-address", "0x123", "0xdeadbeef", "vinu.com", ""]) {
+    test(`schemas.transfer: rejects recipient ${JSON.stringify(bad)}`, () => {
+        const result = schemas.transfer.validate({ to: bad, amount: 1 });
+        assert.ok(result.error !== undefined, "expected a validation error");
+        assert.match(
+            result.error.message,
+            /valid Ethereum name or address/,
+            "the message must say what a valid recipient looks like"
+        );
+    });
+}
+
+test("schemas.transfer: rejects a missing recipient", () => {
+    const result = schemas.transfer.validate({ amount: 1 });
+    assert.ok(result.error !== undefined, "expected a validation error");
+    assert.match(result.error.message, /valid Ethereum name or address/);
+});
+
+for (const good of [
+    "0x12BD0b15D5010De455DCe7944265Fe1D35a84023",
+    "nobody.eth",
+]) {
+    test(`schemas.transfer: accepts recipient ${good}`, () => {
+        const result = schemas.transfer.validate({ to: good, amount: 1 });
+        assert.equal(result.error, undefined);
+        assert.equal(result.value.to, good);
+    });
+}
+
+// The mint form shares the rule but keeps its toggle, and must be unaffected.
+
+test("schemas.mint: custom recipient still ignored while the toggle is off", () => {
+    const result = schemas.mint.validate({
+        editionSize: 1,
+        royaltyPercentage: 5,
+        useCustomRecipient: false,
+        customRecipient: "",
+        dataType: "text/plain",
+    });
+    assert.equal(result.error, undefined);
+});
+
+test("schemas.mint: custom recipient still validated while the toggle is on", () => {
+    const bad = schemas.mint.validate({
+        editionSize: 1,
+        royaltyPercentage: 5,
+        useCustomRecipient: true,
+        customRecipient: "0x123",
+        dataType: "text/plain",
+    });
+    assert.match(bad.error.message, /valid Ethereum name or address/);
+
+    const good = schemas.mint.validate({
+        editionSize: 1,
+        royaltyPercentage: 5,
+        useCustomRecipient: true,
+        customRecipient: "0x12BD0b15D5010De455DCe7944265Fe1D35a84023",
+        dataType: "text/plain",
+    });
+    assert.equal(good.error, undefined);
+});

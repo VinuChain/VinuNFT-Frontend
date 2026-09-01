@@ -47,6 +47,10 @@ export default function BuyModal({
     const allowance = tokenAllowances[paymentToken];
 
     const [paymentTokenBalance, setPaymentTokenBalance] = useState(null);
+    // The raw balance is kept beside the formatted one because sufficiency has
+    // to be decided in the token's own units: a double parsed from an
+    // 18-decimal string cannot tell "exactly the price" from "one wei short".
+    const [paymentTokenBalanceRaw, setPaymentTokenBalanceRaw] = useState(null);
     // Settlement terms, read from the same contracts that will perform the
     // split. null until loaded, so a breakdown is never shown as a guess.
     const [platformFeeBps, setPlatformFeeBps] = useState(null);
@@ -67,10 +71,10 @@ export default function BuyModal({
     const watchAmount = watch("amount", defaultValues.amount);
 
     const validAmount = () => watchAmount <= Math.min(maxAmount, sellerBalance);
-    const validPaymentTokenBalance = () =>
-        total() &&
-        paymentTokenBalance !== null &&
-        parseFloat(paymentTokenBalance) >= parseFloat(total());
+    const validPaymentTokenBalance = (parsedTotal) =>
+        parsedTotal !== null &&
+        paymentTokenBalanceRaw !== null &&
+        paymentTokenBalanceRaw.gte(parsedTotal);
 
     const closeModal = (data) => {
         if (data) {
@@ -113,6 +117,7 @@ export default function BuyModal({
         const balance = await tokenContract.balanceOf(signerAddress);
 
         console.log("Balance:", balance.toString());
+        setPaymentTokenBalanceRaw(balance);
         setPaymentTokenBalance(
             formatTokenAmount(balance.toString(), paymentToken)
         );
@@ -212,7 +217,9 @@ export default function BuyModal({
     const hasEnoughAllowance =
         allowance && parsedTotal && allowance.gte(parsedTotal);
     const disableAction =
-        (!isValid && isDirty) || !validAmount() || !validPaymentTokenBalance();
+        (!isValid && isDirty) ||
+        !validAmount() ||
+        !validPaymentTokenBalance(parsedTotal);
 
     return (
         <div className="modal is-active">
@@ -315,7 +322,7 @@ export default function BuyModal({
                     )}
                     {hasValidTotal &&
                     paymentTokenBalance !== null &&
-                    !validPaymentTokenBalance() ? (
+                    !validPaymentTokenBalance(parsedTotal) ? (
                         <p className="notification is-danger">
                             <b>Error</b>: Insufficient balance.{" "}
                             <BridgeShortcut
