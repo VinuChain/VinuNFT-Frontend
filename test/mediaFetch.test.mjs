@@ -51,11 +51,14 @@ test("non-http schemes are refused without a request", async () => {
 });
 
 test("data: URLs are served inline, which is how on-chain text metadata loads", async () => {
-    const calls = stubFetch(() => okResponse("on-chain"));
+    // This previously asserted that fetch() WAS called with the data: URL, so
+    // it passed while the feature was broken in production: fetch() on a data:
+    // URL is governed by CSP connect-src, which does not list data:, so every
+    // text NFT body was refused and the page held a permanent skeleton.
+    const calls = stubFetch(() => okResponse("unused"));
     const res = await maybeFetchIpfs("data:application/json;base64,e30=");
-    assert.equal(await res.text(), "on-chain");
-    assert.equal(calls.length, 1);
-    assert.ok(calls[0].startsWith("data:"));
+    assert.deepEqual(await res.json(), {});
+    assert.deepEqual(calls, []);
 });
 
 test("an https URL is fetched only when it is one of the configured gateways", () => {
@@ -157,4 +160,52 @@ test("a request carries an abort signal so a hanging gateway cannot stall foreve
     await maybeFetchIpfs("ipfs://QmTest");
     assert.equal(sawSignal, true);
     assert.ok(config.mediaFetchTimeoutMs > 0 && config.mediaFetchTimeoutMs <= 30000);
+});
+
+// ---------------------------------------------------------------------------
+// data: URIs — every text NFT carries its body this way
+// ---------------------------------------------------------------------------
+
+test("maybeFetchIpfs decodes a base64 data: URI without any network call", async () => {
+    const originalFetch = globalThis.fetch;
+    let fetched = 0;
+    globalThis.fetch = async () => {
+        fetched++;
+        throw new Error("network must not be reached for a data: URI");
+    };
+    try {
+        const body = "VinuChain in a Nutshell";
+        const uri = `data:text/plain;base64,${Buffer.from(body).toString("base64")}`;
+        const response = await maybeFetchIpfs(uri);
+        assert.equal(await response.text(), body);
+        assert.equal(response.headers.get("content-type"), "text/plain");
+        // fetch() on a data: URL is governed by CSP connect-src, which does not
+        // list data: — going near the network is the defect, not a detail.
+        assert.equal(fetched, 0);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test("maybeFetchIpfs decodes a percent-encoded data: URI and preserves Unicode", async () => {
+    const response = await maybeFetchIpfs("data:text/plain,caf%C3%A9%20%E2%9C%93");
+    assert.equal(await response.text(), "café ✓");
+});
+
+test("maybeFetchIpfs decodes the on-chain JSON metadata shape", async () => {
+    const metadata = { name: "Token", description: "on chain" };
+    const uri = `data:application/json;base64,${Buffer.from(JSON.stringify(metadata)).toString("base64")}`;
+    const response = await maybeFetchIpfs(uri);
+    assert.deepEqual(await response.json(), metadata);
+});
+
+test("maybeFetchIpfs refuses a malformed data: URI instead of returning junk", async () => {
+    await assert.rejects(
+        () => maybeFetchIpfs("data:text/plain;base64,!!!not-base64!!!"),
+        (e) => e.name === "UnsupportedMediaSource"
+    );
+    await assert.rejects(
+        () => maybeFetchIpfs("data:no-comma-here"),
+        (e) => e.name === "UnsupportedMediaSource"
+    );
 });

@@ -232,9 +232,45 @@ async function readCapped(response, maxBytes) {
 }
 
 /**
+ * Decode a `data:` URI into a Response without touching the network.
+ *
+ * `fetch()` on a `data:` URL is still governed by CSP `connect-src`, which does
+ * not list `data:` and must not: widening it to satisfy an inline decode would
+ * buy nothing and weaken the policy. Every text NFT carries its body as a
+ * `data:` URI, so fetching them meant the body silently never resolved in
+ * production and the page held a permanent skeleton.
+ */
+function responseFromDataUri(url) {
+    const comma = url.indexOf(",");
+    if (comma === -1) {
+        throw new UnsupportedMediaSource(url);
+    }
+
+    const meta = url.slice("data:".length, comma);
+    const isBase64 = /;base64$/i.test(meta);
+    const mediaType =
+        (isBase64 ? meta.slice(0, -";base64".length) : meta) ||
+        "text/plain;charset=US-ASCII";
+    const payload = url.slice(comma + 1);
+
+    let bytes;
+    try {
+        bytes = isBase64
+            ? Uint8Array.from(atob(payload), (c) => c.charCodeAt(0))
+            : new TextEncoder().encode(decodeURIComponent(payload));
+    } catch {
+        // Malformed base64 or percent-encoding. Refuse it the same way an
+        // unsupported scheme is refused, so callers report it honestly.
+        throw new UnsupportedMediaSource(url);
+    }
+
+    return new Response(bytes, { headers: { "Content-Type": mediaType } });
+}
+
+/**
  * Fetch token media, restricted to sources this app is willing to reach.
  *
- * `data:` is served inline by the browser with no network egress, and carries
+ * `data:` is decoded inline with no network egress at all, and carries
  * the on-chain metadata for text NFTs. `ipfs://` is resolved through the
  * configured gateways in order, so one gateway failing degrades instead of
  * blanking every image. A plain https URL is only fetched when it is already
@@ -247,7 +283,7 @@ async function maybeFetchIpfs(url) {
     }
 
     if (url.startsWith("data:")) {
-        return fetch(url);
+        return responseFromDataUri(url);
     }
 
     if (url.startsWith("ipfs://")) {
