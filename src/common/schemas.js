@@ -1,4 +1,5 @@
 import Joi from "joi";
+import config from "../config";
 import { defaultSchema as rehypeDefaultSchema } from "rehype-sanitize";
 
 const ensDomain = Joi.string().domain({ tlds: { allow: ["eth"] } });
@@ -142,6 +143,32 @@ const editRoyalty = Joi.object().keys({
         .label("Royalty percentage"),
 });
 
+/**
+ * A token's metadata document, as validated before anything renders it.
+ *
+ * `mint` stores whatever string it is handed, so every field here is written by
+ * a stranger and read in a viewer's browser. A nested object or an array where
+ * a string belongs throws inside React's render, and this app has no error
+ * boundary — one hostile token would blank whichever page is showing it.
+ *
+ * Unknown keys are stripped rather than rejected: `external_link`,
+ * `animation_url` and friends are not rendered by this app, and a field that
+ * never enters state cannot later be picked up by a component that has
+ * forgotten where it came from. `null` is accepted because real metadata writes
+ * an absent field that way; that is a token saying it has no description, not a
+ * malformed token, and the page reports the two differently.
+ */
+const tokenMetadata = Joi.object()
+    .keys({
+        name: Joi.string().max(512).allow(null, ""),
+        description: Joi.string().max(8192).allow(null, ""),
+        image: Joi.string().max(2048).allow(null, ""),
+        // A text NFT carries its whole body inline as a data: URI, so this is
+        // bounded by the media cap rather than by a plausible URL length.
+        text_uri: Joi.string().max(config.maxMediaFetchBytes).allow(null, ""),
+    })
+    .options({ stripUnknown: true });
+
 const validMarkdown = { ...rehypeDefaultSchema };
 
 const validHTML = {
@@ -158,6 +185,7 @@ export default {
     edit,
     editRoyalty,
     list,
+    tokenMetadata,
     validHTML,
     validMarkdown,
     mint,

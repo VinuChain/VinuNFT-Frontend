@@ -15,8 +15,9 @@ import MarkdownViewer from "./MarkdownViewer";
 import Address from "./Address";
 import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
-import { maybeFetchIpfs } from "../common/ipfs";
-import { getTokenContent } from "../common/nftInfo";
+import { fetchTokenMetadata, getTokenContent } from "../common/nftInfo";
+import { contentStatus } from "../common/contentPolicy";
+import ContentNotice from "./ContentNotice";
 
 const styles = {
     card: {
@@ -54,6 +55,9 @@ export default function NFTCard({ id, type }) {
     const [tokenType, setTokenType] = useState(null);
     const [tokenContent, setTokenContent] = useState(null);
     const [exists, setExists] = useState(true);
+    // A card lives in a grid: one token whose media is gone must state its own
+    // failure rather than take over the page-level error banner for all of them.
+    const [mediaError, setMediaError] = useState(null);
     const [_, setStandardError] = useRecoilState(standardErrorState);
 
     const contractAddress = config.contractAddresses.v1[type];
@@ -108,27 +112,29 @@ export default function NFTCard({ id, type }) {
         if (!tokenURI) return;
 
         try {
-            const tokenDataResponse = await maybeFetchIpfs(tokenURI);
-            const newTokenData = await tokenDataResponse.json();
-            //console.log(newTokenData)
-            setTokenData(newTokenData);
+            const result = await fetchTokenMetadata(tokenURI);
+            setTokenData(result.metadata);
         } catch (e) {
             console.log(e);
-            setStandardError(formatError(e));
+            setMediaError("Metadata unavailable");
         }
     };
 
     const queryTokenContent = async () => {
         if (!type || !tokenData) return;
+        // Suppressed media is not fetched at all, not fetched and then hidden.
+        if (contentHidden) return;
         try {
             const newTokenContent = await getTokenContent(type, tokenData);
             if (newTokenContent.exists) {
                 setTokenContent(newTokenContent.content);
                 setTokenType(newTokenContent.tokenType);
+            } else {
+                setMediaError("No media");
             }
         } catch (e) {
             console.log(e);
-            setStandardError(formatError(e));
+            setMediaError("Media unavailable");
         }
     };
 
@@ -147,6 +153,14 @@ export default function NFTCard({ id, type }) {
     useEffect(() => {
         setExists(true);
     }, [id, type, readProvider]);
+
+    // From the card's own props and the on-chain author, never from metadata.
+    const policyStatus = contentStatus({
+        nftType: type,
+        tokenId: id,
+        addresses: [tokenAuthor],
+    });
+    const contentHidden = policyStatus?.action === "hide";
 
     const effectiveTokenAuthor = tokenAuthor || null;
     const nftPath = `/nft?type=${type}&id=${id}`;
@@ -174,7 +188,13 @@ export default function NFTCard({ id, type }) {
             aria-label={`View ${tokenLabel}`}
         >
             <div style={styles.cardPreview}>
-                {type === "image" ? (
+                {policyStatus ? (
+                    <ContentNotice status={policyStatus} compact />
+                ) : mediaError ? (
+                    <p className="nft-media-unavailable has-text-grey">
+                        {mediaError}
+                    </p>
+                ) : type === "image" ? (
                     <img
                         src={tokenContent}
                         alt={imageAltText}
@@ -202,7 +222,16 @@ export default function NFTCard({ id, type }) {
                 <div className="media">
                     <div className="media-content">
                         <p className="title is-4 mb-0">
-                            {tokenData?.name || <Skeleton />}
+                            {contentHidden
+                                ? `${type} NFT #${id}`
+                                : tokenData?.name ||
+                                  (tokenData ? (
+                                      "Untitled"
+                                  ) : mediaError ? (
+                                      mediaError
+                                  ) : (
+                                      <Skeleton />
+                                  ))}
                         </p>
                         <span className="subtitle is-6">
                             {effectiveTokenAuthor !== null ? (
@@ -223,9 +252,12 @@ export default function NFTCard({ id, type }) {
                 </div>
 
                 <div className="content is-italic" style={styles.description}>
-                    {tokenData?.description !== undefined &&
-                    tokenData?.description !== null ? (
-                        tokenData.description
+                    {contentHidden ? (
+                        ""
+                    ) : tokenData ? (
+                        tokenData.description ?? ""
+                    ) : mediaError ? (
+                        ""
                     ) : (
                         <Skeleton />
                     )}

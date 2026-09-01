@@ -72,10 +72,10 @@ test("an https URL is fetched only when it is one of the configured gateways", (
 
 test("ipfs:// resolves through the first working gateway", async () => {
     const calls = stubFetch(() => okResponse("image-bytes"));
-    const res = await maybeFetchIpfs("ipfs://QmTest");
+    const res = await maybeFetchIpfs("ipfs://QmGatewayFirst");
     assert.equal(await res.text(), "image-bytes");
     assert.equal(calls.length, 1);
-    assert.equal(calls[0], `${config.ipfsGateways[0]}/QmTest`);
+    assert.equal(calls[0], `${config.ipfsGateways[0]}/QmGatewayFirst`);
 });
 
 test("a failing gateway falls through to the next rather than blanking the image", async () => {
@@ -83,7 +83,7 @@ test("a failing gateway falls through to the next rather than blanking the image
         if (url.startsWith(config.ipfsGateways[0])) throw new Error("gateway down");
         return okResponse("recovered");
     });
-    const res = await maybeFetchIpfs("ipfs://QmTest");
+    const res = await maybeFetchIpfs("ipfs://QmGatewayFallback");
     assert.equal(await res.text(), "recovered");
     assert.equal(calls.length, 2);
 });
@@ -92,7 +92,7 @@ test("every gateway failing surfaces an error instead of hanging or returning em
     stubFetch(() => {
         throw new Error("all down");
     });
-    await assert.rejects(() => maybeFetchIpfs("ipfs://QmTest"), /all down/);
+    await assert.rejects(() => maybeFetchIpfs("ipfs://QmAllDown"), /all down/);
 });
 
 test("a non-ok gateway response is treated as a failure and falls through", async () => {
@@ -101,14 +101,14 @@ test("a non-ok gateway response is treated as a failure and falls through", asyn
             ? new Response("nope", { status: 504 })
             : okResponse("second")
     );
-    assert.equal(await (await maybeFetchIpfs("ipfs://QmTest")).text(), "second");
+    assert.equal(await (await maybeFetchIpfs("ipfs://QmNonOk")).text(), "second");
     assert.equal(calls.length, 2);
 });
 
 test("an ipfs:// path with a subpath is preserved through the gateway", async () => {
     const calls = stubFetch(() => okResponse());
-    await maybeFetchIpfs("ipfs://QmTest/nested/file.png");
-    assert.equal(calls[0], `${config.ipfsGateways[0]}/QmTest/nested/file.png`);
+    await maybeFetchIpfs("ipfs://QmSubpath/nested/file.png");
+    assert.equal(calls[0], `${config.ipfsGateways[0]}/QmSubpath/nested/file.png`);
 });
 
 // --- size limits ------------------------------------------------------------
@@ -157,7 +157,7 @@ test("a request carries an abort signal so a hanging gateway cannot stall foreve
         sawSignal = init?.signal instanceof AbortSignal;
         return okResponse();
     });
-    await maybeFetchIpfs("ipfs://QmTest");
+    await maybeFetchIpfs("ipfs://QmSignal");
     assert.equal(sawSignal, true);
     assert.ok(config.mediaFetchTimeoutMs > 0 && config.mediaFetchTimeoutMs <= 30000);
 });
@@ -208,4 +208,50 @@ test("maybeFetchIpfs refuses a malformed data: URI instead of returning junk", a
         () => maybeFetchIpfs("data:no-comma-here"),
         (e) => e.name === "UnsupportedMediaSource"
     );
+});
+
+// --- caching and freshness --------------------------------------------------
+
+test("the same CID is fetched once, so a card then its detail page costs one request", async () => {
+    const calls = stubFetch(() => okResponse("cached-body"));
+    const first = await maybeFetchIpfs("ipfs://QmCacheA");
+    const second = await maybeFetchIpfs("ipfs://QmCacheA");
+    assert.equal(calls.length, 1, "a second read of the same CID must not hit a gateway");
+    assert.equal(await first.text(), "cached-body");
+    assert.equal(await second.text(), "cached-body", "each caller needs its own readable body");
+});
+
+test("a CID already read survives every gateway going down afterwards", async () => {
+    // A CID names its bytes, so this is last-known-good that cannot be stale:
+    // the content behind ipfs://QmCacheB can never become something else.
+    stubFetch(() => okResponse("still-here"));
+    await maybeFetchIpfs("ipfs://QmCacheB");
+    stubFetch(() => {
+        throw new Error("all gateways down");
+    });
+    assert.equal(await (await maybeFetchIpfs("ipfs://QmCacheB")).text(), "still-here");
+});
+
+test("a failure is never cached, so the gateway fallback stays alive", async () => {
+    // Guard, not evidence: this passes before and after the cache exists. It is
+    // here because caching failures is the tempting mistake that would turn one
+    // bad moment into a dead image for the rest of the session.
+    stubFetch(() => {
+        throw new Error("down");
+    });
+    await assert.rejects(() => maybeFetchIpfs("ipfs://QmCacheC"));
+    stubFetch(() => okResponse("recovered later"));
+    assert.equal(await (await maybeFetchIpfs("ipfs://QmCacheC")).text(), "recovered later");
+});
+
+test("images are not retained, so a grid of large pictures cannot fill the tab", async () => {
+    // Guard, not evidence: also passes before the cache exists. It pins the
+    // deliberate exclusion, which is decided from the content type before the
+    // body is buffered.
+    stubFetch(() => okResponse("png-bytes", { "content-type": "image/png" }));
+    await maybeFetchIpfs("ipfs://QmCacheImage");
+    stubFetch(() => {
+        throw new Error("down");
+    });
+    await assert.rejects(() => maybeFetchIpfs("ipfs://QmCacheImage"));
 });

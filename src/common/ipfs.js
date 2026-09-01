@@ -268,6 +268,40 @@ function responseFromDataUri(url) {
 }
 
 /**
+ * Bodies already read from `ipfs://`, kept for the life of the tab.
+ *
+ * An `ipfs://` URI is a CID, so the bytes it names cannot change: a cached
+ * success is correct forever, there is nothing to revalidate, and no staleness
+ * to disclose to the viewer. Nothing else is retained. An allowlisted https URL
+ * is only origin-checked — its path need not be content-addressed, so a cached
+ * copy really could be stale and would be shown as if it were live. A `data:`
+ * URI never leaves the tab in the first place.
+ *
+ * Only successes are cached: caching a failure would turn one bad moment into a
+ * dead image for the rest of the session and silently disable the gateway
+ * fallback.
+ *
+ * ponytail: unbounded by entry count, images excluded. Text bodies and metadata
+ * documents are small and are what a card-then-detail navigation re-reads;
+ * images stream straight into a blob and would double the tab's media memory at
+ * up to maxMediaFetchBytes each. Cap by entry count if a page ever renders
+ * hundreds of text tokens.
+ */
+const cidCache = new Map();
+
+async function retain(url, response) {
+    const type =
+        response.headers.get("content-type") || "application/octet-stream";
+    // Decided from the header, before the body is buffered, so the image path
+    // keeps streaming as it does today.
+    if (type.startsWith("image/")) return response;
+
+    const body = await response.arrayBuffer();
+    cidCache.set(url, { body, type });
+    return new Response(body, { headers: { "content-type": type } });
+}
+
+/**
  * Fetch token media, restricted to sources this app is willing to reach.
  *
  * `data:` is decoded inline with no network egress at all, and carries
@@ -287,11 +321,21 @@ async function maybeFetchIpfs(url) {
     }
 
     if (url.startsWith("ipfs://")) {
+        const cached = cidCache.get(url);
+        if (cached) {
+            return new Response(cached.body, {
+                headers: { "content-type": cached.type },
+            });
+        }
+
         const path = url.slice("ipfs://".length).replace(/^ipfs\//, "");
         let lastError;
         for (const gateway of config.ipfsGateways) {
             try {
-                return await fetchWithLimits(`${gateway}/${path}`);
+                return await retain(
+                    url,
+                    await fetchWithLimits(`${gateway}/${path}`)
+                );
             } catch (error) {
                 if (error instanceof MediaTooLarge) throw error;
                 lastError = error;

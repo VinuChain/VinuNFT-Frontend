@@ -34,7 +34,15 @@ export default function MarkdownViewer({ source }) {
             height={height}
             style={{ width: "100%", overflow: "auto" }}
             srcDoc={sanitizeMarkdown(source)}
-            sandbox
+            // WHY a value and not a bare `sandbox`: React drops `sandbox={true}`
+            // for a string attribute, so the built page shipped an iframe with no
+            // sandbox at all — the second layer this repo documents did not exist.
+            // `allow-same-origin` and nothing else: scripts, forms, popups,
+            // downloads and top-level navigation stay off, while the frame keeps
+            // the parent origin so onLoad can measure its height. Adding
+            // allow-scripts would hand attacker-authored markup a same-origin
+            // script context; it must never be added.
+            sandbox="allow-same-origin"
         />
     );
 }

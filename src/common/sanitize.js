@@ -16,8 +16,12 @@ import schemas from "./schemas";
  * adversarial fixtures in `test/sanitize.test.mjs` exercise.
  *
  * Sanitisation is the first of two layers. Both viewers additionally render the
- * result into an `<iframe sandbox>` with no allow-list, so even a bypass here
- * lands in a context with scripts, forms, and same-origin access disabled.
+ * result into `<iframe sandbox="allow-same-origin">`, so even a bypass here
+ * lands in a context with scripts, forms, popups and top-level navigation
+ * disabled. Same-origin is the one flag granted, because the viewers measure
+ * their own height through the frame's DOM; it is harmless only for as long as
+ * `allow-scripts` stays absent. (Until this was fixed the attribute was written
+ * as a bare `sandbox`, which React drops, so no sandbox shipped at all.)
  */
 /**
  * The rehype plugin list for the Markdown editor's live preview.

@@ -14,6 +14,7 @@ import {
     pageListings,
     rowMatchesFilters,
 } from "../common/marketplaceDiscovery";
+import { contentStatus } from "../common/contentPolicy";
 import { useReadProvider } from "../common/provider";
 import { formatTokenAmount } from "../common/utils";
 import config from "../config";
@@ -301,6 +302,27 @@ export default function Marketplace() {
         };
     }, [readProvider, reloads]);
 
+    // Content policy runs before the user's filters: a suppressed listing is
+    // not offered for sale here at all. Listings render no name, description or
+    // media, so the reason is "do not facilitate the sale", not "do not show
+    // the content". The count is kept because the metrics above are computed
+    // from the unfiltered index, and rows that disagree with a total without
+    // saying why are dishonest coverage.
+    const { shownListings, hiddenByPolicy } = useMemo(() => {
+        const shown = listings.filter(
+            (listing) =>
+                contentStatus({
+                    nftType: listing.nftType,
+                    tokenId: listing.tokenId,
+                    addresses: [listing.seller],
+                })?.action !== "hide"
+        );
+        return {
+            shownListings: shown,
+            hiddenByPolicy: listings.length - shown.length,
+        };
+    }, [listings]);
+
     // One filter implementation, shared with every other consumer and with the
     // tests. The page used to re-implement all four predicates and disagree
     // with the module on an unknown seller balance.
@@ -312,10 +334,17 @@ export default function Marketplace() {
             query,
         };
         const direction = priceSort === "desc" ? -1 : 1;
-        return listings
+        return shownListings
             .filter((listing) => rowMatchesFilters(listing, filters))
             .sort((left, right) => compareListingRows(left, right) * direction);
-    }, [listings, nftType, paymentToken, priceSort, fulfillableOnly, query]);
+    }, [
+        shownListings,
+        nftType,
+        paymentToken,
+        priceSort,
+        fulfillableOnly,
+        query,
+    ]);
 
     // A cursor names a row. Changing the filters can remove that row, and a
     // page anchored to a row that is gone would restart silently, so the reset
@@ -341,6 +370,9 @@ export default function Marketplace() {
                         {error
                             ? "Index scan failed - listing coverage is unknown"
                             : coverageLine(coverage)}
+                        {hiddenByPolicy > 0
+                            ? ` ${hiddenByPolicy} listing(s) are not shown here under the content policy. They still exist on chain and can still be bought through any other client.`
+                            : ""}
                     </p>
                     <h1 className="title">Marketplace</h1>
                     <button

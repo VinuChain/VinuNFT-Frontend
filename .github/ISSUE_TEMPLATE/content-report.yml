@@ -1,0 +1,79 @@
+name: Content report
+description: Report illegal, infringing, impersonating, fraudulent, abusive or malicious content shown on VinuNFT.
+title: "[content] "
+labels: ["content-report"]
+body:
+    - type: markdown
+      value: |
+          This tracker is the intake queue and the audit trail: the report, the
+          evidence, the decision and the blocklist change all sit on one public
+          thread. Anything you post here is public. For legal correspondence or
+          anything you cannot publish, email hello@vitainu.org instead.
+
+          Before you file, read
+          [docs/content-policy.md](https://github.com/VinuChain/VinuNFT-Frontend/blob/main/docs/content-policy.md).
+          The short version: this frontend can stop displaying an item and the
+          operator can unpin media it pinned. Nothing can be deleted from
+          VinuChain, by anyone.
+    - type: dropdown
+      id: contract
+      attributes:
+          label: Which collection
+          options:
+              - Text NFT (0x8974168eC4c942C6D34161e994A759DC3F19b5a8)
+              - Image NFT (0xDE63a95387b89679869591351f5bFD897Dc87DFB)
+              - Not a specific token (an address, a seller, a whole account)
+      validations:
+          required: true
+    - type: input
+      id: token_id
+      attributes:
+          label: Token id, or the 0x address if this is not about one token
+          placeholder: "1"
+      validations:
+          required: true
+    - type: dropdown
+      id: category
+      attributes:
+          label: Category
+          description: One of the classifications the blocklist records. Pick the closest.
+          options:
+              - illegal
+              - infringing
+              - impersonation
+              - fraud
+              - abuse
+              - malware
+      validations:
+          required: true
+    - type: textarea
+      id: evidence
+      attributes:
+          label: Evidence
+          description: >
+              Links, transaction hashes, screenshots, a registration number, a
+              court or authority reference. A report with no evidence cannot be
+              acted on and cannot be defended if the creator appeals.
+      validations:
+          required: true
+    - type: input
+      id: rights_holder
+      attributes:
+          label: Rights holder, if you are claiming infringement or impersonation
+          description: Who owns the right, and your relationship to them.
+      validations:
+          required: false
+    - type: input
+      id: contact
+      attributes:
+          label: Contact for follow-up
+          description: How to reach you if the decision is appealed. A GitHub handle is fine.
+      validations:
+          required: true
+    - type: checkboxes
+      id: acknowledgement
+      attributes:
+          label: Acknowledgement
+          options:
+              - label: I understand that content on VinuChain cannot be deleted, and that a takedown here changes what this website displays.
+                required: true

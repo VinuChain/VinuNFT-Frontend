@@ -7,6 +7,7 @@ import TransactionNotifications from "./components/TransactionNotifications";
 // individually, so global rules silently did not apply there.
 import "./styles/globals.css";
 import config from "./config";
+import { CONTENT_POLICY_URL, REPORT_URL } from "./common/contentPolicy";
 
 const VINUCHAIN_SOCIAL_LINKS = [
     {
@@ -41,6 +42,21 @@ const FOOTER_LINKS = [
         label: "Contact",
         href: "mailto:hello@vitainu.org",
         external: false,
+    },
+    {
+        // The public issue tracker is the intake queue AND the audit trail: a
+        // report, the evidence, the decision and the blocklist pull request all
+        // sit on one thread that neither side can quietly edit away. The mailto
+        // above stays as the private route for legal correspondence.
+        label: "Report content",
+        href: REPORT_URL,
+        external: true,
+    },
+    {
+        // docs/ is not copied into public/, so this must be the repository blob.
+        label: "Content policy",
+        href: CONTENT_POLICY_URL,
+        external: true,
     },
     {
         // From the one registry, so the footer cannot drift from the explorer

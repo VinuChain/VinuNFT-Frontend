@@ -14,6 +14,13 @@ export default function Address({
     external,
 }) {
     const { lookupEns } = useEns();
+    // Rendered during SSR of /nft/ with no query string, where the contract for
+    // an absent type is undefined. Guarding here rather than at each call site
+    // keeps all seven call sites off shortenAddress(undefined).
+    if (!address) {
+        return <></>;
+    }
+
     const label =
         lookupEns(address) ||
         (shorten ? shortenAddress(address, nChar) : address);

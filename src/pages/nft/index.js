@@ -10,11 +10,10 @@ import config from "../../config";
 import { ethers } from "ethers";
 import { v1 } from "../../common/abi";
 import * as queryString from "query-string";
-import { socialPreview } from "../../common/socialPreview";
+import { socialPreview, parseNftRoute } from "../../common/socialPreview";
 
 import HTMLViewer from "../../components/HTMLViewer";
 import MarkdownViewer from "../../components/MarkdownViewer";
-import { navigate } from "gatsby-link";
 import { Helmet } from "react-helmet";
 import { Header } from "../../components";
 
@@ -55,9 +54,18 @@ import {
     tokenAddressToId,
     tokenAllowancesState,
 } from "../../common/user";
-import { maybeFetchIpfs } from "../../common/ipfs";
-import { getTokenContent } from "../../common/nftInfo";
+import { fetchTokenMetadata, getTokenContent } from "../../common/nftInfo";
+import { contentStatus, REPORT_URL } from "../../common/contentPolicy";
+import ContentNotice from "../../components/ContentNotice";
 import { queryFilterChunked } from "../../common/eventScan";
+
+// Fixed, non-derived copy. A media or metadata failure must never echo the
+// token's own strings back into the page, and the viewer needs to be able to
+// tell "we could not get this" from "still loading".
+const METADATA_UNAVAILABLE = "Metadata unavailable";
+const MEDIA_UNAVAILABLE =
+    "This NFT's media could not be loaded from any configured source.";
+const NO_MEDIA = "This NFT's metadata names no media to display.";
 
 const burnedIdsState = atom({
     key: "burnedIds",
@@ -84,9 +92,11 @@ export default function NFTPage({ location }) {
     const marketplaceABI = v1.marketplace;
 
     const parsedQuery = queryString.parse(location.search);
-    const id = parsedQuery ? parseInt(parsedQuery.id) : null;
-
-    const macroNftType = parsedQuery.type;
+    // parseInt("5abc") is 5 and parseInt("-1") is -1, so the page used to read
+    // a token the URL never named; an unrecognised type built a contract at
+    // address `undefined` and threw inside the async reads. One parser, shared
+    // with the social preview, so the two cannot disagree about the same URL.
+    const { type: macroNftType, id } = parseNftRoute(parsedQuery);
 
     const nftAddress = config.contractAddresses.v1[macroNftType];
     const nftABI = v1[macroNftType];
@@ -108,9 +118,28 @@ export default function NFTPage({ location }) {
     // === NFT Info ===
 
     const [tokenData, setTokenData] = useState(null);
+    const [metadataSource, setMetadataSource] = useState(null);
+    const [metadataError, setMetadataError] = useState(null);
+    const [mediaError, setMediaError] = useState(null);
+    // Bumped by the retry control; the load effect already refetches everything.
+    const [reload, setReload] = useState(0);
+    // Gatsby renders this page statically with no query string, so anything
+    // derived from the route differs between the server HTML and the first
+    // client render. Every other value on this page is state — null on both
+    // sides — which is why only the provenance block needs this.
+    const [routeKnown, setRouteKnown] = useState(false);
     const [tokenType, setTokenType] = useState(null);
     const [tokenContent, setTokenContent] = useState(null);
     const [tokenAuthor, setTokenAuthor] = useState(null);
+    // Derived from the validated route and the on-chain author only. Never from
+    // metadata: the metadata is what an entry usually exists to suppress, so
+    // trusting it to decide suppression would let the token opt itself out.
+    const policyStatus = contentStatus({
+        nftType: macroNftType,
+        tokenId: id,
+        addresses: [tokenAuthor],
+    });
+    const contentHidden = policyStatus?.action === "hide";
     const [royaltyInfo, setRoyaltyInfo] = useState(null);
     const [totalSupply, setTotalSupply] = useState(null);
     const [lastNFTId, setLastNFTId] = useState(null);
@@ -311,18 +340,29 @@ export default function NFTPage({ location }) {
         if (!tURI) return;
 
         try {
-            const tokenDataResponse = await maybeFetchIpfs(tURI);
-            const newTokenData = await tokenDataResponse.json();
-            setTokenData(newTokenData);
+            const result = await fetchTokenMetadata(tURI);
+            setTokenData(result.metadata);
+            setMetadataSource(result);
 
-            return newTokenData;
+            return result.metadata;
         } catch (e) {
             console.log(e);
-            setStandardError(formatError(e));
+            // A metadata failure is this token's problem, not the page's, so it
+            // gets a terminal state of its own instead of the global banner —
+            // which would otherwise report an error the rest of the page has
+            // recovered from. No metadata also means no media to reach.
+            setMetadataError(METADATA_UNAVAILABLE);
+            setMediaError(MEDIA_UNAVAILABLE);
         }
     };
 
     const queryTokenContent = async (newTokenData) => {
+        if (!newTokenData) return;
+        // A hidden item's media is not merely not rendered: it is not fetched.
+        // Nothing is gained by pulling the bytes of an unlawful image into the
+        // viewer's browser and then declining to paint them.
+        if (contentHidden) return;
+
         try {
             const tokenContent = await getTokenContent(
                 macroNftType,
@@ -331,10 +371,19 @@ export default function NFTPage({ location }) {
             if (tokenContent.exists) {
                 setTokenContent(tokenContent.content);
                 setTokenType(tokenContent.tokenType);
+            } else {
+                setMediaError(NO_MEDIA);
             }
         } catch (e) {
             console.log(e);
-            setStandardError(formatError(e));
+            // UnsupportedMediaSource and MediaTooLarge carry accurate,
+            // token-free sentences; anything else could be a raw fetch message.
+            setMediaError(
+                e?.name === "UnsupportedMediaSource" ||
+                    e?.name === "MediaTooLarge"
+                    ? e.message
+                    : MEDIA_UNAVAILABLE
+            );
         }
     };
 
@@ -381,12 +430,6 @@ export default function NFTPage({ location }) {
     };
 
     useEffect(() => {
-        if (!id) {
-            navigate("/");
-        }
-    }, [id]);
-
-    useEffect(() => {
         async function queryWalletAddress() {
             if (walletProvider) {
                 try {
@@ -409,6 +452,9 @@ export default function NFTPage({ location }) {
         async function resetInfo() {
             setExists(true);
             setTokenData(null);
+            setMetadataSource(null);
+            setMetadataError(null);
+            setMediaError(null);
             setTokenContent(null);
             setTokenType(null);
             setTokenAuthor(null);
@@ -435,13 +481,14 @@ export default function NFTPage({ location }) {
             setNextValidId(nextId);
         }
         resetInfo();
-    }, [id, readProvider]);
+    }, [id, readProvider, reload]);
 
     /*useEffect(() => queryTokenAuthor(), [id, readProvider])
     useEffect(() => queryRoyaltyInfo(), [id, readProvider])
     useEffect(() => queryTotalSupply(), [id, readProvider])
     useEffect(() => setExists(true), [id, readProvider])*/
     useEffect(() => {
+        setRouteKnown(true);
         queryLastNFTId();
     }, []);
 
@@ -655,6 +702,12 @@ export default function NFTPage({ location }) {
         setUpdateTracker(([_, counter]) => [updatedNFTId, counter + 1]);
     };
 
+    // parseHistory already runs for the History tab; the mint row inside it is
+    // the transaction this token came into existence in, so provenance costs no
+    // extra read. Undefined until the event scan resolves.
+    const historyRows = parseHistory(events);
+    const mintRow = historyRows?.find((row) => row.type === "mint") ?? null;
+
     // Derived only from validated route parameters, never from token metadata.
     const social = socialPreview(parsedQuery);
     const safeSocialId = social.url === "/nft" ? null : id;
@@ -683,7 +736,19 @@ export default function NFTPage({ location }) {
             </Helmet>
             <Header />
             <StandardErrorDisplay />
-            {exists ? (
+            {routeKnown && !(macroNftType && id) ? (
+                /* Redirecting to the home page told the visitor nothing about
+                   the link they followed. `marketplace` is a configured address
+                   but not a collection, and "5abc" and "-1" are not tokens. */
+                <div className="box m-4 nft-unsupported-route">
+                    <h1 className="title is-5">This is not an NFT page</h1>
+                    <p>
+                        The address bar names no token this app can show. Only
+                        the text and image collections are readable here, and
+                        only at a whole, positive token id.
+                    </p>
+                </div>
+            ) : exists ? (
                 <div>
                     <div className="columns m-4">
                         <div
@@ -692,7 +757,22 @@ export default function NFTPage({ location }) {
                         >
                             {readProvider ? (
                                 <div>
-                                    {macroNftType === "image" ? (
+                                    {policyStatus ? (
+                                        <ContentNotice status={policyStatus} />
+                                    ) : null}
+                                    {contentHidden ? null : mediaError ? (
+                                        <div className="box nft-media-unavailable">
+                                            <p>{mediaError}</p>
+                                            <button
+                                                className="button is-small mt-2 nft-media-retry"
+                                                onClick={() =>
+                                                    setReload((n) => n + 1)
+                                                }
+                                            >
+                                                Retry
+                                            </button>
+                                        </div>
+                                    ) : macroNftType === "image" ? (
                                         <img
                                             src={tokenContent}
                                             alt={imageAltText}
@@ -725,6 +805,18 @@ export default function NFTPage({ location }) {
                                             )}
                                         </div>
                                     )}
+                                    {/* Restrictions the visitor cannot see are
+                                        restrictions they cannot rely on: an
+                                        in-content link that quietly does
+                                        nothing reads as a broken page. */}
+                                    <p className="is-size-7 has-text-grey mt-2 nft-content-disclosure">
+                                        This content was uploaded by its creator
+                                        and is not reviewed or endorsed by
+                                        VinuNFT. It renders in a sandboxed frame
+                                        with scripts disabled, and links inside
+                                        it are disabled: nothing here can
+                                        navigate you anywhere.
+                                    </p>
                                 </div>
                             ) : (
                                 <p>Connect a wallet to view this NFT</p>
@@ -732,9 +824,12 @@ export default function NFTPage({ location }) {
                         </div>
                         <div className="column">
                             <h1 className="title">
-                                {tokenData?.name !== null &&
-                                tokenData?.name !== undefined ? (
-                                    tokenData.name
+                                {contentHidden ? (
+                                    "Hidden by content policy"
+                                ) : metadataError ? (
+                                    metadataError
+                                ) : tokenData ? (
+                                    tokenData.name || "Untitled"
                                 ) : (
                                     <Skeleton />
                                 )}
@@ -754,27 +849,39 @@ export default function NFTPage({ location }) {
                                 )}
                             </p>
                             <div className="has-text-left m-0">
-                                {tokenType && totalSupply !== null ? (
-                                    <span>
+                                {/* Supply is an on-chain read and stays true
+                                    when the media fetch fails; gating it on the
+                                    content type reported a figure the chain does
+                                    not agree with. */}
+                                <span>
+                                    {tokenType ? (
                                         <TypeTag type={tokenType} />
+                                    ) : mediaError ? (
+                                        <></>
+                                    ) : (
+                                        <Skeleton inline width={90} />
+                                    )}
+                                    {totalSupply !== null ? (
                                         <span className="tag is-black ml-1">
                                             Edition size:{" "}
                                             {totalSupply.toString()}
                                         </span>
-                                    </span>
-                                ) : (
-                                    <Skeleton
-                                        className="mr-1"
-                                        inline
-                                        count={2}
-                                        width={90}
-                                    />
-                                )}
+                                    ) : (
+                                        <Skeleton
+                                            className="ml-1"
+                                            inline
+                                            width={90}
+                                        />
+                                    )}
+                                </span>
                             </div>
                             <p className="is-italic">
-                                {tokenData?.description !== undefined &&
-                                tokenData?.description !== null ? (
-                                    tokenData.description
+                                {contentHidden ? (
+                                    ""
+                                ) : metadataError ? (
+                                    metadataError
+                                ) : tokenData ? (
+                                    tokenData.description ?? ""
                                 ) : (
                                     <Skeleton />
                                 )}
@@ -794,6 +901,105 @@ export default function NFTPage({ location }) {
                             ) : (
                                 <Skeleton />
                             )}
+                            <hr />
+                            {/* Provenance: which contract, which token, where
+                                the metadata physically lives, and the mint that
+                                created it. Nothing here is taken from metadata
+                                except the source label, which names its own
+                                origin. */}
+                            {routeKnown ? (
+                                <dl className="nft-provenance is-size-7">
+                                    <dt className="has-text-weight-semibold">
+                                        Contract
+                                    </dt>
+                                    <dd className="mb-2">
+                                        <Address
+                                            address={nftAddress}
+                                            external
+                                            shorten
+                                            nChar={8}
+                                        />
+                                    </dd>
+                                    <dt className="has-text-weight-semibold">
+                                        Token ID
+                                    </dt>
+                                    <dd className="mb-2">{id}</dd>
+                                    <dt className="has-text-weight-semibold">
+                                        Metadata
+                                    </dt>
+                                    <dd className="mb-2">
+                                        {metadataError ? (
+                                            "Unavailable"
+                                        ) : metadataSource ? (
+                                            metadataSource.source ===
+                                            "on-chain" ? (
+                                                "On-chain (data: URI stored in the contract)"
+                                            ) : (
+                                                <>
+                                                    External:{" "}
+                                                    <code>
+                                                        {metadataSource.uri.slice(
+                                                            0,
+                                                            80
+                                                        )}
+                                                    </code>
+                                                </>
+                                            )
+                                        ) : (
+                                            <Skeleton width={160} />
+                                        )}
+                                    </dd>
+                                    <dt className="has-text-weight-semibold">
+                                        Minted in
+                                    </dt>
+                                    <dd className="mb-2">
+                                        {historyRows === undefined ? (
+                                            <Skeleton width={160} />
+                                        ) : mintRow ? (
+                                            <a
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                style={{
+                                                    textDecoration: "underline",
+                                                }}
+                                                href={
+                                                    config.blockExplorer.url +
+                                                    "/tx/" +
+                                                    mintRow.transactionHash
+                                                }
+                                            >
+                                                block {mintRow.blockNumber}
+                                            </a>
+                                        ) : (
+                                            "No mint event found in the scanned range"
+                                        )}
+                                    </dd>
+                                </dl>
+                            ) : (
+                                <Skeleton count={4} />
+                            )}
+                            <p className="is-size-7 has-text-grey">
+                                Contract, token ID, edition size, creator,
+                                royalty, listings, owners and history are read
+                                from VinuChain. Name, description and media come
+                                from the metadata source named above.
+                            </p>
+                            <p className="is-size-7 has-text-grey nft-identity-disclaimer">
+                                The creator address is not identity-verified. It
+                                proves control of a key and nothing more: the
+                                name, description and media are whatever the
+                                minter chose, and may impersonate a person,
+                                brand or collection. Only the three contracts
+                                listed above are ever read by this app.{" "}
+                                <a
+                                    target="_blank"
+                                    rel="noreferrer nofollow"
+                                    href={REPORT_URL}
+                                >
+                                    Report this content
+                                </a>
+                                .
+                            </p>
                             <hr />
                             <Listings
                                 nftType={macroNftType}
@@ -917,9 +1123,7 @@ export default function NFTPage({ location }) {
                                                 }}
                                             >
                                                 <NFTHistory
-                                                    history={parseHistory(
-                                                        events
-                                                    )}
+                                                    history={historyRows}
                                                     hideId
                                                 />
                                             </div>

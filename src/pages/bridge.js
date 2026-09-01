@@ -507,6 +507,33 @@ export default function Bridge({ location }) {
 
             if (txData.approveCheck) {
                 const approveCheck = txData.approveCheck;
+
+                // Both the token and the spender arrive from the WanBridge API.
+                // The allowlist check used to run only AFTER the approvals had
+                // been signed, and against a different address (the bridge tx
+                // target), so an unlimited-looking approval to an arbitrary
+                // spender was the one prompt the user got no disclosure for.
+                // Both approvals below — the reset-to-zero and the real one —
+                // are downstream of this gate.
+                const knownSpender = isKnownBridgeTarget(
+                    sourceChain.chainType,
+                    approveCheck.to
+                );
+                if (knownSpender === false) {
+                    throw new Error(
+                        "Token spender address not recognized - aborting for safety."
+                    );
+                }
+                // No allowlist for this chain yet, so the honest position is
+                // that this app cannot vouch for the address it is about to ask
+                // you to trust with your tokens. Held rather than shown here:
+                // it has to be the text on screen when the wallet prompt opens,
+                // and every message between here and there would overwrite it.
+                const spenderNotice =
+                    knownSpender === null
+                        ? `Approving a token spender this app cannot verify. Token: ${approveCheck.token} - Spender: ${approveCheck.to} - Amount: ${approveCheck.amount}. Check both addresses on the explorer before confirming in your wallet.`
+                        : null;
+
                 const erc20 = new ethers.Contract(
                     approveCheck.token,
                     APPROVE_ABI,
@@ -521,7 +548,9 @@ export default function Bridge({ location }) {
                 );
 
                 if (currentAllowance.lt(requiredAllowance)) {
-                    setActionMessage("Approving WanBridge token spend...");
+                    setActionMessage(
+                        spenderNotice ?? "Approving WanBridge token spend..."
+                    );
                     if (!currentAllowance.isZero()) {
                         const resetTx = await erc20.approve(approveCheck.to, 0);
                         await resetTx.wait();
@@ -544,15 +573,19 @@ export default function Bridge({ location }) {
                     "Bridge target address not recognized — aborting for safety."
                 );
             }
-            if (known === null) {
-                // Chain not yet in the allowlist; surface the resolved target
-                // and value so the user can verify before the wallet prompt.
-                setActionMessage(
-                    `Bridge target: ${txData.tx.to} · Value: ${ethers.BigNumber.from(txData.tx.value || "0").toString()} wei. Confirm in your wallet.`
-                );
-            }
+            // Same reason as the spender notice: it was being set and then
+            // immediately overwritten by "Sending bridge transaction...", so the
+            // one moment it existed for was the one moment it was not on screen.
+            const targetNotice =
+                known === null
+                    ? `Bridge target: ${
+                          txData.tx.to
+                      } · Value: ${ethers.BigNumber.from(
+                          txData.tx.value || "0"
+                      ).toString()} wei. Confirm in your wallet.`
+                    : null;
 
-            setActionMessage("Sending bridge transaction...");
+            setActionMessage(targetNotice ?? "Sending bridge transaction...");
             const bridgeTx = await signer.sendTransaction({
                 to: txData.tx.to,
                 data: txData.tx.data,
