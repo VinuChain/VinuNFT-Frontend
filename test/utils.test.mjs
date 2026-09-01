@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const mod = await import("../src/common/utils.js");
-const { exceedsTokenDecimals } = mod.default || mod;
+const { exceedsTokenDecimals, coverageSentence } = mod.default || mod;
 
 test("a 7-decimal price does not fit a 6-decimal token", () => {
     assert.equal(exceedsTokenDecimals("0.0000001", "usdt"), true);
@@ -58,4 +58,22 @@ test("a gas price the node refuses is null too", async () => {
     });
 
     assert.equal(fee, null);
+});
+
+test("coverageSentence states loading, measured lag and unknown lag distinctly", () => {
+    // Three surfaces share this sentence; the two degraded forms are the ones
+    // no browser assertion reaches, because a stubbed chain always answers.
+    assert.equal(
+        coverageSentence("every active listing", null),
+        "Indexing every active listing..."
+    );
+    assert.equal(
+        coverageSentence("every active listing", 14719796, 0),
+        "Every active listing, indexed through block 14719796 (0 blocks behind the head)"
+    );
+    // An unread head is not a lag of zero, and must not be shown as one.
+    assert.equal(
+        coverageSentence("every edition, listing and sale", 5, undefined),
+        "Every edition, listing and sale, indexed through block 5 (an unknown number of blocks behind the head)"
+    );
 });

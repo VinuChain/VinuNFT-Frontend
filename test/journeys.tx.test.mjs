@@ -304,3 +304,31 @@ test(
         }
     }
 );
+
+test(
+    "a transaction toast can be dismissed from the keyboard",
+    { skip: !hasBuild },
+    async () => {
+        // The close control was a <p> wrapping a <span>, both with onClick: a
+        // screen reader announced nothing there and Tab never reached it, so
+        // the only way to clear a toast was a mouse or its 30s timeout.
+        const { page, context } = await openNft({
+            reject: ["eth_sendTransaction"],
+        });
+        try {
+            await clickBuy(page);
+            await page.waitForTimeout(1500);
+            assert.equal(await toasts(page).count(), 1);
+
+            const dismiss = page.getByRole("button", {
+                name: /dismiss notification/i,
+            });
+            assert.equal(await dismiss.count(), 1);
+            await dismiss.press("Enter");
+            await page.waitForTimeout(1200);
+            assert.equal(await toasts(page).count(), 0);
+        } finally {
+            await context.close();
+        }
+    }
+);

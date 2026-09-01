@@ -25,7 +25,6 @@ import TransferButton from "../../components/TransferButton";
 import { useEns } from "../../common/ens";
 import TypeTag from "../../components/TypeTag";
 import BurnButton from "../../components/BurnButton";
-import EditRoyaltyButton from "../../components/EditRoyaltyButton";
 import Decimal from "decimal.js";
 import {
     formatError,
@@ -66,6 +65,14 @@ const MEDIA_UNAVAILABLE =
     "This NFT's media could not be loaded from any configured source.";
 const NO_MEDIA = "This NFT's metadata names no media to display.";
 
+/** Enter and Space, which a native button gets for free and an anchor does not. */
+const activateOnKey = (event, activate) => {
+    if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        activate();
+    }
+};
+
 const burnedIdsState = atom({
     key: "burnedIds",
     default: [],
@@ -84,7 +91,21 @@ const styles = {
     },
 };
 
-export default function NFTPage({ location }) {
+export default function NFTPage(props) {
+    // Every value below is scoped to one token and arrives from a read that
+    // resolves later. React keeps this component mounted across a client-side
+    // navigation, so a slow answer for the token the user left used to land in
+    // the token they are now on — the page showed token 2's id beside token 1's
+    // edition size. Keying on the route discards the whole tree instead, which
+    // is correct for every read at once rather than a guard per setter. The
+    // guard that used to try was commented out below the reads it protected.
+    const { type, id } = parseNftRoute(
+        queryString.parse(props.location.search)
+    );
+    return <NFTDetail {...props} key={`${type}:${id}`} />;
+}
+
+function NFTDetail({ location }) {
     const [readProvider] = useReadProvider();
     const [walletProvider] = useWalletProvider();
     const marketplaceAddress = config.contractAddresses.v1.marketplace;
@@ -669,13 +690,10 @@ export default function NFTPage({ location }) {
     };
 
     useEffect(() => {
-        const updateId = updateTracker[0];
-        //if (updateId === id) {
         queryListings();
         queryTotalSupply();
         queryRoyaltyInfo();
         queryTokenAuthor().then((author) => queryBalances(author));
-        //}
     }, [updateTracker, id, walletProvider]);
 
     useEffect(() => {
@@ -771,7 +789,8 @@ export default function NFTPage({ location }) {
                                                 Retry
                                             </button>
                                         </div>
-                                    ) : macroNftType === "image" ? (
+                                    ) : routeKnown &&
+                                      macroNftType === "image" ? (
                                         <img
                                             src={tokenContent}
                                             alt={imageAltText}
@@ -808,7 +827,7 @@ export default function NFTPage({ location }) {
                                         restrictions they cannot rely on: an
                                         in-content link that quietly does
                                         nothing reads as a broken page. */}
-                                    <p className="is-size-7 has-text-grey mt-2 nft-content-disclosure">
+                                    <p className="is-size-7 nft-muted mt-2 nft-content-disclosure">
                                         This content was uploaded by its creator
                                         and is not reviewed or endorsed by
                                         VinuNFT. It renders in a sandboxed frame
@@ -977,13 +996,13 @@ export default function NFTPage({ location }) {
                             ) : (
                                 <Skeleton count={4} />
                             )}
-                            <p className="is-size-7 has-text-grey">
+                            <p className="is-size-7 nft-muted">
                                 Contract, token ID, edition size, creator,
                                 royalty, listings, owners and history are read
                                 from VinuChain. Name, description and media come
                                 from the metadata source named above.
                             </p>
-                            <p className="is-size-7 has-text-grey nft-identity-disclaimer">
+                            <p className="is-size-7 nft-muted nft-identity-disclaimer">
                                 The creator address is not identity-verified. It
                                 proves control of a key and nothing more: the
                                 name, description and media are whatever the
@@ -1050,26 +1069,6 @@ export default function NFTPage({ location }) {
                                                         onUpdate={onUpdate}
                                                     />
                                                 </div>
-                                                {/*<div className="is-flex is-justify-content-center mt-1">
-                                                    {tokenAuthor ==
-                                                    walletAddress ? (
-                                                        <EditRoyaltyButton
-                                                            nftContract={
-                                                                nftContract
-                                                            }
-                                                            id={id}
-                                                            walletAddress={
-                                                                walletAddress
-                                                            }
-                                                            currentRoyaltyPercentage={
-                                                                royaltyInfo?.amount
-                                                            }
-                                                            onUpdate={onUpdate}
-                                                        />
-                                                    ) : (
-                                                        <></>
-                                                    )}
-                                                    </div>*/}
                                             </div>
                                         ) : (
                                             <></>
@@ -1084,16 +1083,34 @@ export default function NFTPage({ location }) {
                             {readProvider ? (
                                 <>
                                     <div className="tabs is-centered is-fullwidth">
-                                        <ul>
+                                        {/* The anchors carry no href, so they
+                                            were unreachable by Tab and deaf to
+                                            Enter: the two tabs were the only
+                                            pointer-only controls on the page.
+                                            Kept as anchors so Bulma's own
+                                            `.tabs li a` geometry still applies. */}
+                                        <ul role="tablist">
                                             <li
                                                 className={
                                                     isOwners
                                                         ? "is-active has-text-weight-semibold"
                                                         : ""
                                                 }
-                                                onClick={setOwners}
                                             >
-                                                <a>Owners</a>
+                                                <a
+                                                    role="tab"
+                                                    tabIndex={0}
+                                                    aria-selected={isOwners}
+                                                    onClick={setOwners}
+                                                    onKeyDown={(event) =>
+                                                        activateOnKey(
+                                                            event,
+                                                            setOwners
+                                                        )
+                                                    }
+                                                >
+                                                    Owners
+                                                </a>
                                             </li>
                                             <li
                                                 className={
@@ -1101,9 +1118,21 @@ export default function NFTPage({ location }) {
                                                         ? ""
                                                         : "is-active has-text-weight-semibold"
                                                 }
-                                                onClick={setHistory}
                                             >
-                                                <a>History</a>
+                                                <a
+                                                    role="tab"
+                                                    tabIndex={0}
+                                                    aria-selected={!isOwners}
+                                                    onClick={setHistory}
+                                                    onKeyDown={(event) =>
+                                                        activateOnKey(
+                                                            event,
+                                                            setHistory
+                                                        )
+                                                    }
+                                                >
+                                                    History
+                                                </a>
                                             </li>
                                         </ul>
                                     </div>

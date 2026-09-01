@@ -3,8 +3,6 @@ import MDEditor from "@uiw/react-md-editor";
 import { defaultCommands } from "../common/commands";
 import { markdownRehypePlugins } from "../common/sanitize";
 
-import HTMLEditor from "./HTMLEditor";
-
 const styles = {
     link: {
         textDecoration: "underline",
@@ -68,8 +66,6 @@ export default function MultiEditor({ dataType, value, setValue }) {
                     placeholder="Content of your artwork"
                 ></textarea>
             );
-        case "text/html":
-            return <HTMLEditor value={value} setValue={setValue} />;
         default:
             return <p>Unsupported editor</p>;
     }

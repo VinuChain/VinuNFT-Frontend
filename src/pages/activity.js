@@ -12,10 +12,20 @@ import {
 } from "../common/provider";
 import { ethers } from "ethers";
 import { getAllEvents, parseHistory } from "../common/history";
+import { formatError } from "../common/error";
+import { coverageSentence } from "../common/utils";
 import NFTHistory from "../components/NFTHistory";
 
 export default function Activity() {
     const [events, setEvents] = useState(null);
+    // The scan had no error handling at all: a failed RPC left `events` null
+    // forever, and NFTHistory renders null as a skeleton — a page that looks
+    // like it is still loading, permanently, with nothing to retry.
+    const [error, setError] = useState(null);
+    // The feed scans to the head at query time, so the head has moved by the
+    // time it renders. Both blocks are read, so the lag shown is measured
+    // rather than assumed to be zero.
+    const [coverage, setCoverage] = useState(null);
 
     const [readProvider] = useReadProvider();
 
@@ -23,6 +33,10 @@ export default function Activity() {
         if (!readProvider) {
             return;
         }
+
+        setError(null);
+        setEvents(null);
+        setCoverage(null);
 
         const textNftContract = new ethers.Contract(
             config.contractAddresses.v1.text,
@@ -43,33 +57,43 @@ export default function Activity() {
         );
         const firstMarketplaceBlock = config.firstBlocks.v1.marketplace;
 
-        const textEvents = await getAllEvents(
-            textNftContract,
-            marketplaceContract,
-            config.firstBlocks.v1.text,
-            firstMarketplaceBlock
-        );
+        try {
+            const headBlock = await defaultReadProvider.getBlockNumber();
+            const textEvents = await getAllEvents(
+                textNftContract,
+                marketplaceContract,
+                config.firstBlocks.v1.text,
+                firstMarketplaceBlock
+            );
 
-        const imageEvents = await getAllEvents(
-            imageNftContract,
-            marketplaceContract,
-            config.firstBlocks.v1.image,
-            firstMarketplaceBlock
-        );
+            const imageEvents = await getAllEvents(
+                imageNftContract,
+                marketplaceContract,
+                config.firstBlocks.v1.image,
+                firstMarketplaceBlock
+            );
 
-        const allEvents = [];
+            const allEvents = [];
 
-        for (const event of textEvents) {
-            allEvents.push({ ...event, nftType: "text" });
+            for (const event of textEvents) {
+                allEvents.push({ ...event, nftType: "text" });
+            }
+            for (const event of imageEvents) {
+                allEvents.push({ ...event, nftType: "image" });
+            }
+
+            allEvents.sort((a, b) => a.blockNumber - b.blockNumber);
+
+            setEvents(allEvents);
+            setCoverage({
+                scannedThrough: headBlock,
+                lag: (await defaultReadProvider.getBlockNumber()) - headBlock,
+            });
+        } catch (e) {
+            // Naming the failure is the point: an empty feed and an unreachable
+            // node look identical, and only one of them is worth retrying.
+            setError(formatError(e));
         }
-        for (const event of imageEvents) {
-            allEvents.push({ ...event, nftType: "image" });
-        }
-
-        allEvents.sort((a, b) => a.blockNumber - b.blockNumber);
-
-        // console.log("events", allEvents);
-        setEvents(allEvents);
     };
 
     useEffect(() => {
@@ -85,7 +109,30 @@ export default function Activity() {
                     style={{ maxWidth: "100ch", minWidth: "50vw" }}
                 >
                     <h1 className="title has-text-centered">Recent Activity</h1>
-                    <NFTHistory history={parseHistory(events)} />
+                    <p className="has-text-centered nft-index-coverage">
+                        {error
+                            ? "Scan failed - activity coverage is unknown"
+                            : coverageSentence(
+                                  "every mint, transfer, listing and sale",
+                                  coverage?.scannedThrough ?? null,
+                                  coverage?.lag
+                              )}
+                    </p>
+                    {error ? (
+                        <div className="has-text-centered">
+                            <p className="nft-scan-error">
+                                Activity could not be loaded: {error}
+                            </p>
+                            <button
+                                className="button is-small"
+                                onClick={queryEvents}
+                            >
+                                Retry
+                            </button>
+                        </div>
+                    ) : (
+                        <NFTHistory history={parseHistory(events)} />
+                    )}
                 </div>
             </div>
         </>

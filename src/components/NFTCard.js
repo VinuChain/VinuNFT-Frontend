@@ -191,7 +191,7 @@ export default function NFTCard({ id, type }) {
                 {policyStatus ? (
                     <ContentNotice status={policyStatus} compact />
                 ) : mediaError ? (
-                    <p className="nft-media-unavailable has-text-grey">
+                    <p className="nft-media-unavailable nft-muted">
                         {mediaError}
                     </p>
                 ) : type === "image" ? (

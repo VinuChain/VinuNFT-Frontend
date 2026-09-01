@@ -78,6 +78,30 @@ function formatTokenAmount(amount, tokenId) {
     return ethers.utils.formatUnits(amount, token.decimals);
 }
 
+/**
+ * How fresh a scanned view is, in one sentence, for every surface that has one.
+ *
+ * The marketplace, a profile and the activity feed all read a scan that trails
+ * the chain, and each said so in its own words — or, on activity, not at all,
+ * so a reader could not tell an absent row from a not-yet-indexed one. One
+ * wording means a reader learns it once.
+ *
+ * `indexedThrough` null/undefined means the scan is still running.
+ */
+const coverageSentence = (subject, indexedThrough, lagBlocks) => {
+    if (indexedThrough === undefined || indexedThrough === null) {
+        return `Indexing ${subject}...`;
+    }
+    const behind =
+        lagBlocks === undefined || lagBlocks === null
+            ? "an unknown number of"
+            : `${lagBlocks}`;
+    return (
+        `${subject[0].toUpperCase()}${subject.slice(1)}, indexed through ` +
+        `block ${indexedThrough} (${behind} blocks behind the head)`
+    );
+};
+
 export {
     getWalletAddress,
     shortenAddress,
@@ -85,4 +109,5 @@ export {
     formatTokenAmount,
     exceedsTokenDecimals,
     estimateFee,
+    coverageSentence,
 };

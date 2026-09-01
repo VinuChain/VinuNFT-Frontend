@@ -86,12 +86,10 @@ const mint = Joi.object().keys({
         .label("Royalty percentage"),
     useCustomRecipient: Joi.boolean().required(),
     customRecipient: _customRecipient.label("Address"),
-    dataType: Joi.valid(
-        "text/plain",
-        "text/markdown",
-        "text/html",
-        "image"
-    ).required(),
+    // Kept in step with the Create form's own <select>. It listed text/html
+    // too, and that value was the only route to an Ace editor no user could
+    // select — a whole keyboard-hostile editor kept alive by schema drift.
+    dataType: Joi.valid("text/plain", "text/markdown", "image").required(),
 });
 
 const transfer = Joi.object().keys({

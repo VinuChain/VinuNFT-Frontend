@@ -149,8 +149,8 @@ test("both pipelines accept empty and nullish input without throwing", () => {
 });
 
 test("the editor preview and the final render produce identical output", () => {
-    // HTMLEditor renders its preview through HTMLViewer, so both call
-    // sanitizeHtml. This pins that they cannot diverge.
+    // Already-minted text/html tokens still render through HTMLViewer, which
+    // calls sanitizeHtml. This pins that one pipeline against itself.
     const source = '<p class="x">hi</p><script>alert(1)</script>';
     assert.equal(sanitizeHtml(source), sanitizeHtml(source));
     assertInert(sanitizeHtml(source), "editor parity");

@@ -144,9 +144,13 @@ outside both packages' declared ranges.
 ### `@babel/runtime` moderate x2 (`@geoffcox/react-splitter`, `gatsby-plugin-react-helmet`)
 
 ReDoS in transpiled `.replace` with named capturing groups. It fires only when
-attacker-controlled input reaches such a call; the splitter transpiles drag
-geometry and the helmet plugin transpiles tag props built from validated route
-parameters (`src/common/socialPreview.js`).
+attacker-controlled input reaches such a call; the helmet plugin transpiles tag
+props built from validated route parameters (`src/common/socialPreview.js`).
+`@geoffcox/react-splitter` is no longer imported by anything: it reached the
+bundle only through the HTML editor, which was deleted as unreachable UI. It
+still sits in `package.json` alongside `react-ace` and `ace-builds`, which are
+now equally unimported; removing the three declarations belongs to VN-DEPS-001,
+which owns that file and its ratcheted baseline.
 
 ### `query-string` -> `decode-uri-component` moderate x1
 

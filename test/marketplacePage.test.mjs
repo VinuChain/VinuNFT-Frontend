@@ -318,7 +318,9 @@ async function openMarketplace({ logs = MIXED_LOGS, failLogs = false } = {}) {
     await page.goto(`${origin}/marketplace/`, { waitUntil: "domcontentloaded" });
     await page
         .waitForFunction(
-            () => !/Indexing every marketplace event/.test(document.body.textContent ?? ""),
+            // Matches the shared coverage sentence's loading form, which
+            // every scanned surface now renders.
+            () => !/Indexing every /.test(document.body.textContent ?? ""),
             { timeout: 60000 }
         )
         .catch(() => {});

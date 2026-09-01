@@ -24,12 +24,18 @@ export default function TransactionNotifications() {
             draggable: false,
             pauseOnHover: false,
             progress: undefined,
+            // Was a <p> wrapping a <span>, both with onClick: no keyboard
+            // user could dismiss a toast, and a screen reader announced
+            // nothing at all where the control was.
             closeButton: (
-                <p onClick={() => toast.dismiss(transactionId)}>
-                    <span onClick={() => toast.dismiss(transactionId)}>
-                        <FontAwesomeIcon icon={faTimes} />
-                    </span>
-                </p>
+                <button
+                    type="button"
+                    className="button is-small is-white"
+                    aria-label="Dismiss notification"
+                    onClick={() => toast.dismiss(transactionId)}
+                >
+                    <FontAwesomeIcon icon={faTimes} />
+                </button>
             ),
             position: "bottom-right",
             returns: false,

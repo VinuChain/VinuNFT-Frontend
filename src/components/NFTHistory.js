@@ -44,6 +44,13 @@ export default function NFTHistory({ history, hideId }) {
 
     // console.log(history);
 
+    // parseHistory returns undefined for "not scanned yet" and [] for
+    // "scanned, nothing there". Rendering both as a skeleton told a reader
+    // with no activity that the page was still loading, forever.
+    if (Array.isArray(history) && history.length === 0) {
+        return <p className="nft-history-empty">No activity yet.</p>;
+    }
+
     return history ? (
         <div>
             {[...history].reverse().map((event, index) => {

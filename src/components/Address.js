@@ -26,7 +26,7 @@ export default function Address({
         (shorten ? shortenAddress(address, nChar) : address);
 
     return (
-        <span>
+        <span className="vinunft-address">
             {disableLink ? (
                 label
             ) : external ? (

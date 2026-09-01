@@ -1137,3 +1137,26 @@ input[type="radio"] {
     display: inline-flex;
     min-height: 24px;
 }
+
+/* Bulma's .message-header carries the same danger red as the body did, so the
+   word "Error" itself sat at 3.61:1 while the message under it was readable. */
+.message.is-danger .message-header {
+    background-color: #c8203f;
+}
+
+/* Replaces Bulma's .has-text-grey (#7a7a7a), which measured 4.29:1 against the
+   off-white panels this app uses — under the 4.5:1 AA floor, on the provenance
+   and content-disclosure copy a buyer most needs to read. Its own class rather
+   than an !important fight with a Bulma helper that already uses !important. */
+.nft-muted {
+    color: #6b6b6b;
+}
+
+/* Address links are inline text, so their line box measured 14-22px tall,
+   under the 24x24 pointer floor. They are the primary way into the explorer
+   and a profile, so they have to be tappable. */
+.vinunft-address a {
+    align-items: center;
+    display: inline-flex;
+    min-height: 24px;
+}

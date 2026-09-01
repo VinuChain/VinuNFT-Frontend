@@ -313,7 +313,9 @@ export function routeOffline(page, origin, { rpc = {} } = {}) {
             body: JSON.stringify({
                 jsonrpc: "2.0",
                 id: body.id,
-                result: typeof result === "function" ? result(body) : result,
+                // Awaited: an override that delays its answer is how a test
+                // stages a late response landing after the user has moved on.
+                result: typeof result === "function" ? await result(body) : result,
             }),
         });
     });
@@ -487,8 +489,27 @@ export const chainMisses = (page) => page.evaluate(() => window.__chainState.mis
 
 /** Drive the Web3Modal picker through to the injected wallet. */
 export async function connectWallet(page) {
-    await page.locator("button", { hasText: /connect wallet/i }).first().click();
-    await page.locator("text=Connect to your MetaMask Wallet").first().click();
+    // Below the desktop breakpoint the header collapses and the wallet control
+    // lives inside the burger menu — which only opens once React has hydrated,
+    // so the burger is clicked until the control it reveals actually appears.
+    const connect = page
+        .locator("button", { hasText: /connect wallet/i })
+        .first();
+    const burger = page.locator(".vinunft-header__burger");
+    for (let i = 0; i < 40 && !(await connect.isVisible().catch(() => false)); i++) {
+        if (await burger.isVisible().catch(() => false)) {
+            await burger.click().catch(() => {});
+        }
+        await page.waitForTimeout(250);
+    }
+    await connect.click();
+    // On a narrow viewport Web3Modal connects the single injected wallet
+    // directly instead of showing its picker, so the picker is optional.
+    const picker = page.locator("text=Connect to your MetaMask Wallet").first();
+    await picker
+        .waitFor({ state: "visible", timeout: 2000 })
+        .then(() => picker.click())
+        .catch(() => {});
     await page.waitForTimeout(1200);
 }
 

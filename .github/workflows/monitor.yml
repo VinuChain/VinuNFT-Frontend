@@ -36,3 +36,9 @@ jobs:
       - name: Configured IPFS gateways are reachable
         if: always()
         run: node scripts/check-gateways.mjs
+      # The journeys themselves, read-only, against the deployed contracts.
+      # Independent of the two above for the same reason: a paused marketplace
+      # and an unreachable gateway are different incidents.
+      - name: Product journeys still work against the deployed contracts
+        if: always()
+        run: yarn verify:readiness

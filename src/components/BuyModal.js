@@ -12,16 +12,7 @@ import { useTransactionHelper } from "../common/transaction_status";
 import { formatTokenAmount, parseTokenAmount } from "../common/utils";
 import BridgeShortcut from "./BridgeShortcut";
 import { settlementBreakdown, bpsToPercent } from "../common/settlement";
-
-const styles = {
-    modalCard: {
-        maxWidth: "80vw",
-    },
-    modalCardTitle: {
-        overflowWrap: "break-word",
-        maxWidth: "70vw",
-    },
-};
+import ModalCard from "./ModalCard";
 
 const defaultValues = {
     amount: 1,
@@ -222,152 +213,137 @@ export default function BuyModal({
         !validPaymentTokenBalance(parsedTotal);
 
     return (
-        <div className="modal is-active">
-            <div
-                className="modal-background"
-                onClick={() => closeModal(null, null)}
-            />
-            <div className="modal-card" style={styles.modalCard}>
-                <header className="modal-card-head">
-                    <p
-                        className="modal-card-title"
-                        style={styles.modalCardTitle}
-                    >
-                        Buy NFT
-                    </p>
-                </header>
-                <section className="modal-card-body">
-                    <p>Listed quantity: {maxAmount}</p>
-                    {sellerBalance < maxAmount ? (
-                        <p>Seller's balance: {sellerBalance}</p>
-                    ) : (
-                        <></>
-                    )}
-                    <p>Price: {price}</p>
-                    <ValidatedInput
-                        label="Amount"
-                        name="amount"
-                        type="number"
-                        step="1"
-                        min="1"
-                        errors={errors}
-                        register={register}
-                    />
-                    {hasValidTotal ? (
-                        <>
-                            <p>
-                                Total: {totalAmount} {paymentTokenSymbol}
-                            </p>
-                            <p>
-                                Your balance:{" "}
-                                {paymentTokenBalance === null
-                                    ? "Loading..."
-                                    : paymentTokenBalance}{" "}
-                                {paymentTokenSymbol}
-                            </p>
-                            {feeBreakdown ? (
-                                <div
-                                    className="content is-small mt-2"
-                                    data-testid="fee-breakdown"
-                                >
-                                    <p className="mb-1">
-                                        <strong>Where your payment goes</strong>
-                                    </p>
-                                    <ul className="mb-1">
-                                        <li>
-                                            Creator royalty (
-                                            {bpsToPercent(royaltyBps)}%):{" "}
-                                            {formatTokenAmount(
-                                                feeBreakdown.creatorFee.toString(),
-                                                paymentToken
-                                            )}{" "}
-                                            {paymentTokenSymbol}
-                                        </li>
-                                        <li>
-                                            Platform fee (
-                                            {bpsToPercent(platformFeeBps)}%):{" "}
-                                            {formatTokenAmount(
-                                                feeBreakdown.platformFee.toString(),
-                                                paymentToken
-                                            )}{" "}
-                                            {paymentTokenSymbol}
-                                        </li>
-                                        <li>
-                                            Seller receives:{" "}
-                                            {formatTokenAmount(
-                                                feeBreakdown.sellerProceeds.toString(),
-                                                paymentToken
-                                            )}{" "}
-                                            {paymentTokenSymbol}
-                                        </li>
-                                    </ul>
-                                    <p className="is-italic">
-                                        You pay {totalAmount}{" "}
-                                        {paymentTokenSymbol} in total. The
-                                        royalty is taken from the amount left
-                                        after the platform fee.
-                                    </p>
-                                </div>
-                            ) : (
-                                <></>
-                            )}
-                            <BridgeShortcut
-                                token={paymentTokenSymbol}
-                                direction="into"
-                                variant="quiet"
-                            />
-                        </>
-                    ) : (
-                        <p>Total: </p>
-                    )}
-                    {hasValidTotal &&
-                    paymentTokenBalance !== null &&
-                    !validPaymentTokenBalance(parsedTotal) ? (
-                        <p className="notification is-danger">
-                            <b>Error</b>: Insufficient balance.{" "}
-                            <BridgeShortcut
-                                token={paymentTokenSymbol}
-                                direction="into"
-                                variant="danger"
+        <ModalCard title="Buy NFT" onDismiss={() => closeModal(null, null)}>
+            <section className="modal-card-body">
+                <p>Listed quantity: {maxAmount}</p>
+                {sellerBalance < maxAmount ? (
+                    <p>Seller's balance: {sellerBalance}</p>
+                ) : (
+                    <></>
+                )}
+                <p>Price: {price}</p>
+                <ValidatedInput
+                    label="Amount"
+                    name="amount"
+                    type="number"
+                    step="1"
+                    min="1"
+                    errors={errors}
+                    register={register}
+                />
+                {hasValidTotal ? (
+                    <>
+                        <p>
+                            Total: {totalAmount} {paymentTokenSymbol}
+                        </p>
+                        <p>
+                            Your balance:{" "}
+                            {paymentTokenBalance === null
+                                ? "Loading..."
+                                : paymentTokenBalance}{" "}
+                            {paymentTokenSymbol}
+                        </p>
+                        {feeBreakdown ? (
+                            <div
+                                className="content is-small mt-2"
+                                data-testid="fee-breakdown"
                             >
-                                Bridge {paymentTokenSymbol} to VinuChain
-                            </BridgeShortcut>
-                        </p>
-                    ) : (
-                        <></>
-                    )}
-                    {validAmount() ? (
-                        <></>
-                    ) : (
-                        <p className="notification is-danger">
-                            <b>Error</b>:
-                            {watchAmount <= maxAmount
-                                ? ` Cannot buy more tokens than the seller's balance (${sellerBalance}).`
-                                : ` Cannot buy more tokens than the listed amount (${maxAmount}).`}
-                        </p>
-                    )}
-                </section>
-                <footer className="modal-card-foot">
-                    {hasEnoughAllowance ? (
-                        <button
-                            className="button is-black"
-                            disabled={disableAction}
-                            onClick={handleSubmit(closeModal)}
+                                <p className="mb-1">
+                                    <strong>Where your payment goes</strong>
+                                </p>
+                                <ul className="mb-1">
+                                    <li>
+                                        Creator royalty (
+                                        {bpsToPercent(royaltyBps)}%):{" "}
+                                        {formatTokenAmount(
+                                            feeBreakdown.creatorFee.toString(),
+                                            paymentToken
+                                        )}{" "}
+                                        {paymentTokenSymbol}
+                                    </li>
+                                    <li>
+                                        Platform fee (
+                                        {bpsToPercent(platformFeeBps)}%):{" "}
+                                        {formatTokenAmount(
+                                            feeBreakdown.platformFee.toString(),
+                                            paymentToken
+                                        )}{" "}
+                                        {paymentTokenSymbol}
+                                    </li>
+                                    <li>
+                                        Seller receives:{" "}
+                                        {formatTokenAmount(
+                                            feeBreakdown.sellerProceeds.toString(),
+                                            paymentToken
+                                        )}{" "}
+                                        {paymentTokenSymbol}
+                                    </li>
+                                </ul>
+                                <p className="is-italic">
+                                    You pay {totalAmount} {paymentTokenSymbol}{" "}
+                                    in total. The royalty is taken from the
+                                    amount left after the platform fee.
+                                </p>
+                            </div>
+                        ) : (
+                            <></>
+                        )}
+                        <BridgeShortcut
+                            token={paymentTokenSymbol}
+                            direction="into"
+                            variant="quiet"
+                        />
+                    </>
+                ) : (
+                    <p>Total: </p>
+                )}
+                {hasValidTotal &&
+                paymentTokenBalance !== null &&
+                !validPaymentTokenBalance(parsedTotal) ? (
+                    <p className="notification is-danger">
+                        <b>Error</b>: Insufficient balance.{" "}
+                        <BridgeShortcut
+                            token={paymentTokenSymbol}
+                            direction="into"
+                            variant="danger"
                         >
-                            Buy
-                        </button>
-                    ) : (
-                        <button
-                            className="button is-black"
-                            disabled={disableAction}
-                            onClick={approve}
-                        >
-                            Approve {totalAmount || ""}{" "}
-                            {config.tokens[paymentToken].symbol}
-                        </button>
-                    )}
-                </footer>
-            </div>
-        </div>
+                            Bridge {paymentTokenSymbol} to VinuChain
+                        </BridgeShortcut>
+                    </p>
+                ) : (
+                    <></>
+                )}
+                {validAmount() ? (
+                    <></>
+                ) : (
+                    <p className="notification is-danger">
+                        <b>Error</b>:
+                        {watchAmount <= maxAmount
+                            ? ` Cannot buy more tokens than the seller's balance (${sellerBalance}).`
+                            : ` Cannot buy more tokens than the listed amount (${maxAmount}).`}
+                    </p>
+                )}
+            </section>
+            <footer className="modal-card-foot">
+                {hasEnoughAllowance ? (
+                    <button
+                        className="button is-black"
+                        disabled={disableAction}
+                        onClick={handleSubmit(closeModal)}
+                    >
+                        Buy
+                    </button>
+                ) : (
+                    <button
+                        className="button is-black"
+                        disabled={disableAction}
+                        onClick={approve}
+                    >
+                        Approve {totalAmount || ""}{" "}
+                        {config.tokens[paymentToken].symbol}
+                    </button>
+                )}
+            </footer>
+        </ModalCard>
     );
 }

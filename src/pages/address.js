@@ -10,6 +10,7 @@ import config from "../config";
 import "bulma/css/bulma.min.css";
 import "bulma-extensions/dist/css/bulma-extensions.min.css";
 import "../styles/globals.css";
+import { coverageSentence } from "../common/utils";
 
 // Every relationship the index can express for one address. Rendered from one
 // list because five hand-written sections differ only in a heading.
@@ -31,15 +32,10 @@ const EMPTY_PROFILE = {
 
 /** What the profile covers, stated rather than implied. */
 function coverageLine(profile) {
-    if (profile.indexedThrough === undefined) {
-        return "Indexing every transfer, listing and sale...";
-    }
-    const behind = profile.lag
-        ? `${profile.lag.blocks}`
-        : "an unknown number of";
-    return (
-        `Every edition, listing and sale, indexed through block ` +
-        `${profile.indexedThrough} (${behind} blocks behind the head)`
+    return coverageSentence(
+        "every edition, listing and sale",
+        profile.indexedThrough ?? null,
+        profile.lag?.blocks
     );
 }
 

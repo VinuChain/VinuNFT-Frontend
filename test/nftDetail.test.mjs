@@ -386,3 +386,126 @@ test(
         }
     }
 );
+
+test(
+    "a late answer for the token the user left cannot overwrite the token they are on",
+    { skip: !hasBuild },
+    async () => {
+        // Client-side navigation, not a second goto: a goto reloads the
+        // document, the component remounts, and no stale response can survive
+        // — a test written that way passes whether the bug is present or not.
+        const { server, origin } = await startStaticServer();
+        const browser = await chromium.launch();
+        try {
+            // One table: every entry is keyed by the encoded token id, so the
+            // two tokens' answers cannot collide.
+            const answers = {
+                ...nftPageAnswers({ id: 1, totalSupply: 100 }),
+                ...nftPageAnswers({ id: 2, totalSupply: 10 }),
+            };
+            const nft = config.contractAddresses.v1.text.toLowerCase();
+            const totalSupplySig = new ethers.utils.Interface([
+                "function totalSupply(uint256) view returns (uint256)",
+            ]).getSighash("totalSupply");
+
+            const page = await browser.newPage();
+            await routeOffline(page, origin, {
+                rpc: {
+                    eth_blockNumber: BLOCK,
+                    eth_call: async (body) => {
+                        const call = body?.params?.[0] ?? {};
+                        const to = String(call.to ?? "").toLowerCase();
+                        const data = String(call.data ?? "").toLowerCase();
+                        if (
+                            to === nft &&
+                            data.startsWith(totalSupplySig) &&
+                            Number("0x" + data.slice(10, 74)) === 1
+                        ) {
+                            // The slow read the user navigated away from: it
+                            // lands well after token 2 has already answered.
+                            await new Promise((r) => setTimeout(r, 1500));
+                        }
+                        return answerCall(answers, body, []);
+                    },
+                },
+            });
+            await installMockWallet(page, {
+                chain: { answers, blockNumber: BLOCK },
+            });
+            await page.goto(`${origin}/nft/?type=text&id=1`, {
+                waitUntil: "domcontentloaded",
+            });
+            await page.waitForTimeout(500);
+
+            assert.equal(
+                await page.evaluate(() => typeof window.___navigate),
+                "function",
+                "this test depends on Gatsby's client-side navigation"
+            );
+            await page.evaluate(() =>
+                window.___navigate("/nft?type=text&id=2")
+            );
+            await page.waitForTimeout(4000);
+
+            const text = (
+                await page.evaluate(() => document.body.innerText)
+            ).replace(/\s+/g, " ");
+            assert.match(text, /Edition size: 10\b/);
+            assert.doesNotMatch(text, /Edition size: 100\b/);
+        } finally {
+            await browser.close();
+            server.close();
+        }
+    }
+);
+
+test(
+    "the Owners and History tabs are reachable and operable from the keyboard",
+    { skip: !hasBuild },
+    async () => {
+        const { server, origin } = await startStaticServer();
+        const browser = await chromium.launch();
+        try {
+            const answers = nftPageAnswers({ id: 1 });
+            const page = await openPage(browser, origin, {
+                route: "/nft/?type=text&id=1",
+                answers,
+            });
+
+            const reached = [];
+            for (let i = 0; i < 60; i++) {
+                await page.keyboard.press("Tab");
+                reached.push(
+                    await page.evaluate(() =>
+                        (document.activeElement?.textContent ?? "").trim()
+                    )
+                );
+                if (reached.at(-1) === "History") break;
+            }
+            assert.ok(
+                reached.includes("Owners"),
+                "Owners tab is not focusable"
+            );
+            assert.ok(
+                reached.includes("History"),
+                "History tab is not focusable"
+            );
+
+            // Focus is on History; the tab must respond to a key, not only a click.
+            await page.keyboard.press("Enter");
+            await page.waitForTimeout(400);
+            assert.equal(
+                await page.evaluate(() =>
+                    document
+                        .querySelector(".tabs li:nth-child(2)")
+                        ?.className.includes("is-active")
+                ),
+                true,
+                "Enter did not switch to the History tab"
+            );
+        } finally {
+            await browser.close();
+            server.close();
+        }
+    }
+);

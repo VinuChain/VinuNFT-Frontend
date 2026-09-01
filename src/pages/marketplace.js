@@ -5,6 +5,7 @@ import { Header } from "../components";
 import Address from "../components/Address";
 import RoutingLink from "../components/RoutingLink";
 import { lag } from "../common/indexer";
+import { coverageSentence } from "../common/utils";
 import { listingRowsFromIndex, loadIndex } from "../common/indexLoader";
 import { marketplaceMetrics } from "../common/marketplaceAnalytics";
 import {
@@ -33,16 +34,15 @@ import "../styles/globals.css";
  */
 function coverageLine(coverage) {
     if (!coverage) {
-        return "Indexing every marketplace event...";
+        return coverageSentence("every active listing", null);
     }
 
-    const behind = coverage.lag
-        ? `${coverage.lag.blocks}`
-        : "an unknown number of";
-
     return (
-        `Every active listing, indexed from all marketplace events through ` +
-        `block ${coverage.indexedThrough} (${behind} blocks behind the head)` +
+        coverageSentence(
+            "every active listing",
+            coverage.indexedThrough,
+            coverage.lag?.blocks
+        ) +
         (coverage.unknownCollection > 0
             ? `. ${coverage.unknownCollection} not shown: on a collection this app cannot render`
             : "") +

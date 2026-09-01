@@ -5,16 +5,7 @@ import { joiResolver } from "@hookform/resolvers/joi";
 import ValidatedInput from "./ValidatedInput";
 import { schemas } from "../common";
 import config from "../config";
-
-const styles = {
-    modalCard: {
-        maxWidth: "80vw",
-    },
-    modalCardTitle: {
-        overflowWrap: "break-word",
-        maxWidth: "70vw",
-    },
-};
+import ModalCard from "./ModalCard";
 
 const defaultValues = {
     amount: "",
@@ -90,142 +81,127 @@ export default function EditModal({
     if (!isOpen) return <></>;
 
     return (
-        <div className="modal is-active">
-            <div
-                className="modal-background"
-                onClick={() => closeModal(null, null)}
-            />
-            <div className="modal-card" style={styles.modalCard}>
-                <header className="modal-card-head">
-                    <p
-                        className="modal-card-title"
-                        style={styles.modalCardTitle}
-                    >
-                        Edit Listing
-                    </p>
-                </header>
-                <section className="modal-card-body">
+        <ModalCard
+            title="Edit Listing"
+            onDismiss={() => closeModal(null, null)}
+        >
+            <section className="modal-card-body">
+                <p>
+                    Current listing: {oldAmount} for {oldPrice}{" "}
+                    {config.tokens[paymentToken].symbol}
+                </p>
+                <p>Balance: {balance}</p>
+                {balance != effectiveAvailableAmount ? (
                     <p>
-                        Current listing: {oldAmount} for {oldPrice}{" "}
-                        {config.tokens[paymentToken].symbol}
+                        Available (not listed) balance:{" "}
+                        {effectiveAvailableAmount}
                     </p>
-                    <p>Balance: {balance}</p>
-                    {balance != effectiveAvailableAmount ? (
-                        <p>
-                            Available (not listed) balance:{" "}
-                            {effectiveAvailableAmount}
+                ) : (
+                    <></>
+                )}
+                <div className="is-divider" />
+                <div className="field">
+                    <label className="checkbox label">
+                        <input
+                            type="checkbox"
+                            checked={editAmount}
+                            className="mr-1"
+                            onChange={(e) => setEditAmount(e.target.checked)}
+                        />
+                        Edit Amount
+                    </label>
+
+                    {editAmount ? (
+                        <div className="control">
+                            <input
+                                className={
+                                    "input" +
+                                    (errors.amount ? " is-danger" : "")
+                                }
+                                type="number"
+                                min="1"
+                                step="1"
+                                placeholder={oldAmount}
+                                {...register("amount")}
+                            />
+                            {errors.amount ? (
+                                <p className="help is-danger">
+                                    {errors.amount.message}
+                                </p>
+                            ) : (
+                                <></>
+                            )}
+                        </div>
+                    ) : (
+                        <></>
+                    )}
+                </div>
+
+                <div className="field">
+                    <label className="checkbox label">
+                        <input
+                            type="checkbox"
+                            checked={editPrice}
+                            className="mr-1"
+                            onChange={(e) => setEditPrice(e.target.checked)}
+                        />
+                        Edit Price
+                    </label>
+
+                    {editPrice ? (
+                        <div className="control">
+                            <input
+                                className={
+                                    "input" + (errors.price ? " is-danger" : "")
+                                }
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                placeholder={oldPrice}
+                                {...register("price")}
+                            />
+                            {errors.price ? (
+                                <p className="help is-danger">
+                                    {errors.price.message}
+                                </p>
+                            ) : (
+                                <></>
+                            )}
+                        </div>
+                    ) : (
+                        <></>
+                    )}
+                </div>
+
+                {editAmount &&
+                watchAmount > Math.min(balance, effectiveAvailableAmount) ? (
+                    watchAmount <= balance ? (
+                        <p className="notification is-warning">
+                            <b>Warning</b>: {warningMessage()}
                         </p>
                     ) : (
-                        <></>
-                    )}
-                    <div className="is-divider" />
-                    <div className="field">
-                        <label className="checkbox label">
-                            <input
-                                type="checkbox"
-                                checked={editAmount}
-                                className="mr-1"
-                                onChange={(e) =>
-                                    setEditAmount(e.target.checked)
-                                }
-                            />
-                            Edit Amount
-                        </label>
-
-                        {editAmount ? (
-                            <div className="control">
-                                <input
-                                    className={
-                                        "input" +
-                                        (errors.amount ? " is-danger" : "")
-                                    }
-                                    type="number"
-                                    min="1"
-                                    step="1"
-                                    placeholder={oldAmount}
-                                    {...register("amount")}
-                                />
-                                {errors.amount ? (
-                                    <p className="help is-danger">
-                                        {errors.amount.message}
-                                    </p>
-                                ) : (
-                                    <></>
-                                )}
-                            </div>
-                        ) : (
-                            <></>
-                        )}
-                    </div>
-
-                    <div className="field">
-                        <label className="checkbox label">
-                            <input
-                                type="checkbox"
-                                checked={editPrice}
-                                className="mr-1"
-                                onChange={(e) => setEditPrice(e.target.checked)}
-                            />
-                            Edit Price
-                        </label>
-
-                        {editPrice ? (
-                            <div className="control">
-                                <input
-                                    className={
-                                        "input" +
-                                        (errors.price ? " is-danger" : "")
-                                    }
-                                    type="number"
-                                    min="0"
-                                    step="0.1"
-                                    placeholder={oldPrice}
-                                    {...register("price")}
-                                />
-                                {errors.price ? (
-                                    <p className="help is-danger">
-                                        {errors.price.message}
-                                    </p>
-                                ) : (
-                                    <></>
-                                )}
-                            </div>
-                        ) : (
-                            <></>
-                        )}
-                    </div>
-
-                    {editAmount &&
-                    watchAmount >
-                        Math.min(balance, effectiveAvailableAmount) ? (
-                        watchAmount <= balance ? (
-                            <p className="notification is-warning">
-                                <b>Warning</b>: {warningMessage()}
-                            </p>
-                        ) : (
-                            <p className="notification is-danger">
-                                <b>Error</b>: Cannot list more tokens than you
-                                own ({balance}).
-                            </p>
-                        )
-                    ) : (
-                        <></>
-                    )}
-                </section>
-                <footer className="modal-card-foot">
-                    <button
-                        className="button is-black"
-                        disabled={
-                            (!isValid && isDirty) ||
-                            !validCheckboxes() ||
-                            watchAmount > balance
-                        }
-                        onClick={handleSubmit(closeModal)}
-                    >
-                        Edit
-                    </button>
-                </footer>
-            </div>
-        </div>
+                        <p className="notification is-danger">
+                            <b>Error</b>: Cannot list more tokens than you own (
+                            {balance}).
+                        </p>
+                    )
+                ) : (
+                    <></>
+                )}
+            </section>
+            <footer className="modal-card-foot">
+                <button
+                    className="button is-black"
+                    disabled={
+                        (!isValid && isDirty) ||
+                        !validCheckboxes() ||
+                        watchAmount > balance
+                    }
+                    onClick={handleSubmit(closeModal)}
+                >
+                    Edit
+                </button>
+            </footer>
+        </ModalCard>
     );
 }

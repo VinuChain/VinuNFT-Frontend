@@ -113,3 +113,16 @@ test("schemas.mint: custom recipient still validated while the toggle is on", ()
     });
     assert.equal(good.error, undefined);
 });
+
+test("schemas.mint: a content type the form cannot offer is rejected", () => {
+    // The Ace-based HTML editor was reachable only through this value, and the
+    // Create form never offered it. A schema that keeps accepting a dataType no
+    // UI can produce is how the unreachable editor survived unnoticed.
+    const result = schemas.mint.validate({
+        editionSize: 1,
+        royaltyPercentage: 5,
+        useCustomRecipient: false,
+        dataType: "text/html",
+    });
+    assert.ok(result.error, "text/html must not validate");
+});
