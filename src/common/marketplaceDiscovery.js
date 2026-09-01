@@ -1,32 +1,20 @@
 import { ethers } from "ethers";
-import config from "../config";
-import { v1 } from "./abi";
-import { tokenAddressToId } from "./user";
-import { formatTokenAmount } from "./utils";
 
-export const MARKETPLACE_DISCOVERY_WINDOW = 12;
-export const MARKETPLACE_LISTINGS_PER_TOKEN_LIMIT = 5;
+/**
+ * The one implementation of "which listings match, in what order, on what page".
+ *
+ * Discovery itself moved to `indexLoader.js`: the marketplace is enumerated by
+ * folding every marketplace event, not by reading a window of token ids. What
+ * is left here is pure — no provider, no network — so the page and its tests
+ * apply the same predicates to the same rows and cannot disagree.
+ */
 
-function paymentTokenId(address) {
-    if (!address) {
-        return null;
-    }
+/** Rows per page. Small enough that the first screen is not a wall of cards. */
+export const LISTINGS_PAGE_SIZE = 12;
 
-    const checksum = ethers.utils.getAddress(address);
-    return (
-        tokenAddressToId[checksum] || tokenAddressToId[address.toLowerCase()]
-    );
-}
-
-export function tokenIdsFromLatest(lastTokenId, windowSize) {
-    const ids = [];
-    for (let offset = 0; offset < windowSize; offset++) {
-        const tokenId = lastTokenId - offset;
-        if (tokenId >= 1) {
-            ids.push(tokenId);
-        }
-    }
-    return ids;
+/** A listing's identity, stable across refolds and across ingestion. */
+export function listingRowKey(row) {
+    return `${row.nftType}:${row.tokenId}:${row.listingId}`;
 }
 
 export function rowMatchesFilters(row, filters) {
@@ -42,6 +30,10 @@ export function rowMatchesFilters(row, filters) {
         }
     }
 
+    // An unknown seller balance is unknown AVAILABILITY, not a known shortfall.
+    // The row is kept and labelled "Seller balance unavailable" rather than
+    // hidden, so the filter never silently shrinks the marketplace on the
+    // strength of a read that did not happen.
     if (filters.fulfillableOnly && row.sellerBalance !== null) {
         if (row.sellerBalance < row.amount) {
             return false;
@@ -61,58 +53,61 @@ export function rowMatchesFilters(row, filters) {
         }
     }
 
+    if (filters.query) {
+        const query = String(filters.query).trim();
+        if (query) {
+            // Two unambiguous shapes only. A token id matches EXACTLY: a prefix
+            // match would answer a search for token 1 with token 11, 100 and
+            // 1000, which is worse than no search. An address matches by prefix
+            // because nobody types 40 hex characters.
+            if (/^\d+$/.test(query)) {
+                if (String(row.tokenId) !== query) {
+                    return false;
+                }
+            } else if (query.toLowerCase().startsWith("0x")) {
+                if (
+                    !String(row.seller)
+                        .toLowerCase()
+                        .startsWith(query.toLowerCase())
+                ) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+    }
+
     return true;
 }
 
 /**
- * Chunk an array into sub-arrays of at most `size` elements.
- * Used to cap concurrent RPC calls to avoid rate-limiting on the public
- * VinuChain RPC (which may reject large bursts). Chosen concurrency: 8
- * calls per wave — empirically safe for a single-node RPC while still
- * giving a ~10x wall-clock speedup over fully sequential reads.
- */
-function chunkArray(arr, size) {
-    const chunks = [];
-    for (let i = 0; i < arr.length; i += size) {
-        chunks.push(arr.slice(i, i + size));
-    }
-    return chunks;
-}
-
-const CONCURRENCY_LIMIT = 8;
-
-/**
- * Run `tasks` (an array of zero-arg async functions) with at most
- * CONCURRENCY_LIMIT in flight at once. Returns results in input order.
- */
-async function parallelCapped(tasks) {
-    const results = new Array(tasks.length);
-    const indexed = tasks.map((fn, i) => [fn, i]);
-    for (const chunk of chunkArray(indexed, CONCURRENCY_LIMIT)) {
-        const settled = await Promise.all(chunk.map(([fn]) => fn()));
-        for (let j = 0; j < chunk.length; j++) {
-            results[chunk[j][1]] = settled[j];
-        }
-    }
-    return results;
-}
-
-/**
- * Order two listing rows by price, then by a deterministic identity.
+ * Order two listing rows: payment token first, then price, then identity.
  *
- * `row.price` is already decimal-normalised across payment tokens (USDT has 6
- * decimals, WVC 18), so it is the value to compare — but comparing it with
- * parseFloat collapses prices that differ below double resolution, e.g.
- * 1.000000000000000001 and 1.000000000000000002, leaving their relative order
- * to fetch order. Re-parsing to fixed-point at 18 decimals keeps the
- * normalisation and restores the precision.
+ * Payment token comes first on purpose. No price oracle exists in this product
+ * (VN-PRICE-001), so there is no defined ordering between 1 ETH and 100 VINU;
+ * interleaving them invites exactly the comparison the data cannot support.
+ * Grouping by currency keeps every adjacent pair comparable.
  *
- * A price that will not parse sorts last instead of throwing: one listing in an
- * unknown denomination must not take the whole marketplace page down.
+ * Within one currency the raw base-unit price decides. Rows carry `priceRaw`,
+ * so nothing is re-parsed; the decimal-string fallback is for callers that
+ * build rows without it, and it re-parses at 18 decimals rather than through
+ * parseFloat, which collapses prices below double resolution.
+ *
+ * A row with no price sorts last instead of throwing: one listing in an unknown
+ * denomination must not take the whole marketplace page down.
  */
 export function compareListingRows(left, right) {
-    const leftPrice = fixedPointPrice(left.price);
-    const rightPrice = fixedPointPrice(right.price);
+    const leftToken = left.paymentToken ?? null;
+    const rightToken = right.paymentToken ?? null;
+    if (leftToken !== rightToken) {
+        if (leftToken === null) return 1;
+        if (rightToken === null) return -1;
+        return leftToken < rightToken ? -1 : 1;
+    }
+
+    const leftPrice = rowPrice(left);
+    const rightPrice = rowPrice(right);
 
     if (leftPrice === null || rightPrice === null) {
         if (leftPrice !== rightPrice) {
@@ -131,157 +126,44 @@ export function compareListingRows(left, right) {
     );
 }
 
-function fixedPointPrice(price) {
+function rowPrice(row) {
+    if (row.priceRaw !== undefined && row.priceRaw !== null) {
+        return ethers.BigNumber.from(row.priceRaw);
+    }
     try {
-        return ethers.utils.parseUnits(String(price), 18);
+        return ethers.utils.parseUnits(String(row.price), 18);
     } catch (e) {
         return null;
     }
 }
 
-export async function discoverMarketplaceListings(
-    readProvider,
-    filters = {},
-    options = {}
+/**
+ * One page of sorted rows, bounded by a cursor rather than an offset.
+ *
+ * The cursor is a listing's identity, so the boundary survives ingestion: a
+ * cheaper listing arriving between renders joins the page it belongs to instead
+ * of pushing the last row of every page onto the next one. An unknown cursor
+ * restarts at the top — `queryEvents` returns an empty page there, which for a
+ * marketplace would blank the results the moment a filter change removed the
+ * cursor's row.
+ *
+ * Pages accumulate: `rows` is everything up to and including the new page, the
+ * shape a "Load more" list renders.
+ */
+export function pageListings(
+    rows,
+    { cursor = null, pageSize = LISTINGS_PAGE_SIZE } = {}
 ) {
-    const windowSize = options.windowSize || MARKETPLACE_DISCOVERY_WINDOW;
-    const listingLimit =
-        options.listingLimit || MARKETPLACE_LISTINGS_PER_TOKEN_LIMIT;
+    const start = cursor
+        ? rows.findIndex((row) => listingRowKey(row) === cursor) + 1
+        : 0;
+    const visible = rows.slice(0, start + pageSize);
+    const last = visible[visible.length - 1];
 
-    const marketplace = new ethers.Contract(
-        config.contractAddresses.v1.marketplace,
-        v1.marketplace,
-        readProvider
-    );
-
-    // Resolve both NFT types concurrently. Within each type, all per-token
-    // and per-listing reads are also parallelised (capped at CONCURRENCY_LIMIT
-    // concurrent calls to avoid overwhelming the public VinuChain RPC).
-    const rowsByType = await Promise.all(
-        ["text", "image"].map(async (nftType) => {
-            if (
-                filters.nftType &&
-                filters.nftType !== "all" &&
-                filters.nftType !== nftType
-            ) {
-                return [];
-            }
-
-            const nftAddress = config.contractAddresses.v1[nftType];
-            const nftContract = new ethers.Contract(
-                nftAddress,
-                v1[nftType],
-                readProvider
-            );
-
-            const lastTokenId = (await nftContract.lastTokenId()).toNumber();
-            const tokenIds = tokenIdsFromLatest(lastTokenId, windowSize);
-
-            // Fetch listingCount for all tokens in this type concurrently.
-            const listingCounts = await parallelCapped(
-                tokenIds.map(
-                    (tokenId) => async () =>
-                        (
-                            await marketplace.listingCount(nftAddress, tokenId)
-                        ).toNumber()
-                )
-            );
-
-            // For each token, fetch all capped listings concurrently.
-            const perTokenListings = await parallelCapped(
-                tokenIds.map((tokenId, idx) => async () => {
-                    const cappedListingCount = Math.min(
-                        listingCounts[idx],
-                        listingLimit
-                    );
-                    const listingIds = Array.from(
-                        { length: cappedListingCount },
-                        (_, i) => i
-                    );
-                    return parallelCapped(
-                        listingIds.map(
-                            (listingId) => async () =>
-                                marketplace.listings(
-                                    nftAddress,
-                                    tokenId,
-                                    listingId
-                                )
-                        )
-                    );
-                })
-            );
-
-            // Collect valid listings before fetching balances.
-            const validListings = [];
-            for (let ti = 0; ti < tokenIds.length; ti++) {
-                const tokenId = tokenIds[ti];
-                const listings = perTokenListings[ti];
-                for (
-                    let listingId = 0;
-                    listingId < listings.length;
-                    listingId++
-                ) {
-                    const listing = listings[listingId];
-                    const amount = listing.amount.toNumber();
-                    const seller = listing.seller;
-
-                    if (
-                        amount <= 0 ||
-                        seller === ethers.constants.AddressZero ||
-                        !listing.paymentToken
-                    ) {
-                        continue;
-                    }
-
-                    const paymentToken = paymentTokenId(listing.paymentToken);
-                    if (!paymentToken) {
-                        continue;
-                    }
-
-                    validListings.push({
-                        tokenId,
-                        listingId,
-                        seller,
-                        amount,
-                        listing,
-                        paymentToken,
-                    });
-                }
-            }
-
-            // Fetch sellerBalance for each surviving listing concurrently.
-            const balances = await parallelCapped(
-                validListings.map(({ seller, tokenId }) => async () => {
-                    try {
-                        return (
-                            await nftContract.balanceOf(seller, tokenId)
-                        ).toNumber();
-                    } catch (e) {
-                        return null;
-                    }
-                })
-            );
-
-            return validListings.map((entry, i) => ({
-                nftType,
-                tokenId: entry.tokenId,
-                listingId: entry.listingId,
-                seller: entry.seller,
-                amount: entry.amount,
-                price: formatTokenAmount(
-                    entry.listing.price,
-                    entry.paymentToken
-                ),
-                paymentToken: entry.paymentToken,
-                sellerBalance: balances[i],
-            }));
-        })
-    );
-
-    const rows = rowsByType.flat();
-
-    const sortDirection = filters.priceSort === "desc" ? -1 : 1;
-    return rows
-        .filter((row) => rowMatchesFilters(row, filters))
-        .sort((left, right) => compareListingRows(left, right) * sortDirection);
+    return {
+        rows: visible,
+        nextCursor:
+            last && visible.length < rows.length ? listingRowKey(last) : null,
+        remaining: rows.length - visible.length,
+    };
 }

@@ -1,63 +1,29 @@
 import { ethers } from "ethers";
-import config from "../config";
-import { v1 } from "./abi";
+import { lag } from "./indexer";
+import { loadIndex, profileFromIndex } from "./indexLoader";
 
-export const ADDRESS_PROFILE_WINDOW = 12;
-
-function recentTokenIds(lastTokenId, windowSize) {
-    const ids = [];
-    for (let offset = 0; offset < windowSize; offset++) {
-        const tokenId = lastTokenId - offset;
-        if (tokenId >= 1) {
-            ids.push(tokenId);
-        }
-    }
-    return ids;
-}
-
-export async function loadAddressProfileNfts(
-    readProvider,
-    address,
-    options = {}
-) {
+/**
+ * Everything one address has done with both collections, from the index.
+ *
+ * This used to walk the latest 12 token ids per type and read balanceOf and
+ * authorOf for each. That silently hid every older token: an address whose only
+ * NFT was token 1 of a thousand looked like it owned nothing, and there was no
+ * way for the page to tell that apart from an empty profile. The index is a
+ * fold over each contract's whole life, so every edition, listing and sale is
+ * reachable — bounded by the block it was scanned to, which is returned so the
+ * page can say so.
+ */
+export async function loadAddressProfileNfts(readProvider, address) {
     if (!ethers.utils.isAddress(address)) {
         throw new Error("Invalid address");
     }
 
     const normalizedAddress = ethers.utils.getAddress(address);
-    const windowSize = options.windowSize || ADDRESS_PROFILE_WINDOW;
-    const owned = [];
-    const created = [];
+    const { state, headBlock } = await loadIndex(readProvider);
 
-    for (const nftType of ["text", "image"]) {
-        const contract = new ethers.Contract(
-            config.contractAddresses.v1[nftType],
-            v1[nftType],
-            readProvider
-        );
-        const lastTokenId = (await contract.lastTokenId()).toNumber();
-
-        for (const tokenId of recentTokenIds(lastTokenId, windowSize)) {
-            const [balance, author] = await Promise.all([
-                contract
-                    .balanceOf(normalizedAddress, tokenId)
-                    .then((value) => value.toNumber())
-                    .catch(() => 0),
-                contract.authorOf(tokenId).catch(() => null),
-            ]);
-
-            if (balance > 0) {
-                owned.push({ type: nftType, id: tokenId, balance });
-            }
-
-            if (
-                author &&
-                ethers.utils.getAddress(author) === normalizedAddress
-            ) {
-                created.push({ type: nftType, id: tokenId });
-            }
-        }
-    }
-
-    return { owned, created };
+    return {
+        ...profileFromIndex(state, normalizedAddress),
+        indexedThrough: state.lastIndexedBlock,
+        lag: lag(state, headBlock),
+    };
 }

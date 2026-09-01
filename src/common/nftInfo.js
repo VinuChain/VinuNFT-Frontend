@@ -1,7 +1,9 @@
 import { maybeFetchIpfs } from "./ipfs";
 
 // Derive the render MIME type from the on-chain URI — never from the remote
-// Content-Type header, which can be attacker-controlled.
+// Content-Type header, which can be attacker-controlled. Exported because the
+// marketplace card states the same format the token page renders, and two
+// parsers would eventually disagree about the same token.
 function deriveTokenType(textUri) {
     if (textUri.startsWith("data:")) {
         // data:<mime>[;base64],<data> — parse the declared MIME
@@ -49,4 +51,4 @@ async function getTokenContent(nftType, tokenData) {
     }
 }
 
-export { getTokenContent };
+export { deriveTokenType, getTokenContent };

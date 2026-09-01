@@ -217,16 +217,18 @@ test("HTML sanitization does not allow style or data URL expansion", () => {
     }
 });
 
-test("marketplace discovery stays bounded and linked", () => {
+test("marketplace discovery reads the index and stays linked", () => {
     const design = read("docs/marketplace-discovery.md");
     const helper = read("src/common/marketplaceDiscovery.js");
     const page = read("src/pages/marketplace.js");
     const header = read("src/components/Header.js");
 
-    assert.equal(design.includes("client-only MVP"), true);
-    assert.equal(design.includes("Maximum RPC call count"), true);
-    assert.equal(helper.includes("MARKETPLACE_DISCOVERY_WINDOW"), true);
-    assert.equal(helper.includes("MARKETPLACE_LISTINGS_PER_TOKEN_LIMIT"), true);
+    // The window was replaced, not merely widened: the route reads the index,
+    // and the doc has to describe that rather than the bounded MVP it dropped.
+    assert.equal(design.includes("reads the **index**"), true);
+    assert.equal(design.includes("## RPC Cost"), true);
+    assert.equal(page.includes("indexLoader"), true);
+    assert.equal(page.includes("MARKETPLACE_DISCOVERY_WINDOW"), false);
     assert.equal(helper.includes("queryFilter"), false);
     assert.equal(page.includes("Marketplace - VinuNFT"), true);
     assert.equal(
@@ -236,6 +238,24 @@ test("marketplace discovery stays bounded and linked", () => {
     assert.equal(page.includes("Fulfillable"), true);
     assert.equal(page.includes("No listings"), true);
     assert.equal(header.includes("/marketplace"), true);
+
+    // One filter implementation. The page reached the module's predicates
+    // rather than keeping a second copy that disagreed on an unknown balance.
+    assert.equal(page.includes("rowMatchesFilters"), true);
+    assert.equal(page.includes("pageListings"), true);
+
+    // Analytics live outside the discovery helper, which this file also pins
+    // free of queryFilter, and every definition is written down beside them.
+    const analytics = read("src/common/marketplaceAnalytics.js");
+    assert.equal(helper.includes("marketplaceMetrics"), false);
+    assert.equal(design.includes("## Metric Definitions"), true);
+    assert.equal(design.includes("### What is deliberately NOT shown"), true);
+
+    // No cross-currency aggregate anywhere: every money figure is keyed by
+    // payment token, and a total across tokens has no definition without a
+    // price oracle this product does not have.
+    assert.equal(analytics.includes("byPaymentToken"), true);
+    assert.equal(analytics.includes("totalVolume"), false);
 });
 
 test("address profiles validate addresses and preserve explorer access", () => {
@@ -245,8 +265,8 @@ test("address profiles validate addresses and preserve explorer access", () => {
     const address = read("src/components/Address.js");
 
     assert.equal(design.includes("/address?address=0x"), true);
-    assert.equal(design.includes("Maximum RPC call count"), true);
-    assert.equal(helper.includes("ADDRESS_PROFILE_WINDOW"), true);
+    assert.equal(design.includes("## Index Strategy"), true);
+    assert.equal(helper.includes("loadIndex"), true);
     assert.equal(helper.includes("queryFilter"), false);
     assert.equal(page.includes("Address - VinuNFT"), true);
     assert.equal(page.includes("Invalid address"), true);

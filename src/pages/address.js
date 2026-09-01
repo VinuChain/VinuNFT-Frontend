@@ -3,16 +3,45 @@ import { ethers } from "ethers";
 import { Helmet } from "react-helmet";
 import { Header, NFTCard } from "../components";
 import Address from "../components/Address";
-import {
-    ADDRESS_PROFILE_WINDOW,
-    loadAddressProfileNfts,
-} from "../common/addressProfile";
+import { loadAddressProfileNfts } from "../common/addressProfile";
 import { useReadProvider } from "../common/provider";
 import config from "../config";
 
 import "bulma/css/bulma.min.css";
 import "bulma-extensions/dist/css/bulma-extensions.min.css";
 import "../styles/globals.css";
+
+// Every relationship the index can express for one address. Rendered from one
+// list because five hand-written sections differ only in a heading.
+const SECTIONS = [
+    ["owned", "Owned NFTs"],
+    ["created", "Created NFTs"],
+    ["listed", "Listed for sale"],
+    ["bought", "Bought"],
+    ["sold", "Sold"],
+];
+
+const EMPTY_PROFILE = {
+    owned: [],
+    created: [],
+    listed: [],
+    bought: [],
+    sold: [],
+};
+
+/** What the profile covers, stated rather than implied. */
+function coverageLine(profile) {
+    if (profile.indexedThrough === undefined) {
+        return "Indexing every transfer, listing and sale...";
+    }
+    const behind = profile.lag
+        ? `${profile.lag.blocks}`
+        : "an unknown number of";
+    return (
+        `Every edition, listing and sale, indexed through block ` +
+        `${profile.indexedThrough} (${behind} blocks behind the head)`
+    );
+}
 
 export default function AddressPage({ location }) {
     const [readProvider] = useReadProvider();
@@ -26,7 +55,7 @@ export default function AddressPage({ location }) {
         ? ethers.utils.getAddress(rawAddress)
         : null;
 
-    const [profile, setProfile] = useState({ owned: [], created: [] });
+    const [profile, setProfile] = useState(EMPTY_PROFILE);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -81,8 +110,9 @@ export default function AddressPage({ location }) {
                     <>
                         <section className="vinunft-page__header">
                             <p className="vinunft-page__eyebrow">
-                                Bounded profile window: latest{" "}
-                                {ADDRESS_PROFILE_WINDOW} tokens per type
+                                {error
+                                    ? "Index scan failed - profile coverage is unknown"
+                                    : coverageLine(profile)}
                             </p>
                             <h1 className="title">Address Profile</h1>
                             <p className="address-profile__address">
@@ -106,48 +136,32 @@ export default function AddressPage({ location }) {
                         {error ? (
                             <p className="notification is-danger">{error}</p>
                         ) : loading ? (
-                            <p>Loading bounded address profile...</p>
+                            <p>Loading indexed address profile...</p>
                         ) : (
                             <>
-                                <section className="address-profile__section">
-                                    <h2 className="title is-4">Owned NFTs</h2>
-                                    {profile.owned.length === 0 ? (
-                                        <p>
-                                            No owned NFTs found in the bounded
-                                            profile window.
-                                        </p>
-                                    ) : (
-                                        <div className="address-profile__grid">
-                                            {profile.owned.map((nft) => (
-                                                <NFTCard
-                                                    key={`${nft.type}-${nft.id}`}
-                                                    type={nft.type}
-                                                    id={nft.id}
-                                                />
-                                            ))}
-                                        </div>
-                                    )}
-                                </section>
-
-                                <section className="address-profile__section">
-                                    <h2 className="title is-4">Created NFTs</h2>
-                                    {profile.created.length === 0 ? (
-                                        <p>
-                                            No created NFTs found in the bounded
-                                            profile window.
-                                        </p>
-                                    ) : (
-                                        <div className="address-profile__grid">
-                                            {profile.created.map((nft) => (
-                                                <NFTCard
-                                                    key={`${nft.type}-${nft.id}`}
-                                                    type={nft.type}
-                                                    id={nft.id}
-                                                />
-                                            ))}
-                                        </div>
-                                    )}
-                                </section>
+                                {SECTIONS.map(([key, heading]) => (
+                                    <section
+                                        className="address-profile__section"
+                                        key={key}
+                                    >
+                                        <h2 className="title is-4">
+                                            {heading}
+                                        </h2>
+                                        {profile[key].length === 0 ? (
+                                            <p>None in the index.</p>
+                                        ) : (
+                                            <div className="address-profile__grid">
+                                                {profile[key].map((nft) => (
+                                                    <NFTCard
+                                                        key={`${nft.type}-${nft.id}`}
+                                                        type={nft.type}
+                                                        id={nft.id}
+                                                    />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </section>
+                                ))}
                             </>
                         )}
                     </>

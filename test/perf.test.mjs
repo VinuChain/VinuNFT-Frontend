@@ -160,11 +160,26 @@ async function countRpc(path, { wallet = false, answers = null } = {}) {
 // Measured 2026-09-01 against the build in public/: / 18, /marketplace/ 12,
 // /activity/ 432 (375 eth_getLogs, matching the 376 seen live), /address/ 23,
 // /nft/ 300. Budgets are those plus room for ordinary churn.
+//
+// /marketplace/ and /address/ were re-measured after VN-INDEX-001 pointed both
+// at the index: each now pays the same one-pass-per-contract scan /activity/
+// pays (375 eth_getLogs over three contracts), instead of a 12-token window
+// that could not see most of the marketplace. The budget still gates the SHAPE
+// of the scan — 375 is three passes, and the defect class this catches is a
+// fresh pass per token or per filter, which would be an order of magnitude
+// more. Both routes share one scan within a session; these are cold loads.
+//
+// Re-measured after VN-MARKET-001/002: /marketplace/ 421, /address/ 424. The
+// settlement and format reads those tickets added are O(sales) and O(listed
+// tokens), NOT O(blocks), so they contribute ZERO here — routeOffline answers
+// eth_getLogs with [], leaving the stub marketplace with no sales and no
+// listings. That is why this budget cannot police them; test/indexLoader.test.mjs
+// pins their exact counts (8 eth_call, 2 receipts) against the live fixture.
 const RPC_CASES = [
     { path: "/", budget: 30 },
-    { path: "/marketplace/", budget: 30 },
+    { path: "/marketplace/", budget: 450 },
     { path: "/activity/", budget: 450 },
-    { path: `/address/?address=${TEST_ACCOUNT}`, budget: 40 },
+    { path: `/address/?address=${TEST_ACCOUNT}`, budget: 450 },
     {
         path: "/nft/?type=image&id=1",
         // 300 calls measured, of which 250 are the one chunked history pass

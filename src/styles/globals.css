@@ -447,8 +447,62 @@ button {
     min-height: 2.5rem;
 }
 
-.marketplace-filters__seller {
+.marketplace-filters__search {
     grid-column: 1 / -1;
+}
+
+/* Seven fields per card now: format, price and lot total, amount, supply,
+   seller, creator, availability. */
+.marketplace-metrics {
+    border: 1px solid #dce5df;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+}
+
+.marketplace-metrics__grid {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    margin-bottom: 0.75rem;
+}
+
+.marketplace-metric__label {
+    color: #5a6d64;
+    font-size: 0.72rem;
+    font-weight: 900;
+    margin: 0;
+    text-transform: uppercase;
+}
+
+.marketplace-metric__amount,
+.marketplace-metric__count {
+    font-size: 1.1rem;
+    font-weight: 800;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.marketplace-metric__note,
+.marketplace-metrics__note,
+.marketplace-metrics__definitions {
+    color: #5a6d64;
+    font-size: 0.78rem;
+    margin: 0.15rem 0 0;
+}
+
+.marketplace-listings__count {
+    color: #5a6d64;
+    font-size: 0.85rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+}
+
+.marketplace-listing__format,
+.marketplace-listing__total {
+    color: #5a6d64;
+    font-size: 0.78rem;
+    margin: 0.2rem 0 0;
 }
 
 .marketplace-listings {
@@ -462,7 +516,7 @@ button {
     border-radius: 8px;
     display: grid;
     gap: 1rem;
-    grid-template-columns: minmax(8rem, 1.3fr) repeat(4, minmax(6.5rem, 1fr));
+    grid-template-columns: minmax(8rem, 1.3fr) repeat(6, minmax(6rem, 1fr));
     padding: 1rem;
 }
 
