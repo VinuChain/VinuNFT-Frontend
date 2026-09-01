@@ -1,12 +1,15 @@
 import { ethers } from "ethers";
-import { WANBRIDGE_API_BASE, WANBRIDGE_PARTNER } from "../common/wanbridge";
+import { fetchWanBridgeJson, WANBRIDGE_PARTNER } from "../common/wanbridge";
 import { applyApiRateLimit, parseBody, sendJson } from "../common/apiRateLimit";
 import {
-    isChainType,
     isDestinationAccount,
+    isEvmWanBridgeChain,
     isPositiveDecimal,
     isTokenIdentifier,
 } from "../common/wanbridgeValidation";
+
+// Upstream `error` text is third-party copy that the page renders.
+const UPSTREAM_ERROR_MAX = 200;
 
 function requireString(value) {
     return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -30,7 +33,13 @@ export default async function handler(req, res) {
         });
     }
 
+    // parseBody returns null on a body it cannot parse; unguarded it threw out
+    // of the handler and a malformed request became a 500 instead of a 400.
     const body = parseBody(req);
+    if (!body) {
+        return sendJson(res, 400, { message: "Malformed request body" });
+    }
+
     const payload = {
         fromChain: requireString(body.fromChain),
         toChain: requireString(body.toChain),
@@ -48,9 +57,13 @@ export default async function handler(req, res) {
         });
     }
 
-    if (!isChainType(payload.fromChain) || !isChainType(payload.toChain)) {
+    // The source chain has to be one this app can actually build and sign an
+    // EVM transaction for, not merely something shaped like a chain code. The
+    // destination is enforced by isDestinationAccount below, which now fails
+    // closed on any chain whose account format is unknown.
+    if (!isEvmWanBridgeChain(payload.fromChain)) {
         return sendJson(res, 400, {
-            message: "Invalid WanBridge chain type",
+            message: "Unsupported WanBridge source chain",
         });
     }
 
@@ -80,17 +93,34 @@ export default async function handler(req, res) {
     }
 
     try {
-        const upstream = await fetch(`${WANBRIDGE_API_BASE}/createTx2`, {
+        const upstream = await fetchWanBridgeJson("createTx2", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
         });
-        const response = await upstream.json();
 
-        return sendJson(res, upstream.ok ? 200 : upstream.status, response);
+        if (!upstream.ok) {
+            // Never forward an upstream error body: it echoes this request's
+            // own fields back at the browser and can carry arbitrary text.
+            return sendJson(res, 502, {
+                message: "WanBridge transaction upstream error",
+            });
+        }
+
+        if (!upstream.payload.success) {
+            return sendJson(res, 200, {
+                success: false,
+                error: String(
+                    upstream.payload.error ||
+                        "WanBridge returned no transaction"
+                ).slice(0, UPSTREAM_ERROR_MAX),
+            });
+        }
+
+        return sendJson(res, 200, upstream.payload);
     } catch (error) {
         return sendJson(res, 502, {
-            message: error.message || "Could not create WanBridge transaction",
+            message: "Could not create WanBridge transaction",
         });
     }
 }

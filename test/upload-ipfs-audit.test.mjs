@@ -286,3 +286,23 @@ test("upload audit reasons ignore attacker-controlled error text", async () => {
     assert.equal(events.length, 1);
     assert.equal(events[0].reason, "upload_rejected");
 });
+
+test("a malformed body is a 400 that does not echo the JSON parser", async () => {
+    // There were two byte-identical parseBody copies, both unguarded. This one
+    // was safe only because its call site happens to sit inside the handler's
+    // try — the other, in wanbridge-create-tx, did not, and returned a 500.
+    // Both now use the shared guarded parseBody, and the rejection is the
+    // handler's own sentence rather than "Unexpected end of JSON input".
+    const res = response();
+    const events = await captureAuditEvents(() => handler(request("{"), res));
+
+    assert.equal(res.statusCode, 400);
+    const body = JSON.parse(res.body);
+    assert.equal(body.error, "Malformed request body.");
+    assert.equal(/JSON|token|Unexpected/i.test(body.error), false);
+    assert.equal(
+        events.some((event) => event.reason === "malformed_body"),
+        true,
+        "a rejected upload must be audited with its reason"
+    );
+});

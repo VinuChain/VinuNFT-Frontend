@@ -8,14 +8,9 @@ module.exports = {
         title: "vinu-nft",
     },
     plugins: [
-        {
-            resolve: "gatsby-source-filesystem",
-            options: {
-                name: "pages",
-                path: "./src/pages/",
-            },
-            __key: "pages",
-        },
+        // gatsby-source-filesystem is not here: it sourced ./src/pages into
+        // GraphQL and nothing in src/ runs a graphql query or useStaticQuery,
+        // so it built a node graph no page ever read.
         "gatsby-plugin-react-helmet",
         "gatsby-plugin-csp-nonce",
     ],

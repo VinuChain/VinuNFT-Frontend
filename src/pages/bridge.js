@@ -4,6 +4,7 @@ import { Helmet } from "react-helmet";
 import { Header, WalletButton } from "../components";
 import { useWalletProvider } from "../common/provider";
 import {
+    decimalAmountToRaw,
     feeLabel,
     formatRawTokenAmount,
     getBridgeEvmChain,
@@ -17,9 +18,13 @@ import {
     quotaIsUnavailable,
     tokenKey,
     toHexChainId,
+    validateBridgeTx,
     WANBRIDGE_WEB_URL,
 } from "../common/wanbridge";
-import { isDestinationAccount } from "../common/wanbridgeValidation";
+import {
+    canValidateDestinationChain,
+    isDestinationAccount,
+} from "../common/wanbridgeValidation";
 
 import "bulma/css/bulma.min.css";
 import "bulma-extensions/dist/css/bulma-extensions.min.css";
@@ -140,14 +145,45 @@ function sortRoutes(routes) {
     });
 }
 
-function routeDescription(route) {
+function routeDescription(route, canSign) {
     if (!route) {
         return "Loading live WanBridge routes.";
     }
     if (!route.supportsInAppSigning) {
         return `${route.fromChain.chainName} source wallets continue in the official WanBridge app.`;
     }
+    if (!canSign) {
+        return `VinuNFT cannot check that a ${route.toChain.chainName} destination address is well formed, so this route continues in the official WanBridge app.`;
+    }
     return `This signs on ${route.fromChain.chainName} and delivers ${route.toToken.symbol} on ${route.toChain.chainName}.`;
+}
+
+// One quota read, used by the route effect and again immediately before submit.
+// `no-store` because the proxy answers with s-maxage=30/stale-while-revalidate,
+// and a re-check served from that cache re-checks nothing.
+async function fetchQuota(route, signal) {
+    const params = new URLSearchParams({
+        fromChainType: route.fromChain.chainType,
+        toChainType: route.toChain.chainType,
+        tokenPairID: route.tokenPairID,
+        symbol: route.symbol,
+    });
+    const response = await fetch(
+        `/api/wanbridge-quota-and-fee?${params.toString()}`,
+        { signal, cache: "no-store" }
+    );
+    const payload = await response.json();
+    if (!response.ok || responseHasMessage(payload)) {
+        throw new Error(
+            responseHasMessage(payload)
+                ? payload.message
+                : "Could not load bridge quota"
+        );
+    }
+    if (!payload.success) {
+        throw new Error(payload.error || "WanBridge quota unavailable");
+    }
+    return payload.data;
 }
 
 function validateDestination(route, value) {
@@ -184,7 +220,7 @@ export default function Bridge({ location }) {
     const [busy, setBusy] = useState(false);
     const [actionMessage, setActionMessage] = useState(null);
     const [lastTx, setLastTx] = useState(null);
-    const [lastHash, setLastHash] = useState(null);
+    const [lastSubmission, setLastSubmission] = useState(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -342,30 +378,7 @@ export default function Bridge({ location }) {
             try {
                 setQuotaLoading(true);
                 setQuotaError(null);
-                const params = new URLSearchParams({
-                    fromChainType: selectedRoute.fromChain.chainType,
-                    toChainType: selectedRoute.toChain.chainType,
-                    tokenPairID: selectedRoute.tokenPairID,
-                    symbol: selectedRoute.symbol,
-                });
-                const response = await fetch(
-                    `/api/wanbridge-quota-and-fee?${params.toString()}`,
-                    { signal: controller.signal }
-                );
-                const payload = await response.json();
-                if (!response.ok || responseHasMessage(payload)) {
-                    throw new Error(
-                        responseHasMessage(payload)
-                            ? payload.message
-                            : "Could not load bridge quota"
-                    );
-                }
-                if (!payload.success) {
-                    throw new Error(
-                        payload.error || "WanBridge quota unavailable"
-                    );
-                }
-                setQuota(payload.data);
+                setQuota(await fetchQuota(selectedRoute, controller.signal));
             } catch (error) {
                 if (!controller.signal.aborted) {
                     setQuota(null);
@@ -382,6 +395,14 @@ export default function Bridge({ location }) {
         return () => controller.abort();
     }, [selectedRoute]);
 
+    // A route is only signable here if the destination chain is one this app
+    // can validate an account for. XPL (Plasma) is live in the WanBridge catalog
+    // and in neither chain list, so its destination is hand-typed and, before
+    // isDestinationAccount was made to fail closed, unchecked.
+    const canSign = Boolean(
+        selectedRoute?.supportsInAppSigning &&
+            canValidateDestinationChain(selectedRoute.toChain.chainType)
+    );
     const amountValid = isPositiveDecimalAmount(amount);
     const destinationValid = validateDestination(selectedRoute, destination);
     const routeUnavailable = quotaIsUnavailable(quota);
@@ -394,7 +415,7 @@ export default function Bridge({ location }) {
               )
             : false;
     const canSubmit =
-        Boolean(selectedRoute) &&
+        canSign &&
         !busy &&
         !routeUnavailable &&
         amountValid &&
@@ -405,7 +426,7 @@ export default function Bridge({ location }) {
         if (!selectedRoute) {
             return "Loading WanBridge routes";
         }
-        if (!selectedRoute.supportsInAppSigning) {
+        if (!canSign) {
             return "Open WanBridge";
         }
         if (!walletProvider) {
@@ -422,7 +443,7 @@ export default function Bridge({ location }) {
             return;
         }
 
-        if (!selectedRoute.supportsInAppSigning) {
+        if (!canSign) {
             window.open(WANBRIDGE_WEB_URL, "_blank", "noopener,noreferrer");
             return;
         }
@@ -450,7 +471,7 @@ export default function Bridge({ location }) {
         setBusy(true);
         setActionMessage("Preparing WanBridge transaction...");
         setLastTx(null);
-        setLastHash(null);
+        setLastSubmission(null);
 
         try {
             await switchToBridgeChain(walletProvider, sourceChain);
@@ -461,6 +482,25 @@ export default function Bridge({ location }) {
             if (Number(activeNetwork.chainId) !== Number(sourceChain.chainId)) {
                 throw new Error(
                     `Wallet is on chain ${activeNetwork.chainId}, expected ${sourceChain.chainId} (${sourceChain.name}). Switch networks and retry.`
+                );
+            }
+
+            // The displayed quota was fetched when the route was picked and the
+            // proxy caches for 30s on top of that. A floor or ceiling that moved
+            // in between would otherwise be committed to against a number the
+            // user was never shown.
+            const freshQuota = await fetchQuota(selectedRoute);
+            setQuota(freshQuota);
+            if (
+                quotaIsUnavailable(freshQuota) ||
+                !isAmountWithinQuota(
+                    amount,
+                    selectedRoute.fromToken.decimals,
+                    freshQuota
+                )
+            ) {
+                throw new Error(
+                    "The WanBridge quota for this route changed while you were on this page. Check the updated minimum and maximum, then try again."
                 );
             }
 
@@ -501,6 +541,14 @@ export default function Bridge({ location }) {
             }
 
             setLastTx(txData);
+
+            // The route the user picked is local ground truth; the token and the
+            // addresses in this response are not.
+            const rejection = validateBridgeTx(selectedRoute, txData);
+            if (rejection) {
+                throw new Error(rejection);
+            }
+
             setActionMessage("Checking bridge allowance...");
 
             const signer = walletProvider.getSigner();
@@ -515,15 +563,13 @@ export default function Bridge({ location }) {
                 // spender was the one prompt the user got no disclosure for.
                 // Both approvals below — the reset-to-zero and the real one —
                 // are downstream of this gate.
+                // validateBridgeTx already rejected a spender that is on a
+                // populated allowlist's wrong side; what is left is the honest
+                // "no allowlist exists for this chain" case.
                 const knownSpender = isKnownBridgeTarget(
                     sourceChain.chainType,
                     approveCheck.to
                 );
-                if (knownSpender === false) {
-                    throw new Error(
-                        "Token spender address not recognized - aborting for safety."
-                    );
-                }
                 // No allowlist for this chain yet, so the honest position is
                 // that this app cannot vouch for the address it is about to ask
                 // you to trust with your tokens. Held rather than shown here:
@@ -568,11 +614,6 @@ export default function Bridge({ location }) {
                 sourceChain.chainType,
                 txData.tx.to
             );
-            if (known === false) {
-                throw new Error(
-                    "Bridge target address not recognized — aborting for safety."
-                );
-            }
             // Same reason as the spender notice: it was being set and then
             // immediately overwritten by "Sending bridge transaction...", so the
             // one moment it existed for was the one moment it was not on screen.
@@ -592,8 +633,17 @@ export default function Bridge({ location }) {
                 value: ethers.BigNumber.from(txData.tx.value || "0"),
             });
             await bridgeTx.wait();
-            setLastHash(bridgeTx.hash);
-            setActionMessage("WanBridge transaction confirmed.");
+            setLastSubmission({
+                hash: bridgeTx.hash,
+                explorerUrl: sourceChain.explorerUrl,
+                toChainName: selectedRoute.toChain.chainName,
+            });
+            // wait() resolves on source-chain inclusion. The bridge itself has
+            // not delivered anything yet, and saying otherwise is the difference
+            // between "sent" and "arrived".
+            setActionMessage(
+                `Confirmed on ${sourceChain.name}. WanBridge still has to deliver on ${selectedRoute.toChain.chainName} - track it in the official WanBridge app.`
+            );
         } catch (error) {
             setActionMessage(getErrorMessage(error));
         } finally {
@@ -607,7 +657,11 @@ export default function Bridge({ location }) {
         setSelectedRouteId(route.id);
     }
 
-    const quotaTokenDecimals = selectedRoute?.fromToken.decimals || "18";
+    // `??`, not `||`: a legitimate 0 decimals must not silently become 18.
+    const quotaTokenDecimals = selectedRoute?.fromToken.decimals ?? "18";
+    // The operation fee is a percentage clamped to a floor and a ceiling, so it
+    // is only knowable once an amount exists.
+    const quotaRawAmount = decimalAmountToRaw(amount, quotaTokenDecimals);
     const nativeFeeDecimals = selectedRoute
         ? nativeFeeDecimalsForChain(selectedRoute.fromChain.chainType)
         : 18;
@@ -778,12 +832,12 @@ export default function Bridge({ location }) {
 
                         <p
                             className={
-                                selectedRoute?.supportsInAppSigning
+                                canSign
                                     ? "notification is-success"
                                     : "notification is-warning"
                             }
                         >
-                            {routeDescription(selectedRoute)}
+                            {routeDescription(selectedRoute, canSign)}
                         </p>
 
                         {!walletProvider ? (
@@ -860,9 +914,9 @@ export default function Bridge({ location }) {
                                     <strong>
                                         {feeLabel(
                                             quota.networkFee,
-                                            nativeFeeDecimals
-                                        )}{" "}
-                                        {nativeFeeSymbol}
+                                            nativeFeeDecimals,
+                                            nativeFeeSymbol
+                                        )}
                                     </strong>
                                 </div>
                                 <div>
@@ -870,9 +924,10 @@ export default function Bridge({ location }) {
                                     <strong>
                                         {feeLabel(
                                             quota.operationFee,
-                                            quotaTokenDecimals
-                                        )}{" "}
-                                        {selectedRoute.fromToken.symbol}
+                                            quotaTokenDecimals,
+                                            selectedRoute.fromToken.symbol,
+                                            quotaRawAmount
+                                        )}
                                     </strong>
                                 </div>
                             </div>
@@ -894,10 +949,27 @@ export default function Bridge({ location }) {
                                     <dd>{lastTx.receiveAmount || "Pending"}</dd>
                                     <dt>Bridge tx target</dt>
                                     <dd>{lastTx.tx?.to || "Pending"}</dd>
-                                    {lastHash ? (
+                                    {lastSubmission ? (
                                         <>
-                                            <dt>Confirmed hash</dt>
-                                            <dd>{lastHash}</dd>
+                                            <dt>Source chain transaction</dt>
+                                            <dd>
+                                                <a
+                                                    href={`${lastSubmission.explorerUrl}/tx/${lastSubmission.hash}`}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                >
+                                                    {lastSubmission.hash}
+                                                </a>
+                                            </dd>
+                                            <dt>
+                                                Delivery on{" "}
+                                                {lastSubmission.toChainName}
+                                            </dt>
+                                            <dd>
+                                                Pending - WanBridge delivers
+                                                after the source transaction
+                                                confirms.
+                                            </dd>
                                         </>
                                     ) : (
                                         <></>

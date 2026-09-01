@@ -4,6 +4,9 @@ import {
     uploadPayloadDigest,
 } from "../common/uploadIntent";
 import { sniffImage } from "../common/imageSniff";
+// One parseBody, not a private copy: the copy here was unguarded and safe only
+// because its call site happens to sit inside the handler's try.
+import { parseBody } from "../common/apiRateLimit";
 
 const PINATA_PIN_FILE_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";
 const PINATA_PIN_JSON_URL = "https://api.pinata.cloud/pinning/pinJSONToIPFS";
@@ -64,14 +67,6 @@ export const config = {
         },
     },
 };
-
-function parseBody(req) {
-    if (typeof req.body === "string") {
-        return JSON.parse(req.body);
-    }
-
-    return req.body || {};
-}
 
 function sendJson(res, statusCode, body) {
     res.status(statusCode);
@@ -391,6 +386,12 @@ export default async function handler(req, res) {
     try {
         assertPinataJwt();
         payload = parseBody(req);
+        if (!payload) {
+            throw new UploadRejection(
+                "malformed_body",
+                "Malformed request body."
+            );
+        }
         assertUploadAuth(req, payload);
         const response =
             payload.type === "json"

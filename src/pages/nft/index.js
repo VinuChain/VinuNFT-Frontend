@@ -37,7 +37,6 @@ import NFTOwners from "../../components/NFTOwners";
 
 import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
-//import { getEventListeners } from 'ws';
 
 import {
     getEvents,

@@ -37,11 +37,10 @@ const config = {
     // Exceeding it fails the whole call with "too wide blocks range".
     maxLogBlockRange: 100000,
     api_keys: {
-        alchemy: process.env.GATSBY_ALCHEMY_API_KEY,
+        // Ethereum mainnet, for ENS reverse lookups only (src/common/provider.js).
+        // GATSBY_ values are compiled into the public bundle, so this must be a
+        // domain-restricted key, never a secret.
         alchemy_mainnet: process.env.GATSBY_ALCHEMY_MAINNET_API_KEY,
-        infura: {
-            project_id: "0781eeb9a06842599941233024a4218c",
-        },
     },
     ens: {
         cacheExpiration: 1000 * 60 * 2, // 2 minutes

@@ -1,6 +1,6 @@
 import {
     buildVinuChainRoutes,
-    WANBRIDGE_API_BASE,
+    fetchWanBridgeJson,
     VINUCHAIN_CHAIN_TYPE,
 } from "../common/wanbridge";
 import { applyApiRateLimit, sendJson } from "../common/apiRateLimit";
@@ -9,11 +9,6 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 
 let cachedCatalog = null;
 
-async function fetchJson(path) {
-    const response = await fetch(`${WANBRIDGE_API_BASE}/${path}`);
-    return await response.json();
-}
-
 async function getVinuChainCatalog() {
     const now = Date.now();
     if (cachedCatalog && cachedCatalog.expiresAt > now) {
@@ -21,22 +16,25 @@ async function getVinuChainCatalog() {
     }
 
     const [hashResponse, pairsResponse] = await Promise.all([
-        fetchJson("tokenPairsHash"),
-        fetchJson("tokenPairs"),
+        fetchWanBridgeJson("tokenPairsHash"),
+        fetchWanBridgeJson("tokenPairs"),
     ]);
 
-    if (!pairsResponse.success) {
-        throw new Error(pairsResponse.error || "WanBridge tokenPairs failed");
+    if (!pairsResponse.ok || !pairsResponse.payload.success) {
+        throw new Error("WanBridge tokenPairs failed");
     }
 
-    const pairs = pairsResponse.data.filter(
+    const pairs = pairsResponse.payload.data.filter(
         (pair) =>
             pair.fromChain?.chainType === VINUCHAIN_CHAIN_TYPE ||
             pair.toChain?.chainType === VINUCHAIN_CHAIN_TYPE
     );
 
     const value = {
-        hash: hashResponse.success ? hashResponse.data : null,
+        hash:
+            hashResponse.ok && hashResponse.payload.success
+                ? hashResponse.payload.data
+                : null,
         fetchedAt: new Date().toISOString(),
         pairs,
         routes: buildVinuChainRoutes(pairs),
@@ -76,8 +74,10 @@ export default async function handler(req, res) {
         );
         return sendJson(res, 200, catalog);
     } catch (error) {
+        // Fixed text: the caught error can carry the upstream body, a DNS name
+        // or an AbortError, none of which the browser needs.
         return sendJson(res, 502, {
-            message: error.message || "Could not load WanBridge pairs",
+            message: "Could not load WanBridge pairs",
         });
     }
 }

@@ -100,9 +100,22 @@ export function applyApiRateLimit(req, res, options) {
     return activeBucket.count <= options.limit;
 }
 
+/**
+ * The request body as an object, or null if it is not parseable.
+ *
+ * Returning null rather than throwing is the point: a host that hands the
+ * handler a raw string body puts the parse before any try block a caller has
+ * opened, so an unguarded JSON.parse turns a malformed request into a 500 from
+ * outside the handler instead of the 400 every other bad input gets. Callers
+ * must treat null as a 400.
+ */
 export function parseBody(req) {
     if (typeof req.body === "string") {
-        return JSON.parse(req.body);
+        try {
+            return JSON.parse(req.body);
+        } catch (error) {
+            return null;
+        }
     }
 
     return req.body || {};

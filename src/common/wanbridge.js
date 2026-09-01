@@ -7,6 +7,39 @@ export const WANBRIDGE_PARTNER = "VinuNFT";
 export const VINUCHAIN_CHAIN_TYPE = "VC";
 export const VINUCHAIN_TOKEN_PRIORITY = ["USDT", "VINU", "VC"];
 
+const WANBRIDGE_TIMEOUT_MS = 10000;
+const WANBRIDGE_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+
+// Every proxy reaches the same third-party API, so the bound belongs here once
+// rather than three times. Without it a hung or hostile upstream holds the
+// serverless invocation to the platform ceiling and buffers an unbounded body.
+// ponytail: a chunked response with no content-length is still fully buffered
+// by text() before the length check; stream it if this upstream goes chunked.
+export async function fetchWanBridgeJson(path, init = {}) {
+    const response = await fetch(`${WANBRIDGE_API_BASE}/${path}`, {
+        ...init,
+        signal: AbortSignal.timeout(WANBRIDGE_TIMEOUT_MS),
+    });
+
+    if (
+        Number(response.headers.get("content-length")) >
+        WANBRIDGE_MAX_RESPONSE_BYTES
+    ) {
+        throw new Error("WanBridge response too large");
+    }
+
+    const body = await response.text();
+    if (body.length > WANBRIDGE_MAX_RESPONSE_BYTES) {
+        throw new Error("WanBridge response too large");
+    }
+
+    return {
+        ok: response.ok,
+        status: response.status,
+        payload: JSON.parse(body),
+    };
+}
+
 const BRIDGE_NATIVE_FEE_DECIMALS = {
     BTC: 8,
     SOL: 9,
@@ -144,11 +177,42 @@ export function toHexChainId(chainId) {
     return `0x${Number(chainId).toString(16)}`;
 }
 
+// The catalog is a third-party feed and its `decimals` is what scales the raw
+// amount the wallet ends up signing, so a wrong one is a wrong transfer, not a
+// wrong label. src/config.js is ground truth for the VinuChain tokens this app
+// already knows; a pair that disagrees, or that carries a nonsensical decimals
+// at all, is dropped rather than mis-scaled.
+function tokenDecimalsAreUsable(token) {
+    const decimals = Number(token?.decimals);
+    return Number.isInteger(decimals) && decimals >= 0 && decimals <= 36;
+}
+
+function vinuChainDecimalsMatchConfig(token) {
+    const address = String(token?.address || "").toLowerCase();
+    const configured = Object.values(config.tokens).find(
+        (entry) => entry.address.toLowerCase() === address
+    );
+    return !configured || Number(token.decimals) === configured.decimals;
+}
+
 export function buildVinuChainRoutes(pairs) {
     const routes = pairs.flatMap((pair) => {
         if (
             pair.fromChain?.chainType !== VINUCHAIN_CHAIN_TYPE &&
             pair.toChain?.chainType !== VINUCHAIN_CHAIN_TYPE
+        ) {
+            return [];
+        }
+
+        const vcToken =
+            pair.fromChain.chainType === VINUCHAIN_CHAIN_TYPE
+                ? pair.fromToken
+                : pair.toToken;
+
+        if (
+            !tokenDecimalsAreUsable(pair.fromToken) ||
+            !tokenDecimalsAreUsable(pair.toToken) ||
+            !vinuChainDecimalsMatchConfig(vcToken)
         ) {
             return [];
         }
@@ -319,21 +383,81 @@ export function quotaIsUnavailable(quota) {
     return ZERO_QUOTA_RE.test(String(quota.maxQuota || "0"));
 }
 
-export function feeLabel(fee, decimals) {
+// `rawAmount` is the transfer size in the from-token's raw units, or null when
+// nothing has been entered yet.
+export function feeLabel(fee, decimals, symbol, rawAmount = null) {
     if (!fee) {
         return "Unavailable";
     }
 
+    const amount = (raw) => {
+        const text = formatRawTokenAmount(raw, decimals, {
+            compact: true,
+            maxDecimals: 6,
+        });
+        return symbol && text !== "Unavailable" ? `${text} ${symbol}` : text;
+    };
+
     if (fee.isPercent) {
-        const value = toDecimal(fee.value || "0");
-        if (!value) {
+        const rate = toDecimal(fee.value || "0");
+        if (!rate) {
             return "Unavailable";
         }
-        return `${formatDecimal(value.times(100), 4)}%`;
+
+        // WanBridge denominates minFeeLimit/maxFeeLimit in the from-token's raw
+        // units (verified on pair 536 in both directions: 200000 at 6 decimals
+        // out of VinuChain, 200000000000000000 at 18 into it — the same 0.2
+        // USDT). The rate alone understates every transfer under the floor, and
+        // the floor is where most of them sit: on VC->BNB USDT it is 0.2 on a
+        // 0.4 minimum transfer, so the honest number is 125x the percentage.
+        const floor = fee.minFeeLimit ? toDecimal(fee.minFeeLimit) : null;
+        const ceiling = fee.maxFeeLimit ? toDecimal(fee.maxFeeLimit) : null;
+
+        if (rawAmount) {
+            let charged = new Decimal(rawAmount).times(rate);
+            if (floor && charged.lessThan(floor)) {
+                charged = floor;
+            }
+            if (ceiling && charged.greaterThan(ceiling)) {
+                charged = ceiling;
+            }
+            return amount(charged.toDecimalPlaces(0, Decimal.ROUND_DOWN));
+        }
+
+        const percent = `${formatDecimal(rate.times(100), 4)}%`;
+        const band = [
+            floor ? `min ${amount(floor)}` : null,
+            ceiling ? `max ${amount(ceiling)}` : null,
+        ].filter(Boolean);
+        return band.length ? `${percent} (${band.join(", ")})` : percent;
     }
 
-    return formatRawTokenAmount(fee.value, decimals, {
-        compact: true,
-        maxDecimals: 6,
-    });
+    return amount(fee.value);
+}
+
+// The token, the spender and the call target in a WanBridge createTx2 response
+// are all chosen by a third party, but the route the user picked is local
+// ground truth — so the token being approved can be checked against it before
+// anything reaches a wallet prompt. The target checks stay inert until
+// WANBRIDGE_CONTRACTS is populated; the token check bites today.
+export function validateBridgeTx(route, txData) {
+    const approveToken = txData?.approveCheck?.token;
+    if (
+        approveToken &&
+        String(approveToken).toLowerCase() !==
+            String(route.fromToken.address).toLowerCase()
+    ) {
+        return `WanBridge asked to approve ${approveToken}, which is not the ${route.fromToken.symbol} token this route sends (${route.fromToken.address}). Aborting for safety.`;
+    }
+
+    for (const target of [txData?.tx?.to, txData?.approveCheck?.to]) {
+        if (
+            target &&
+            isKnownBridgeTarget(route.fromChain.chainType, target) === false
+        ) {
+            return `${target} is not a known WanBridge contract on ${route.fromChain.chainName}. Aborting for safety.`;
+        }
+    }
+
+    return null;
 }

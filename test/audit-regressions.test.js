@@ -212,9 +212,39 @@ test("HTML sanitization does not allow style or data URL expansion", () => {
             `${viewer} must not build its own pipeline`
         );
         assert.equal(source.includes("common/sanitize"), true);
-        // Sanitised output is still rendered into a sandboxed iframe.
-        assert.equal(source.includes("sandbox"), true);
+        // Sanitised output is still rendered into a sandboxed iframe. The
+        // value matters: a bare `sandbox` is `sandbox={true}` in JSX, which
+        // React drops for a non-boolean attribute, so the frame shipped with
+        // no sandbox at all. test/nftDetail.test.mjs asserts the attribute
+        // that actually reaches the DOM; this only stops the source from
+        // regressing to a form that silently emits nothing.
+        assert.equal(source.includes('sandbox="allow-same-origin"'), true);
     }
+});
+
+test("no unread third-party account id ships in the client config", () => {
+    // `infura.project_id` was a hardcoded account identifier with no reader
+    // anywhere in the repo, inlined verbatim into the browser bundle.
+    // tsx transpiles src/config.js to CommonJS, so the default export is
+    // where the object lands (same idiom as the .mjs suites).
+    const configModule = require("../src/config");
+    const { api_keys: apiKeys } = configModule.default || configModule;
+    assert.equal(
+        "infura" in apiKeys,
+        false,
+        "no unread third-party account id may ship in the client config"
+    );
+    for (const [name, value] of Object.entries(apiKeys)) {
+        assert.equal(
+            typeof value === "string" && value.length > 0,
+            false,
+            `${name} must come from the environment, not a literal in config.js`
+        );
+    }
+
+    // GATSBY_ values are compiled into the bundle. Only PINATA_API_JWT carried
+    // a warning, so the Alchemy keys read like secrets an operator must guard.
+    assert.match(read(".env.example"), /GATSBY_.*public browser bundle/is);
 });
 
 test("marketplace discovery reads the index and stays linked", () => {

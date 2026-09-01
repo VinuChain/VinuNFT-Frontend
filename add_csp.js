@@ -111,12 +111,24 @@ const CONNECT_SRC_ORIGINS = [
     "https://mainnet.base.org", // Base RPC
     "https://mainnet.optimism.io", // OP Mainnet RPC
     "https://gwan-ssl.wandevs.org:56891", // Wanchain RPC
+    // ENS reverse lookup. ethers 5's AlchemyProvider resolves mainnet to this
+    // host; ethers 6 moved to eth-mainnet.g.alchemy.com, so the deferred v6
+    // migration has to change this entry or every ENS name stops resolving.
+    "https://eth-mainnet.alchemyapi.io",
 ];
+
+// The whole `content=` value of the CSP meta tag, whether it still holds the
+// `script-src 'self'` seed from Wrapper.js or an already-expanded policy from
+// an earlier run. Matching only the seed made this script silently do nothing
+// on a warm build: Gatsby reuses the page HTML it already wrote (seed gone)
+// while re-emitting the bundle, so `___chunkMapping` and
+// `___webpackCompilationHash` changed underneath a policy that still pinned the
+// previous build's hashes and every page shipped unable to boot itself.
+const CSP_META_CONTENT =
+    /(<meta[^>]*http-equiv="Content-Security-Policy"[^>]*content=")([^"]*)(")/i;
 
 function addHashesToHtmlFile(inputFilePath, hashes) {
     // Add the hashes to the file's Content Security tag
-
-    const template = "script-src &#x27;self&#x27;";
 
     // Read the file
     let fileContents = fs.readFileSync(inputFilePath, { encoding: "utf-8" });
@@ -135,15 +147,33 @@ function addHashesToHtmlFile(inputFilePath, hashes) {
         `frame-ancestors 'self'; ` +
         // blob: is required: token images are fetched with a byte cap and
         // handed to <img> via URL.createObjectURL, so without it every image
-        // NFT is blocked by the policy.
-        `img-src 'self' data: blob: https:; ` +
+        // NFT is blocked by the policy. The gateway origins replace a bare
+        // `https:`, which let a minted NFT body reference an image on any host
+        // and beacon every viewer's IP and User-Agent to the minter — the same
+        // threat src/common/ipfs.js closed for the media path. Deliberate
+        // content-policy change: a markdown NFT pointing at an arbitrary https
+        // image no longer loads it.
+        `img-src 'self' data: blob: ${ipfsGatewayOrigins().join(" ")}; ` +
         `style-src 'self' 'unsafe-inline'; ` +
         `frame-src 'self'; ` +
+        // No <form> in this app posts anywhere, and form-action does not
+        // inherit from default-src, so without it injected markup could still
+        // submit somewhere off-origin.
+        `form-action 'none'; ` +
         `connect-src ${connectSrc}; ` +
         `script-src 'self' ${newHashes}`;
 
-    // Replace the CSP tag
-    fileContents = fileContents.replace(template, newCsp);
+    // Replace the CSP tag. Gatsby also emits slice fragments under
+    // public/_gatsby/ that are stitched into pages and carry no meta tag of
+    // their own; they are not documents, so they are skipped rather than
+    // treated as a broken page.
+    if (!CSP_META_CONTENT.test(fileContents)) {
+        return false;
+    }
+    fileContents = fileContents.replace(
+        CSP_META_CONTENT,
+        (_match, before, _old, after) => `${before}${newCsp}${after}`
+    );
 
     //console.log(fileContents.slice(0, 1000)); // Just to check the changes before writing the file
 
@@ -151,15 +181,23 @@ function addHashesToHtmlFile(inputFilePath, hashes) {
 
     // Write the file back
     fs.writeFileSync(inputFilePath, fileContents, { encoding: "utf-8" });
+    return true;
 }
 
 // The list of all hashes for inserting later via `gatsby-plugin-csp` settings
 let scriptHashes = [];
 // Iterates through the list of HTML files to calculate all hashes
 // Note, I omitted the body of `getHtmlFiles()` method
+let pagesWritten = 0;
 getHtmlFiles(TARGET_FOLDER).forEach((file) => {
     const hashes = getShaFromTags(file, "script");
-    addHashesToHtmlFile(file, hashes);
+    if (addHashesToHtmlFile(file, hashes)) pagesWritten += 1;
 });
 
-console.log("Done!");
+if (pagesWritten === 0) {
+    throw new Error(
+        "add_csp: no page carried a Content-Security-Policy meta tag — the build shipped no policy at all"
+    );
+}
+
+console.log(`Done! (${pagesWritten} pages)`);

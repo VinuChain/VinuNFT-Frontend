@@ -38,8 +38,10 @@ Copy `.env.example` into `.env.development` or `.env.production` as needed.
 
 Browser-safe variables:
 
-- `GATSBY_ALCHEMY_API_KEY`
-- `GATSBY_ALCHEMY_MAINNET_API_KEY`
+- `GATSBY_ALCHEMY_MAINNET_API_KEY`, Ethereum mainnet, ENS reverse lookups only.
+  Left empty, ethers 5 falls back to its shared public demo key and ENS names
+  stop resolving under real traffic. `https://eth-mainnet.alchemyapi.io` is in
+  the CSP `connect-src` for this; an ethers 6 upgrade moves that host.
 - `GATSBY_IPFS_UPLOAD_ENDPOINT`, default `/api/upload-ipfs`
 
 Server-only variables:
@@ -97,7 +99,8 @@ See `docs/marketplace-discovery.md`, `docs/address-profiles.md`, and `docs/vinus
 yarn verify:ci
 ```
 
-`yarn verify:ci` matches the GitHub Actions quality gate:
+`yarn verify:ci` runs the machine-independent part of the GitHub Actions quality
+gate:
 
 ```bash
 yarn lint
@@ -105,6 +108,14 @@ yarn test
 yarn audit:triage
 yarn build
 ```
+
+`.github/workflows/ci.yml` additionally runs `yarn verify:deployed` before the
+build and `yarn verify:csp` then `yarn verify:rendered` after it. Those three
+are not folded into `verify:ci`: two need network (a VinuChain RPC, a Chromium
+download) and `verify:rendered` must run after `yarn build` against the artifact
+it just produced. **`yarn verify:csp` is not optional after a build** — it is
+the only gate that catches a policy that no longer matches the bundle it ships
+with.
 
 `yarn test` runs focused audit-regression checks for the Pinata boundary, public upload docs, marketplace bounds, address profiles, WanBridge routing/proxy validation, removed PHP route, purchase-history token mapping, provider listener cleanup, buy-modal balance rendering, config normalization, bounded event scans, markdown rich-text enablement, and HTML sanitization settings.
 
