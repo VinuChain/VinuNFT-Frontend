@@ -84,11 +84,7 @@ const config = {
     // hosts the app will fetch token media from at all: an NFT URI is
     // attacker-controlled (ImageNFT.mint accepts any string), so fetching
     // arbitrary hosts would turn every viewer's browser into a probe.
-    ipfsGateways: [
-        "https://gateway.pinata.cloud/ipfs",
-        "https://ipfs.io/ipfs",
-        "https://cloudflare-ipfs.com/ipfs",
-    ],
+    ipfsGateways: ["https://gateway.pinata.cloud/ipfs", "https://ipfs.io/ipfs"],
     // Caps on fetching token media: an unbounded response can exhaust the tab.
     mediaFetchTimeoutMs: 10000,
     maxMediaFetchBytes: 10 * 1024 * 1024,

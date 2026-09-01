@@ -21,7 +21,10 @@ jobs:
       - run: yarn audit:triage
       - name: Verify deployed contract truth (addresses, first blocks, ABI/deployment agreement)
         run: yarn verify:deployed
-      - run: yarn build
+      # Timed, and capped well above the ~90s a clean build takes here: this
+      # catches a build that has structurally blown up, not a slow runner.
+      - name: Build (fails past a 10 minute ceiling)
+        run: time timeout 600 yarn build
       # Must run after the build: the policy is injected into public/ by
       # add_csp.js, so before it there is nothing to check and the CSP tests
       # skip themselves.

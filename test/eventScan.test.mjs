@@ -254,3 +254,93 @@ test("queryFilterChunked: a failed wider pass does not poison an earlier range",
     const events = await queryFilterChunked(c, { topics: [SIG_A] }, 0, 100000);
     assert.deepEqual(events.map((e) => e.blockNumber), [10]);
 });
+
+// --- reorg safety, retry and removed-log handling ---------------------------
+
+test("queryFilterChunked: a delta scan re-reads the recent tail, so an orphaned log is dropped", async () => {
+    _resetLogCache();
+    // `logs` is the contract's live log set; mutating it simulates the node
+    // answering differently after a reorg replaced the tip.
+    const logs = [log(299999, SIG_A, 0)];
+    const c = fakeContract(300000, logs);
+    const first = await queryFilterChunked(c, { topics: [SIG_A] }, 0, 300000);
+    assert.deepEqual(first.map((e) => e.transactionHash), ["0x299999"]);
+
+    // Reorg: the block at 299999 is rebuilt and carries a different log.
+    logs.length = 0;
+    logs.push({ ...log(299999, SIG_A, 0), transactionHash: "0xreplacement" });
+
+    // The head MUST advance past the cached toBlock, or allContractEvents
+    // early-returns the cached promise and this passes for the wrong reason.
+    const second = await queryFilterChunked(c, { topics: [SIG_A] }, 0, 400000);
+    assert.deepEqual(
+        second.map((e) => e.transactionHash),
+        ["0xreplacement"],
+        "an orphaned log must not survive the delta concat"
+    );
+});
+
+test("queryFilterChunked: the rescan window never re-reads below fromBlock", async () => {
+    _resetLogCache();
+    const c = fakeContract(300000, [log(250000, SIG_A)]);
+    await queryFilterChunked(c, { topics: [SIG_A] }, 250000, 300000);
+    await queryFilterChunked(c, { topics: [SIG_A] }, 250000, 400000);
+    for (const [from] of c.asked) {
+        assert.ok(from >= 250000, `rescan asked for ${from}, below fromBlock`);
+    }
+});
+
+test("queryFilterChunked: rescanning does not duplicate an unchanged log", async () => {
+    _resetLogCache();
+    const c = fakeContract(300000, [log(299999, SIG_A)]);
+    await queryFilterChunked(c, { topics: [SIG_A] }, 0, 300000);
+    const second = await queryFilterChunked(c, { topics: [SIG_A] }, 0, 400000);
+    assert.equal(second.length, 1, "the rescanned tail must replace, not append");
+});
+
+test("queryFilterChunked: a transiently failing sub-range is retried, not fatal", async () => {
+    _resetLogCache();
+    const c = fakeContract(300000, [log(10, SIG_A), log(250000, SIG_A)]);
+    const real = c.provider.getLogs;
+    let attempts = 0;
+    c.provider.getLogs = async (args) => {
+        if (args.fromBlock === 200002) {
+            attempts++;
+            if (attempts === 1) throw new Error("throttled");
+        }
+        return real(args);
+    };
+
+    const events = await queryFilterChunked(c, { topics: [SIG_A] }, 0, "latest");
+    assert.deepEqual(events.map((e) => e.blockNumber), [10, 250000]);
+    assert.equal(attempts, 2, "the throttled range must be asked for again");
+});
+
+test("queryFilterChunked: a permanently failing sub-range still rejects", async () => {
+    _resetLogCache();
+    const c = fakeContract(300000, [log(10, SIG_A)]);
+    const real = c.provider.getLogs;
+    c.provider.getLogs = async (args) => {
+        if (args.fromBlock === 200002) throw new Error("node unavailable");
+        return real(args);
+    };
+    // Retries must not let an outage be served as a complete history.
+    await assert.rejects(
+        () => queryFilterChunked(c, { topics: [SIG_A] }, 0, "latest"),
+        /node unavailable/
+    );
+});
+
+test("queryFilterChunked: a log flagged removed is skipped (defensive only)", async () => {
+    _resetLogCache();
+    // DEFENSIVE: eth_getLogs on canonical blocks reports removed:false for
+    // every log (checked against all 11 live marketplace logs) — a reverted log
+    // is simply absent. removed:true comes from eth_getFilterChanges, which
+    // this app never calls. This is a guard, not a shipped-defect regression.
+    const c = fakeContract(300000, [
+        { ...log(10, SIG_A), removed: true },
+        log(20, SIG_A),
+    ]);
+    const events = await queryFilterChunked(c, { topics: [SIG_A] }, 0, "latest");
+    assert.deepEqual(events.map((e) => e.blockNumber), [20]);
+});

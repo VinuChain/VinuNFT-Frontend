@@ -1,0 +1,38 @@
+# Drift monitor for state that changes without anyone pushing a commit.
+#
+# CI only runs on pull_request and push, so a pause flip, a fee change, an
+# ownership transfer or a gateway going dark is invisible until somebody
+# happens to open a PR. This runs the two read-only gates that can see those
+# things on a clock instead.
+#
+# Deliberately not a schedule trigger on ci.yml: re-running lint, test, build,
+# Playwright and audit:triage daily against a moving advisory baseline produces
+# the alert fatigue that gets monitors muted.
+#
+# NOT covered here, and not coverable until a production host is named:
+# deployed frontend SHA vs main, production frontend error rate, uptime.
+name: Monitor
+
+on:
+  schedule:
+    # 07:00 UTC daily. Drift that matters (fee, pause, owner) is acted on by a
+    # human, so hourly buys nothing and costs a run every hour.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - run: yarn install --frozen-lockfile
+      - name: Deployed contract state matches scripts/deployed-invariants.json
+        run: yarn verify:deployed
+      # always(): a drifted pin must not hide the gateway result, they are
+      # independent failures.
+      - name: Configured IPFS gateways are reachable
+        if: always()
+        run: node scripts/check-gateways.mjs

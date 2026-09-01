@@ -97,6 +97,48 @@ async function parallelCapped(tasks) {
     return results;
 }
 
+/**
+ * Order two listing rows by price, then by a deterministic identity.
+ *
+ * `row.price` is already decimal-normalised across payment tokens (USDT has 6
+ * decimals, WVC 18), so it is the value to compare — but comparing it with
+ * parseFloat collapses prices that differ below double resolution, e.g.
+ * 1.000000000000000001 and 1.000000000000000002, leaving their relative order
+ * to fetch order. Re-parsing to fixed-point at 18 decimals keeps the
+ * normalisation and restores the precision.
+ *
+ * A price that will not parse sorts last instead of throwing: one listing in an
+ * unknown denomination must not take the whole marketplace page down.
+ */
+export function compareListingRows(left, right) {
+    const leftPrice = fixedPointPrice(left.price);
+    const rightPrice = fixedPointPrice(right.price);
+
+    if (leftPrice === null || rightPrice === null) {
+        if (leftPrice !== rightPrice) {
+            return leftPrice === null ? 1 : -1;
+        }
+    } else if (!leftPrice.eq(rightPrice)) {
+        return leftPrice.lt(rightPrice) ? -1 : 1;
+    }
+
+    // Equal prices need a total order, or two pages of the same result set can
+    // disagree about which row belongs where.
+    return (
+        String(left.nftType).localeCompare(String(right.nftType)) ||
+        left.tokenId - right.tokenId ||
+        left.listingId - right.listingId
+    );
+}
+
+function fixedPointPrice(price) {
+    try {
+        return ethers.utils.parseUnits(String(price), 18);
+    } catch (e) {
+        return null;
+    }
+}
+
 export async function discoverMarketplaceListings(
     readProvider,
     filters = {},
@@ -137,10 +179,11 @@ export async function discoverMarketplaceListings(
 
             // Fetch listingCount for all tokens in this type concurrently.
             const listingCounts = await parallelCapped(
-                tokenIds.map((tokenId) => async () =>
-                    (
-                        await marketplace.listingCount(nftAddress, tokenId)
-                    ).toNumber()
+                tokenIds.map(
+                    (tokenId) => async () =>
+                        (
+                            await marketplace.listingCount(nftAddress, tokenId)
+                        ).toNumber()
                 )
             );
 
@@ -156,8 +199,13 @@ export async function discoverMarketplaceListings(
                         (_, i) => i
                     );
                     return parallelCapped(
-                        listingIds.map((listingId) => async () =>
-                            marketplace.listings(nftAddress, tokenId, listingId)
+                        listingIds.map(
+                            (listingId) => async () =>
+                                marketplace.listings(
+                                    nftAddress,
+                                    tokenId,
+                                    listingId
+                                )
                         )
                     );
                 })
@@ -168,7 +216,11 @@ export async function discoverMarketplaceListings(
             for (let ti = 0; ti < tokenIds.length; ti++) {
                 const tokenId = tokenIds[ti];
                 const listings = perTokenListings[ti];
-                for (let listingId = 0; listingId < listings.length; listingId++) {
+                for (
+                    let listingId = 0;
+                    listingId < listings.length;
+                    listingId++
+                ) {
                     const listing = listings[listingId];
                     const amount = listing.amount.toNumber();
                     const seller = listing.seller;
@@ -216,7 +268,10 @@ export async function discoverMarketplaceListings(
                 listingId: entry.listingId,
                 seller: entry.seller,
                 amount: entry.amount,
-                price: formatTokenAmount(entry.listing.price, entry.paymentToken),
+                price: formatTokenAmount(
+                    entry.listing.price,
+                    entry.paymentToken
+                ),
                 paymentToken: entry.paymentToken,
                 sellerBalance: balances[i],
             }));
@@ -228,9 +283,5 @@ export async function discoverMarketplaceListings(
     const sortDirection = filters.priceSort === "desc" ? -1 : 1;
     return rows
         .filter((row) => rowMatchesFilters(row, filters))
-        .sort(
-            (left, right) =>
-                (parseFloat(left.price) - parseFloat(right.price)) *
-                sortDirection
-        );
+        .sort((left, right) => compareListingRows(left, right) * sortDirection);
 }

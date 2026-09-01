@@ -12,7 +12,10 @@
  *   3. every function in the frontend ABI is callable on the deployed
  *      bytecode, probed with eth_call rather than bytecode string matching,
  *      which produces false negatives;
- *   4. the frontend ABI is compared against the backend artifact ABI when
+ *   4. the mutable state every admin lever can move — pause, platform fee,
+ *      commission account, owner, pending fee change, fee timelock — and the
+ *      deployed bytecode hash still match scripts/deployed-invariants.json;
+ *   5. the frontend ABI is compared against the backend artifact ABI when
  *      --backend <path> is given, so undeployed source drift is reported
  *      explicitly instead of being mistaken for a deployment.
  *
@@ -23,6 +26,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
+import { diffInvariants, loadPins } from "./deployed-invariants.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const argv = process.argv.slice(2);
@@ -53,6 +57,10 @@ const maxLogBlockRange = Number(pick(/maxLogBlockRange:\s*(\d+)/, "maxLogBlockRa
 const ABI_FILE = { text: "TextNFT", marketplace: "Marketplace", image: "ImageNFT" };
 
 const failures = [];
+// Values read below are compared against the committed pin; see
+// scripts/deployed-invariants.mjs for why this costs no extra RPC call.
+const pinned = loadPins();
+const actual = {};
 const notes = [];
 const fail = (m) => failures.push(m);
 
@@ -84,10 +92,15 @@ for (const [name, address] of Object.entries(addresses)) {
         fail(`${name}: '${address}' is not a valid address`);
         continue;
     }
-    if ((await provider.getCode(address)) === "0x") {
+    const code = await provider.getCode(address);
+    if (code === "0x") {
         fail(`${name}: no contract code at ${address} on chain ${chainId}`);
         continue;
     }
+    // Hash rather than store the bytecode: a pin file nobody can read is a pin
+    // file nobody maintains.
+    const state = { codeHash: ethers.utils.keccak256(code), views: {} };
+    actual[name] = state;
 
     const configured = Number(firstBlocks[name]);
     if (!Number.isInteger(configured)) {
@@ -125,7 +138,16 @@ for (const [name, address] of Object.entries(addresses)) {
                (x.stateMutability === "view" || x.stateMutability === "pure")
     )) {
         try {
-            await provider.call({ to: address, data: iface.encodeFunctionData(f.name, []) });
+            const result = await provider.call({
+                to: address,
+                data: iface.encodeFunctionData(f.name, []),
+            });
+            // The answer was previously discarded, which is exactly why state
+            // drift was invisible. Keep it in a JSON-comparable shape.
+            const decoded = iface.decodeFunctionResult(f.name, result);
+            state.views[f.name] = decoded
+                .map((v) => (v?._isBigNumber ? v.toString() : String(v)))
+                .join(",");
         } catch (e) {
             fail(`${name}: frontend ABI declares ${f.name}() but it is absent from the deployed contract at ${address}`);
         }
@@ -155,11 +177,32 @@ for (const [name, address] of Object.entries(addresses)) {
     }
 }
 
+const drift = diffInvariants(actual, pinned);
+if (drift.length) {
+    for (const d of drift) fail(d);
+    fail(
+        "the values above are pinned in scripts/deployed-invariants.json — if an " +
+            "admin action changed them deliberately, update that file in the same " +
+            "change; otherwise treat this as an unauthorised contract state change"
+    );
+}
+
 console.log(`chain ${chainId} via ${rpc}, head ${head}`);
+for (const [name, s] of Object.entries(actual)) {
+    const pins = Object.keys(pinned[name]?.views ?? {});
+    console.log(
+        `monitored ${name}: bytecode hash + ${pins.length} pinned view(s)` +
+            (pins.length ? ` (${pins.join(", ")})` : "")
+    );
+}
 for (const n of notes) console.log(`note: ${n}`);
 if (failures.length) {
     console.error(`\nFAIL (${failures.length}):`);
     for (const f of failures) console.error(`  ${f}`);
     process.exit(1);
 }
-console.log(`\nOK: ${Object.keys(addresses).length} contracts — addresses, first blocks, ABI/deployment agreement verified`);
+console.log(
+    `\nOK: ${Object.keys(addresses).length} contracts — addresses, first blocks, ABI/deployment agreement and pinned live state verified.\n` +
+        "NOT monitored here (needs a host nobody has named yet): deployed frontend SHA, " +
+        "production frontend errors, uptime. IPFS gateway reachability: scripts/check-gateways.mjs."
+);

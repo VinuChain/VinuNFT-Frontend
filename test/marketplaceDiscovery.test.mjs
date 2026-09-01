@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import * as _mod from "../src/common/marketplaceDiscovery.js";
 
 // tsx CJS-interop: named exports land on the .default namespace object
-const { tokenIdsFromLatest, rowMatchesFilters } = _mod.default || _mod;
+const { tokenIdsFromLatest, rowMatchesFilters, compareListingRows } =
+    _mod.default || _mod;
 
 // ---------------------------------------------------------------------------
 // tokenIdsFromLatest
@@ -108,4 +109,60 @@ test("rowMatchesFilters: seller mismatch", () => {
 
 test("rowMatchesFilters: invalid seller address in filter returns false", () => {
     assert.equal(rowMatchesFilters(baseRow, { seller: "not-an-address" }), false);
+});
+
+// ---------------------------------------------------------------------------
+// compareListingRows
+// ---------------------------------------------------------------------------
+
+const priceRow = (price, extra = {}) => ({
+    nftType: "text",
+    tokenId: 1,
+    listingId: 0,
+    price,
+    ...extra,
+});
+
+test("compareListingRows: 18-decimal prices below float resolution still order", () => {
+    // parseFloat collapses these two to the same double, so a float comparator
+    // returns 0 and the stable sort keeps the contradicting input order.
+    const cheap = priceRow("1.000000000000000001", { listingId: 0 });
+    const dear = priceRow("1.000000000000000002", { listingId: 1 });
+    const sorted = [dear, cheap].sort(compareListingRows);
+    assert.deepEqual(
+        sorted.map((r) => r.price),
+        ["1.000000000000000001", "1.000000000000000002"]
+    );
+});
+
+test("compareListingRows: prices are compared across token decimals, not raw units", () => {
+    // 1 USDT (6 decimals) must not outrank 100 WVC (18 decimals); rows carry
+    // the already-normalised decimal string, which is why this holds.
+    const usdt = priceRow("1.0", { paymentToken: "usdt", listingId: 0 });
+    const wvc = priceRow("100.0", { paymentToken: "wvc", listingId: 1 });
+    assert.deepEqual(
+        [wvc, usdt].sort(compareListingRows).map((r) => r.price),
+        ["1.0", "100.0"]
+    );
+});
+
+test("compareListingRows: equal prices fall back to a deterministic key", () => {
+    const a = priceRow("5.0", { nftType: "text", tokenId: 2, listingId: 1 });
+    const b = priceRow("5.0", { nftType: "text", tokenId: 2, listingId: 0 });
+    const c = priceRow("5.0", { nftType: "image", tokenId: 9, listingId: 0 });
+    const key = (r) => `${r.nftType}:${r.tokenId}:${r.listingId}`;
+    // Same rows in any input order must produce the same output order.
+    assert.deepEqual(
+        [a, b, c].sort(compareListingRows).map(key),
+        [c, b, a].sort(compareListingRows).map(key)
+    );
+});
+
+test("compareListingRows: an unparseable price sorts last rather than throwing", () => {
+    const good = priceRow("1.0");
+    const bad = priceRow(null, { listingId: 1 });
+    assert.deepEqual(
+        [bad, good].sort(compareListingRows).map((r) => r.price),
+        ["1.0", null]
+    );
 });

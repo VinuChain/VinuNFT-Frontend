@@ -13,6 +13,44 @@ export const MAX_LOG_BLOCK_RANGE = config.maxLogBlockRange;
 export const SCAN_CONCURRENCY = 8;
 
 /**
+ * How far back a delta scan re-reads blocks it has already cached.
+ *
+ * A later call reuses the cached events and resumes after them, so a log from
+ * a block the chain later orphaned would be served to history, discovery and
+ * profiles for the rest of the session with nothing to displace it. Re-reading
+ * the tail lets the canonical chain's logs replace it.
+ *
+ * ponytail: a reorg deeper than this window is not detected. The cheap
+ * alternative — scanning only up to the `finalized`/`safe` block tag — is
+ * unavailable because this RPC rejects both tags.
+ */
+export const REORG_RESCAN_DEPTH = 128;
+
+/**
+ * Attempts per sub-range before the whole pass fails. A marketplace scan is
+ * ~125 ranges against a public RPC, so one throttled range would otherwise
+ * discard 124 completed ones. The reject-on-final-failure contract is
+ * unchanged: a partial history is still never presented as complete.
+ */
+export const RANGE_ATTEMPTS = 3;
+const RETRY_BACKOFF_MS = 250;
+
+async function getLogsWithRetry(provider, params) {
+    for (let attempt = 1; ; attempt++) {
+        try {
+            return await provider.getLogs(params);
+        } catch (error) {
+            if (attempt >= RANGE_ATTEMPTS) {
+                throw error;
+            }
+            await new Promise((resolve) =>
+                setTimeout(resolve, RETRY_BACKOFF_MS * attempt)
+            );
+        }
+    }
+}
+
+/**
  * Split [fromBlock, toBlock] into inclusive sub-ranges of at most `maxSpan`
  * blocks apart. `maxSpan` is a *difference*, not a count: a span of 100000
  * covers 100001 blocks, which is exactly what the node accepts.
@@ -112,7 +150,13 @@ async function fetchContractEvents(
 ) {
     const address = contract.address;
     const previous = pending ? await pending.promise : [];
-    const scanFrom = pending ? pending.toBlock + 1 : fromBlock;
+    const scanFrom = pending
+        ? Math.max(fromBlock, pending.toBlock + 1 - REORG_RESCAN_DEPTH)
+        : fromBlock;
+    // Everything at or above scanFrom is about to be fetched again; keeping the
+    // cached copies too would both resurrect orphaned logs and double-count the
+    // rescanned ones.
+    const kept = previous.filter((e) => e.blockNumber < scanFrom);
     const ranges = blockRanges(scanFrom, toBlock, maxSpan);
     const fetched = new Array(ranges.length);
 
@@ -120,7 +164,7 @@ async function fetchContractEvents(
         const wave = ranges.slice(i, i + SCAN_CONCURRENCY);
         const settled = await Promise.all(
             wave.map(([from, to]) =>
-                contract.provider.getLogs({
+                getLogsWithRetry(contract.provider, {
                     address,
                     fromBlock: from,
                     toBlock: to,
@@ -134,6 +178,13 @@ async function fetchContractEvents(
 
     const decoded = [];
     for (const log of fetched.flat()) {
+        // Defensive: eth_getLogs on canonical blocks never sets this — a
+        // reverted log is simply absent from the result. It is set by
+        // eth_getFilterChanges, which this app does not use today.
+        if (log.removed) {
+            continue;
+        }
+
         let parsed;
         try {
             parsed = contract.interface.parseLog(log);
@@ -145,7 +196,7 @@ async function fetchContractEvents(
         decoded.push({ ...log, event: parsed.name, args: parsed.args });
     }
 
-    return previous.concat(decoded);
+    return kept.concat(decoded);
 }
 
 /**
