@@ -322,9 +322,13 @@ test("WanBridge port uses VinuNFT proxies and validated transaction creation", (
     assert.equal(model.includes('WANBRIDGE_PARTNER = "VinuNFT"'), true);
     assert.equal(model.includes('VINUCHAIN_CHAIN_TYPE = "VC"'), true);
     assert.equal(model.includes("buildVinuChainRoutes"), true);
-    assert.equal(bridge.includes("/api/wanbridge-token-pairs"), true);
-    assert.equal(bridge.includes("/api/wanbridge-quota-and-fee"), true);
-    assert.equal(bridge.includes("/api/wanbridge-create-tx"), true);
+    // Each bridge call must go through this site's own proxy, never straight to
+    // WanChain. The paths are built by apiRoute so they carry the canonical
+    // trailing slash and skip the deployment's 308.
+    assert.equal(bridge.includes('apiRoute("wanbridge-token-pairs")'), true);
+    assert.equal(bridge.includes('apiRoute("wanbridge-quota-and-fee"'), true);
+    assert.equal(bridge.includes('apiRoute("wanbridge-create-tx")'), true);
+    assert.equal(/fetch\(\s*["'`]https?:\/\//.test(bridge), false);
     assert.equal(bridge.includes("wallet_switchEthereumChain"), true);
     assert.equal(bridge.includes("wallet_addEthereumChain"), true);
     assert.equal(bridge.includes("approveCheck"), true);

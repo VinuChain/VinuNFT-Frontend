@@ -1,3 +1,4 @@
+import { apiRoute } from "./apiRoute";
 /**
  * Ships uncaught browser errors to /api/client-error.
  *
@@ -23,7 +24,7 @@ export function reportClientErrors(target) {
 
         reported += 1;
         sending = true;
-        fetch("/api/client-error", {
+        fetch(apiRoute("client-error"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

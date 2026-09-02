@@ -1,3 +1,5 @@
+import { withTrailingSlash } from "./common/apiRoute";
+
 const config = {
     contractAddresses: {
         v1: {
@@ -115,8 +117,11 @@ const config = {
     // Caps on fetching token media: an unbounded response can exhaust the tab.
     mediaFetchTimeoutMs: 10000,
     maxMediaFetchBytes: 10 * 1024 * 1024,
-    ipfsUploadEndpoint:
-        process.env.GATSBY_IPFS_UPLOAD_ENDPOINT || "/api/upload-ipfs",
+    // Canonical trailing slash: the deployment 308s `/api/x` to `/api/x/`, and
+    // paying that redirect on every upload is a wasted round trip.
+    ipfsUploadEndpoint: withTrailingSlash(
+        process.env.GATSBY_IPFS_UPLOAD_ENDPOINT || "/api/upload-ipfs"
+    ),
     maxIpfsUploadBytes: 10 * 1024 * 1024,
 };
 

@@ -29,6 +29,7 @@ import {
 import "bulma/css/bulma.min.css";
 import "bulma-extensions/dist/css/bulma-extensions.min.css";
 import "../styles/globals.css";
+import { apiRoute } from "../common/apiRoute";
 
 const APPROVE_ABI = [
     "function allowance(address owner, address spender) view returns (uint256)",
@@ -169,7 +170,7 @@ async function fetchQuota(route, signal) {
         symbol: route.symbol,
     });
     const response = await fetch(
-        `/api/wanbridge-quota-and-fee?${params.toString()}`,
+        apiRoute("wanbridge-quota-and-fee", params.toString()),
         { signal, cache: "no-store" }
     );
     const payload = await response.json();
@@ -255,9 +256,12 @@ export default function Bridge({ location }) {
         async function loadCatalog() {
             try {
                 setCatalogError(null);
-                const response = await fetch("/api/wanbridge-token-pairs", {
-                    signal: controller.signal,
-                });
+                const response = await fetch(
+                    apiRoute("wanbridge-token-pairs"),
+                    {
+                        signal: controller.signal,
+                    }
+                );
                 const payload = await response.json();
                 if (!response.ok || responseHasMessage(payload)) {
                     throw new Error(
@@ -504,19 +508,22 @@ export default function Bridge({ location }) {
                 );
             }
 
-            const createResponse = await fetch("/api/wanbridge-create-tx", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    fromChain: selectedRoute.fromChain.chainType,
-                    toChain: selectedRoute.toChain.chainType,
-                    fromToken: selectedRoute.fromToken.address,
-                    toToken: selectedRoute.toToken.address,
-                    fromAccount: walletAddress,
-                    toAccount: destination.trim(),
-                    amount: amount.trim(),
-                }),
-            });
+            const createResponse = await fetch(
+                apiRoute("wanbridge-create-tx"),
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        fromChain: selectedRoute.fromChain.chainType,
+                        toChain: selectedRoute.toChain.chainType,
+                        fromToken: selectedRoute.fromToken.address,
+                        toToken: selectedRoute.toToken.address,
+                        fromAccount: walletAddress,
+                        toAccount: destination.trim(),
+                        amount: amount.trim(),
+                    }),
+                }
+            );
             const createPayload = await createResponse.json();
 
             if (!createResponse.ok || responseHasMessage(createPayload)) {

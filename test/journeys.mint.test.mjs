@@ -70,7 +70,11 @@ async function openMint({ chain = {}, reject = [], uploads = null } = {}) {
         // config.ipfsUploadEndpoint is same-origin, so routeOffline would let
         // it through to the static server and 404. Registered last, because
         // Playwright matches the most recently added handler first.
-        await page.route("**/api/upload-ipfs", (route) => {
+        // A RegExp, not a glob: Playwright's `*` does not cross `/`, so
+        // "**/api/upload-ipfs*" does NOT match the canonical
+        // "/api/upload-ipfs/" the client now requests. Matching both forms
+        // keeps this working if the deployment ever stops redirecting.
+        await page.route(/\/api\/upload-ipfs\/?(\?|$)/, (route) => {
             uploads.count += 1;
             route.fulfill({
                 status: 200,
