@@ -219,6 +219,102 @@ test("requests: connecting a wallet costs a bounded number of calls", { skip: !h
     );
 });
 
+// --- upload: IPFS pinning ---------------------------------------------------
+
+// MEASURED against the LIVE Pinata API, through the real
+// src/api/upload-ipfs.js handler — not a stub, not a client-side timing.
+// Supplied by the operator who ran it, on or before 2026-09-02; the exact run
+// date was not recorded, so it is stated as a bound rather than invented:
+//
+//     payload      round trip   status
+//     1 KB           1951 ms    200
+//     256 KB         2233 ms    200
+//     2 MB           6123 ms    200
+//     metadata       1240 ms    200
+//
+// 4 uploads, 0 errors. The four test objects were unpinned afterwards. The
+// measurement is not repeated here and cannot be: it needs a Pinata credential,
+// which this repository does not have and must never contain.
+//
+// NOT A BUDGET, AND DELIBERATELY NOT GATED. These are third-party wall-clock
+// numbers from a service this project neither hosts nor controls; asserting a
+// ceiling on them would gate Pinata's day, and the file's own rule at the top
+// is to gate counted work and never wall clock. They are recorded so the cost
+// of a mint can be reasoned about at all, which until now it could not.
+//
+// What IS controlled is the COUNT, and the count is what multiplies the numbers
+// above. An image mint is image + metadata:
+//
+//   2 endpoint round trips  — gated in test/journeys.mint.test.mjs, which also
+//                             holds a failed mint to reusing the pinned CIDs
+//   1 Pinata round trip per endpoint call — gated below
+//
+// So a typical image mint spends ~1.2 s + ~2.2 s = ~3.4 s in Pinata, and a 2 MB
+// image ~6.1 s + ~1.2 s = ~7.4 s. The 6.1 s single call is the figure that has
+// to fit inside the host's per-invocation function duration limit, because the
+// two calls are two separate invocations.
+
+const UPLOAD_ACTION = { file: "mint-image", json: "mint-metadata" };
+
+test("upload: one accepted upload costs exactly one Pinata round trip", async () => {
+    const { ethers } = await import("ethers");
+    const { default: handler } = await import("../src/api/upload-ipfs.js");
+    const { createUploadMessage, uploadPayloadDigest } = await import(
+        "../src/common/uploadIntent.js"
+    );
+
+    const wallet = ethers.Wallet.createRandom();
+    process.env.PINATA_API_JWT = "test-only-placeholder-not-a-credential";
+    process.env.PINATA_ALLOWED_UPLOAD_ADDRESSES = wallet.address;
+
+    const payload = { type: "json", metadata: { name: "Perf" } };
+    const issuedAt = new Date().toISOString();
+    const auth = {
+        address: wallet.address,
+        issuedAt,
+        signature: await wallet.signMessage(
+            createUploadMessage({
+                address: ethers.utils.getAddress(wallet.address),
+                issuedAt,
+                chainId: 207,
+                action: UPLOAD_ACTION[payload.type],
+                digest: uploadPayloadDigest(payload),
+            })
+        ),
+    };
+
+    const realFetch = globalThis.fetch;
+    const pinataCalls = [];
+    globalThis.fetch = async (url, init) => {
+        pinataCalls.push(String(url));
+        return { ok: true, status: 200, text: async () => '{"IpfsHash":"QmPerf"}' };
+    };
+
+    const res = {
+        statusCode: null,
+        status(code) { this.statusCode = code; return this; },
+        setHeader() {},
+        send(body) { this.body = body; return this; },
+    };
+    const realInfo = console.info;
+    console.info = () => {};
+    try {
+        await handler(
+            { method: "POST", headers: {}, socket: { remoteAddress: "203.0.113.9" }, body: { ...payload, auth } },
+            res
+        );
+    } finally {
+        globalThis.fetch = realFetch;
+        console.info = realInfo;
+    }
+
+    assert.equal(res.statusCode, 200, `the upload was rejected, so this counted nothing: ${res.body}`);
+    // The budget. Each of these costs 1.2-6.1 s of somebody else's latency, so
+    // a handler that retried, or pinned twice for redundancy, would silently
+    // double the slowest step of a mint with nothing to notice it.
+    assert.deepEqual(pinataCalls, ["https://api.pinata.cloud/pinning/pinJSONToIPFS"]);
+});
+
 // --- upload validation ------------------------------------------------------
 
 test("upload validation inspects headers rather than decoding", async () => {

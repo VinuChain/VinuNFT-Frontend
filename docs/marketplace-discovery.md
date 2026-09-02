@@ -109,6 +109,14 @@ fixture at head 14724734:
   caches each contract's decoded pass while creators, settlements and formats
   are resolved once and kept.
 
+The 100000-block range is bought by the `address` filter. Measured 2026-09-02
+on chain 207 and chain 206 alike, the node caps an `eth_getLogs` carrying
+neither `address` nor `topics` at 100 blocks, and one carrying either at
+100000. The limit is a property of the query, not of the network — a scan that
+stopped filtering by contract would still be correct and would cost 125,000
+ranges instead of 125. `scripts/verify-deployed-truth.mjs` probes both
+boundaries against the live node.
+
 Every one of these is O(sales) or O(listed tokens), not O(blocks): they scale
 with what the marketplace did, and the `ponytail:` comments in `indexLoader.js`
 name the point at which each wants a multicall or an indexed receipt instead.

@@ -9,12 +9,23 @@ const {
     topicsMatch,
     _resetLogCache,
     MAX_LOG_BLOCK_RANGE,
+    MAX_UNFILTERED_LOG_BLOCK_RANGE,
     SCAN_CONCURRENCY,
 } = _mod.default || _mod;
 
-// Verified against VinuChain: the node rejects eth_getLogs when
-// toBlock - fromBlock > 100000 ("too wide blocks range, the limit is 100000").
+// Measured 2026-09-02 against BOTH VinuChain RPCs — https://rpc.vinuchain.org
+// (chain 207) and https://vinufoundation-rpc.com (chain 206). They answer
+// identically, so neither number is per-network. The node picks the limit from
+// the SHAPE of the filter:
+//
+//   address and/or topics present -> toBlock - fromBlock <= 100000
+//   neither present               -> toBlock - fromBlock <= 100
+//
+// Both boundaries were probed at limit and limit+1 on both chains, with
+// non-empty results on the accepting side (393 logs testnet, 222 mainnet), so
+// this is the node's rule and not an empty-result short circuit.
 const NODE_LIMIT = 100000;
+const UNFILTERED_NODE_LIMIT = 100;
 
 // Real deployment truth, confirmed via each contract's creation transaction.
 const MARKETPLACE_FIRST_BLOCK = 2232125;
@@ -22,6 +33,14 @@ const HEAD_AT_AUDIT = 14719796;
 
 test("MAX_LOG_BLOCK_RANGE matches the limit the node actually enforces", () => {
     assert.equal(MAX_LOG_BLOCK_RANGE, NODE_LIMIT);
+});
+
+test("the unfiltered limit is recorded, and is 1000x smaller", () => {
+    assert.equal(MAX_UNFILTERED_LOG_BLOCK_RANGE, UNFILTERED_NODE_LIMIT);
+    assert.ok(
+        MAX_LOG_BLOCK_RANGE / MAX_UNFILTERED_LOG_BLOCK_RANGE === 1000,
+        "the gap between the two limits is what makes the address filter load-bearing"
+    );
 });
 
 test("blockRanges: no range exceeds the node limit across the real scan span", () => {
@@ -99,12 +118,22 @@ test("topicsMatch: a filter deeper than the log's topics does not match", () => 
 const SIG_A = "0x" + "a".repeat(64);
 const SIG_B = "0x" + "b".repeat(64);
 
-/** Stands in for an ethers Contract, rejecting over-wide ranges like the node. */
+/**
+ * Stands in for an ethers Contract, rejecting over-wide ranges like the node.
+ *
+ * The fake applies BOTH measured limits, keyed on the filter shape exactly as
+ * the node is: a request with no address and no topics is capped at 100. That
+ * is what gives `requests` below its teeth — a scan that stopped filtering by
+ * address would still be correct, just 1000x more requests, and no assertion
+ * about ranges or results would notice.
+ */
 function fakeContract(head, logs = [], address = "0xCafe") {
     const asked = [];
+    const requests = [];
     return {
         address,
         asked,
+        requests,
         interface: {
             parseLog: (log) => {
                 if (log.topics[0] === SIG_A) return { name: "Alpha", args: ["a"] };
@@ -114,10 +143,18 @@ function fakeContract(head, logs = [], address = "0xCafe") {
         },
         provider: {
             getBlockNumber: async () => head,
-            getLogs: async ({ fromBlock, toBlock }) => {
+            getLogs: async (params) => {
+                const { fromBlock, toBlock } = params;
                 asked.push([fromBlock, toBlock]);
-                if (toBlock - fromBlock > NODE_LIMIT) {
-                    throw new Error("too wide blocks range, the limit is 100000");
+                requests.push(params);
+                const filtered =
+                    Boolean(params.address) ||
+                    (params.topics && params.topics.length > 0);
+                const limit = filtered ? NODE_LIMIT : UNFILTERED_NODE_LIMIT;
+                if (toBlock - fromBlock > limit) {
+                    throw new Error(
+                        `too wide blocks range, the limit is ${limit}`
+                    );
                 }
                 return logs.filter(
                     (l) => l.blockNumber >= fromBlock && l.blockNumber <= toBlock
@@ -133,6 +170,22 @@ const log = (blockNumber, topic, logIndex = 0) => ({
     logIndex,
     transactionHash: `0x${blockNumber}`,
     topics: [topic],
+});
+
+test("queryFilterChunked: every request filters by contract address", async () => {
+    _resetLogCache();
+    const c = fakeContract(HEAD_AT_AUDIT);
+    await queryFilterChunked(c, { topics: [SIG_A] }, MARKETPLACE_FIRST_BLOCK, "latest");
+
+    assert.ok(c.requests.length > 100, "a 12.5M block span must issue many requests");
+    for (const params of c.requests) {
+        assert.equal(
+            params.address,
+            c.address,
+            `a request for ${params.fromBlock}..${params.toBlock} carried no address filter, ` +
+                `which drops the node's range limit from ${NODE_LIMIT} to ${UNFILTERED_NODE_LIMIT}`
+        );
+    }
 });
 
 test("queryFilterChunked: never asks the node for an over-wide range", async () => {

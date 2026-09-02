@@ -50,9 +50,16 @@ const section = (name) => {
 
 const addresses = section("contractAddresses");
 const firstBlocks = section("firstBlocks");
-const rpc = pick(/rpc:\s*"([^"]+)"/, "rpc");
+// Anchored to the top-level key. An unanchored /rpc:/ matched the first `rpc:`
+// anywhere in the file, and the moment config.js recorded the testnet's RPC
+// inside `networks` this gate silently started verifying chain 206's contracts
+// against chain 207's addresses.
+const rpc = pick(/^ {4}rpc:\s*"([^"]+)"/m, "rpc");
 const chainId = Number(pick(/main:\s*\{[\s\S]*?chainId:\s*(\d+)/, "chainId"));
 const maxLogBlockRange = Number(pick(/maxLogBlockRange:\s*(\d+)/, "maxLogBlockRange"));
+const maxUnfilteredLogBlockRange = Number(
+    pick(/maxUnfilteredLogBlockRange:\s*(\d+)/, "maxUnfilteredLogBlockRange")
+);
 
 const ABI_FILE = { text: "TextNFT", marketplace: "Marketplace", image: "ImageNFT" };
 
@@ -85,6 +92,29 @@ try {
     await provider.getLogs({ fromBlock: probeFrom, toBlock: head, address: addresses.marketplace });
 } catch (e) {
     fail(`config.maxLogBlockRange=${maxLogBlockRange} is too wide for ${rpc}: ${e.shortMessage || e.message}`);
+}
+
+// The 100000 above is bought by the address filter. An unfiltered request gets
+// 100 — a 1000x cliff, and the reason config.js says the filter is
+// load-bearing. Probed here rather than only asserted offline, because it is
+// the node's rule and the node is free to change it.
+try {
+    await provider.getLogs({ fromBlock: head - maxUnfilteredLogBlockRange, toBlock: head });
+} catch (e) {
+    fail(
+        `config.maxUnfilteredLogBlockRange=${maxUnfilteredLogBlockRange} is too wide for an unfiltered ` +
+            `eth_getLogs on ${rpc}: ${e.shortMessage || e.message}`
+    );
+}
+try {
+    await provider.getLogs({ fromBlock: head - maxUnfilteredLogBlockRange - 1, toBlock: head });
+    fail(
+        `${rpc} accepted an unfiltered eth_getLogs spanning ${maxUnfilteredLogBlockRange + 1}; ` +
+            `config.maxUnfilteredLogBlockRange=${maxUnfilteredLogBlockRange} understates it, and the ` +
+            `comment in config.js claiming the address filter is load-bearing is no longer true`
+    );
+} catch {
+    /* expected: unfiltered requests really are capped far below the filtered limit */
 }
 
 for (const [name, address] of Object.entries(addresses)) {
@@ -203,6 +233,7 @@ if (failures.length) {
 }
 console.log(
     `\nOK: ${Object.keys(addresses).length} contracts — addresses, first blocks, ABI/deployment agreement and pinned live state verified.\n` +
-        "NOT monitored here (needs a host nobody has named yet): deployed frontend SHA, " +
-        "production frontend errors, uptime. IPFS gateway reachability: scripts/check-gateways.mjs."
+        "NOT monitored here: deployed frontend SHA and production uptime (scripts/check-production.mjs), " +
+        "production frontend errors (posted to /api/client-error, readable only in the Vercel runtime log), " +
+        "IPFS gateway reachability (scripts/check-gateways.mjs)."
 );

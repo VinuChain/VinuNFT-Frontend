@@ -6,7 +6,11 @@ import {
 import { sniffImage } from "../common/imageSniff";
 // One parseBody, not a private copy: the copy here was unguarded and safe only
 // because its call site happens to sit inside the handler's try.
-import { parseBody } from "../common/apiRateLimit";
+import { clientKey, parseBody } from "../common/apiRateLimit";
+import {
+    consumeRateLimit,
+    RateLimitStoreError,
+} from "../common/uploadRateLimit";
 
 const PINATA_PIN_FILE_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";
 const PINATA_PIN_JSON_URL = "https://api.pinata.cloud/pinning/pinJSONToIPFS";
@@ -54,11 +58,6 @@ const ALLOWED_MEDIA_TYPES = (
 const MAX_IMAGE_PIXELS = Number(
     envValue("PINATA_MAX_IMAGE_PIXELS") || 40000000
 );
-
-// ponytail: process-memory rate limit, resets on cold start and is not shared
-// between instances. Documented as a burst guard, not distributed abuse
-// control; move to Redis/edge counters before removing the upload allowlist.
-const uploadRateLimit = new Map();
 
 export const config = {
     bodyParser: {
@@ -163,44 +162,45 @@ function assertPinataJwt() {
     }
 }
 
-function clientIp(req) {
-    const trustedHeader = envValue("TRUSTED_CLIENT_IP_HEADER");
-    if (
-        trustedHeader &&
-        typeof req.headers[trustedHeader.toLowerCase()] === "string"
-    ) {
-        return req.headers[trustedHeader.toLowerCase()].trim();
+// Bucket keys are hashed: the same identifiers the audit log refuses to record
+// in the clear should not sit in a third-party store either, and a hash bounds
+// the key length against a long trusted-header value.
+async function assertRateLimit(req, address) {
+    let exceeded;
+
+    try {
+        exceeded = await consumeRateLimit(
+            [
+                {
+                    key: `address:${hashAuditValue(address.toLowerCase())}`,
+                    limit: MAX_UPLOADS_PER_WINDOW,
+                },
+                {
+                    key: `ip:${hashAuditValue(clientKey(req))}`,
+                    limit: MAX_UPLOADS_PER_WINDOW,
+                },
+                { key: "global", limit: MAX_GLOBAL_UPLOADS_PER_WINDOW },
+            ],
+            RATE_LIMIT_WINDOW_MS
+        );
+    } catch (error) {
+        if (error instanceof RateLimitStoreError) {
+            // Fail closed. An upload that cannot be counted is an upload with
+            // no limit at all, which is worse than a refused one.
+            throw new UploadRejection(
+                "rate_limit_store_unavailable",
+                "Upload rate limiting is unavailable; try again shortly."
+            );
+        }
+        throw error;
     }
 
-    return req.socket?.remoteAddress || "unknown";
-}
-
-function checkRateLimitBucket(key, maxUploads) {
-    const now = Date.now();
-    const existing = uploadRateLimit.get(key) || [];
-    const recent = existing.filter(
-        (timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS
-    );
-
-    if (recent.length >= maxUploads) {
+    if (exceeded) {
         throw new UploadRejection(
             "rate_limited",
             "Upload rate limit exceeded."
         );
     }
-
-    recent.push(now);
-    uploadRateLimit.set(key, recent);
-}
-
-function assertRateLimit(req, address) {
-    const ipAddress = clientIp(req);
-    checkRateLimitBucket(
-        `address:${address.toLowerCase()}`,
-        MAX_UPLOADS_PER_WINDOW
-    );
-    checkRateLimitBucket(`ip:${ipAddress}`, MAX_UPLOADS_PER_WINDOW);
-    checkRateLimitBucket("global", MAX_GLOBAL_UPLOADS_PER_WINDOW);
 }
 
 function assertAllowedUploader(address) {
@@ -234,7 +234,7 @@ function digestedPayload(payload) {
     return rest;
 }
 
-function assertUploadAuth(req, payload) {
+async function assertUploadAuth(req, payload) {
     const auth = payload?.auth;
     if (!auth?.address || !auth?.issuedAt || !auth?.signature) {
         throw new UploadRejection(
@@ -287,7 +287,7 @@ function assertUploadAuth(req, payload) {
     }
 
     assertAllowedUploader(address);
-    assertRateLimit(req, address);
+    await assertRateLimit(req, address);
 }
 
 async function pinJson(metadata) {
@@ -392,7 +392,7 @@ export default async function handler(req, res) {
                 "Malformed request body."
             );
         }
-        assertUploadAuth(req, payload);
+        await assertUploadAuth(req, payload);
         const response =
             payload.type === "json"
                 ? await pinJson(payload.metadata)

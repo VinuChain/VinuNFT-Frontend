@@ -9,8 +9,13 @@
 # Playwright and audit:triage daily against a moving advisory baseline produces
 # the alert fatigue that gets monitors muted.
 #
-# NOT covered here, and not coverable until a production host is named:
-# deployed frontend SHA vs main, production frontend error rate, uptime.
+# The production host is Vercel. Uptime, deployed-SHA-vs-branch-head and API
+# route presence are checked by scripts/check-production.mjs below; it exits 1
+# when its repository variable is unset rather than skipping quietly.
+#
+# NOT covered here: production frontend error volume. Browser errors reach
+# /api/client-error and the Vercel runtime log, which this workflow cannot
+# query. README records that log's retention and alerting limits.
 name: Monitor
 
 on:
@@ -42,3 +47,14 @@ jobs:
       - name: Product journeys still work against the deployed contracts
         if: always()
         run: yarn verify:readiness
+      # github.sha on a schedule trigger is the default branch head, which is
+      # what production should be serving. Not `git rev-parse origin/main`:
+      # actions/checkout is a shallow single-branch clone and that ref may not
+      # resolve. VINUNFT_PRODUCTION_URL is a public hostname, so it is a
+      # repository variable rather than a secret, and visible in settings.
+      - name: Production is up and serving this branch head
+        if: always()
+        env:
+          VINUNFT_PRODUCTION_URL: ${{ vars.VINUNFT_PRODUCTION_URL }}
+          EXPECTED_COMMIT_SHA: ${{ github.sha }}
+        run: node scripts/check-production.mjs

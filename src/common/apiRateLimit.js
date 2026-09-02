@@ -37,7 +37,14 @@ function isPrivateOrLoopbackAddress(value) {
     );
 }
 
-function clientKey(req) {
+/**
+ * A stable per-client bucket key.
+ *
+ * Exported because the IPFS upload endpoint needs the same answer: behind
+ * Vercel's proxy `req.socket.remoteAddress` is the proxy itself and identical
+ * for every request, so a per-IP limit keyed on it is one shared global bucket.
+ */
+export function clientKey(req) {
     const trustedHeader = process.env.TRUSTED_CLIENT_IP_HEADER?.toLowerCase();
     if (trustedHeader) {
         const trustedIp = firstHeader(req.headers[trustedHeader]);

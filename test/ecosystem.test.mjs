@@ -18,6 +18,27 @@ test("chain identity matches VinuChain mainnet", () => {
     assert.equal(config.rpc, "https://rpc.vinuchain.org");
 });
 
+test("the testnet is recorded, and recorded as unusable by this app", () => {
+    // Measured 2026-09-02: eth_chainId returns 0xce and testnet.vinuexplorer.org
+    // answers. The ledger's "no reachable VinuChain testnet" blocker is void.
+    assert.equal(config.networks.testnet.chainId, 206);
+    assert.equal(config.networks.testnet.rpc, "https://vinufoundation-rpc.com");
+
+    // Reachable is not the same as usable. Nothing is deployed on 206, so the
+    // app has no addresses and no first blocks for it, and the CSP does not
+    // allow its RPC. These assertions fail the moment someone adds a testnet
+    // entry to the UI without doing the deployment first — which would give
+    // users a network switch that renders an empty marketplace and blames the
+    // chain.
+    assert.equal(Object.keys(config.contractAddresses).join(), "v1");
+    assert.ok(
+        !readFileSync("add_csp.js", "utf8").includes(
+            new URL(config.networks.testnet.rpc).origin
+        ),
+        "the testnet RPC is in connect-src, so this is no longer a recorded coordinate — deploy to 206 and register its addresses"
+    );
+});
+
 test("native currency is VC, the protocol-native monetary unit", () => {
     assert.equal(config.nativeCurrency.symbol, "VC");
     assert.equal(config.nativeCurrency.name, "VinuCoin");

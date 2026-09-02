@@ -9,6 +9,9 @@ public
 !.env.example
 known_hosts
 
+# Vercel build output (Build Output API v3) and local CLI state
+.vercel/
+
 # Local-only OMC state and advisory improve-plans (kept out of the public repo)
 .omc/
 plans/

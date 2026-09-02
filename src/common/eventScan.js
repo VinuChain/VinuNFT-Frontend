@@ -6,8 +6,19 @@ import config from "../config";
  * ("too wide blocks range, the limit is 100000"). Every historical scan in
  * this app spans millions of blocks, so each one must be split into ranges
  * the node will actually answer.
+ *
+ * The 100000 is conditional on the request carrying a filter. A request with
+ * no `address` and no `topics` is capped at 100 instead — the same on chain
+ * 207 and chain 206, so this is not a per-network value. `fetchContractEvents`
+ * below always passes `address`, and must keep doing so: without it the node
+ * would answer only 100 blocks at a time, making a backfill 1000x more
+ * requests. test/eventScan.test.mjs enforces that with a fake that applies
+ * both limits exactly as the node does.
  */
 export const MAX_LOG_BLOCK_RANGE = config.maxLogBlockRange;
+
+/** The cap for a request that filters on neither address nor topics. */
+export const MAX_UNFILTERED_LOG_BLOCK_RANGE = config.maxUnfilteredLogBlockRange;
 
 /** Range requests in flight at once, per contract pass. */
 export const SCAN_CONCURRENCY = 8;

@@ -31,11 +31,39 @@ const config = {
             name: "ENS",
             chainId: 1,
         },
+        // VinuChain testnet. RECORDED COORDINATES, NOT A NETWORK THIS APP CAN
+        // RUN AGAINST: no VinuNFT contract is deployed on chain 206, so
+        // contractAddresses/firstBlocks have nothing to say about it and the
+        // CSP does not allow its RPC. It is here because the ledger recorded
+        // "no reachable VinuChain testnet" as a deployment blocker and that is
+        // no longer true — confirmed live 2026-09-02, eth_chainId 0xce, head
+        // ~1,603,000. Wiring it as a switchable network needs a deployment
+        // first; test/ecosystem.test.mjs holds that door shut.
+        testnet: {
+            name: "VinuChain Testnet",
+            chainId: 206,
+            rpc: "https://vinufoundation-rpc.com",
+            blockExplorer: "https://testnet.vinuexplorer.org",
+        },
     },
     rpc: "https://rpc.vinuchain.org",
     // Largest `toBlock - fromBlock` the RPC will accept for eth_getLogs.
     // Exceeding it fails the whole call with "too wide blocks range".
+    //
+    // The node applies TWO limits, chosen by the shape of the filter, not by
+    // the chain: a request carrying an `address` and/or `topics` gets 100000,
+    // a request carrying neither gets 100. Measured 2026-09-02 on both
+    // https://rpc.vinuchain.org (chain 207) and https://vinufoundation-rpc.com
+    // (chain 206) — the two chains answer identically, so this value is NOT
+    // per-network. Every scan in this app filters by contract address (see
+    // eventScan.js), which is what buys the 100000; dropping that filter would
+    // silently cut the limit by 1000x and turn a ~125-range backfill into
+    // ~125,000.
     maxLogBlockRange: 100000,
+    // The limit for a request with no `address` and no `topics`. Nothing in
+    // this app issues one; it is recorded so the gate in
+    // scripts/verify-deployed-truth.mjs can prove the rule still holds.
+    maxUnfilteredLogBlockRange: 100,
     api_keys: {
         // Ethereum mainnet, for ENS reverse lookups only (src/common/provider.js).
         // GATSBY_ values are compiled into the public bundle, so this must be a

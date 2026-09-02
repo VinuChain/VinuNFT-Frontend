@@ -3,7 +3,16 @@ const { Parser } = require("htmlparser2");
 const fs = require("fs");
 const path = require("path");
 
-const TARGET_FOLDER = path.join(path.resolve(), "public");
+// public/ is what `gatsby build` writes. On Vercel the Gatsby builder plugin
+// runs in onPostBuild — inside `gatsby build`, so before this script — and
+// hardlinks (or, on failure, copies) public/ into .vercel/output/static, which
+// is the directory that actually ships. Walking both is correct either way,
+// and re-processing a hardlink is a no-op because CSP_META_CONTENT matches an
+// already-expanded policy as well as the bare seed.
+const TARGET_FOLDERS = [
+    path.join(path.resolve(), "public"),
+    path.join(path.resolve(), ".vercel", "output", "static"),
+].filter((folder) => fs.existsSync(folder));
 
 function getHtmlFiles() {
     // Iterate recursively through the directory and return all HTML files
@@ -25,7 +34,7 @@ function getHtmlFiles() {
         return results;
     };
 
-    return walk(TARGET_FOLDER);
+    return TARGET_FOLDERS.flatMap(walk);
 }
 
 function computeHash(text) {
@@ -189,7 +198,7 @@ let scriptHashes = [];
 // Iterates through the list of HTML files to calculate all hashes
 // Note, I omitted the body of `getHtmlFiles()` method
 let pagesWritten = 0;
-getHtmlFiles(TARGET_FOLDER).forEach((file) => {
+getHtmlFiles().forEach((file) => {
     const hashes = getShaFromTags(file, "script");
     if (addHashesToHtmlFile(file, hashes)) pagesWritten += 1;
 });
