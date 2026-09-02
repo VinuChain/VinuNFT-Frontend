@@ -15,7 +15,7 @@ import {
     pageListings,
     rowMatchesFilters,
 } from "../common/marketplaceDiscovery";
-import { contentStatus } from "../common/contentPolicy";
+import { visibleListings } from "../common/contentPolicy";
 import { useReadProvider } from "../common/provider";
 import { formatTokenAmount } from "../common/utils";
 import config from "../config";
@@ -308,20 +308,10 @@ export default function Marketplace() {
     // the content". The count is kept because the metrics above are computed
     // from the unfiltered index, and rows that disagree with a total without
     // saying why are dishonest coverage.
-    const { shownListings, hiddenByPolicy } = useMemo(() => {
-        const shown = listings.filter(
-            (listing) =>
-                contentStatus({
-                    nftType: listing.nftType,
-                    tokenId: listing.tokenId,
-                    addresses: [listing.seller],
-                })?.action !== "hide"
-        );
-        return {
-            shownListings: shown,
-            hiddenByPolicy: listings.length - shown.length,
-        };
-    }, [listings]);
+    const { shown: shownListings, hiddenByPolicy } = useMemo(
+        () => visibleListings(listings),
+        [listings]
+    );
 
     // One filter implementation, shared with every other consumer and with the
     // tests. The page used to re-implement all four predicates and disagree
@@ -371,7 +361,7 @@ export default function Marketplace() {
                             ? "Index scan failed - listing coverage is unknown"
                             : coverageLine(coverage)}
                         {hiddenByPolicy > 0
-                            ? ` ${hiddenByPolicy} listing(s) are not shown here under the content policy. They still exist on chain and can still be bought through any other client.`
+                            ? ` ${hiddenByPolicy} listing(s) are not shown here under the content policy. They still exist on chain and can still be bought or delisted through any other client.`
                             : ""}
                     </p>
                     <h1 className="title">Marketplace</h1>

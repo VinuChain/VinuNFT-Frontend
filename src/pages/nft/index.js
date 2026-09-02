@@ -53,7 +53,11 @@ import {
     tokenAllowancesState,
 } from "../../common/user";
 import { fetchTokenMetadata, getTokenContent } from "../../common/nftInfo";
-import { contentStatus, REPORT_URL } from "../../common/contentPolicy";
+import {
+    contentDecision,
+    visibleListings,
+    REPORT_URL,
+} from "../../common/contentPolicy";
 import ContentNotice from "../../components/ContentNotice";
 import { queryFilterChunked } from "../../common/eventScan";
 
@@ -64,6 +68,10 @@ const METADATA_UNAVAILABLE = "Metadata unavailable";
 const MEDIA_UNAVAILABLE =
     "This NFT's media could not be loaded from any configured source.";
 const NO_MEDIA = "This NFT's metadata names no media to display.";
+// The creator is what an address-scoped blocklist entry is matched against, so
+// a creator that could not be read is a policy question with no answer yet.
+const CREATOR_UNCHECKED =
+    "This NFT's creator could not be read, so its media has not been checked against the content policy and was not fetched.";
 
 /** Enter and Space, which a native button gets for free and an anchor does not. */
 const activateOnKey = (event, activate) => {
@@ -151,15 +159,21 @@ function NFTDetail({ location }) {
     const [tokenType, setTokenType] = useState(null);
     const [tokenContent, setTokenContent] = useState(null);
     const [tokenAuthor, setTokenAuthor] = useState(null);
+    // Null author means two different things — "not read yet" and "no author" —
+    // and the policy has to tell them apart, so the read records that it ran.
+    const [authorRead, setAuthorRead] = useState(false);
     // Derived from the validated route and the on-chain author only. Never from
     // metadata: the metadata is what an entry usually exists to suppress, so
     // trusting it to decide suppression would let the token opt itself out.
-    const policyStatus = contentStatus({
-        nftType: macroNftType,
-        tokenId: id,
-        addresses: [tokenAuthor],
-    });
-    const contentHidden = policyStatus?.action === "hide";
+    // `contentHidden` is a tri-state: null until the author read lands.
+    const { status: policyStatus, hidden: contentHidden } = contentDecision(
+        {
+            nftType: macroNftType,
+            tokenId: id,
+            addresses: [tokenAuthor],
+        },
+        { creatorKnown: authorRead }
+    );
     const [royaltyInfo, setRoyaltyInfo] = useState(null);
     const [totalSupply, setTotalSupply] = useState(null);
     const [lastNFTId, setLastNFTId] = useState(null);
@@ -345,6 +359,11 @@ function NFTDetail({ location }) {
         try {
             const author = await getNftAuthor(nftContract, id);
             setTokenAuthor(author);
+            // Only here. A read that FAILED leaves the decision open on
+            // purpose: an unknown creator is not "a creator no entry names",
+            // and resolving it to that would let one flaky RPC response switch
+            // creator-scoped suppression off and fetch the media anyway.
+            setAuthorRead(true);
             return author;
         } catch (e) {
             if (!isTokenExistenceError(e)) {
@@ -352,6 +371,14 @@ function NFTDetail({ location }) {
                 setStandardError(formatError(e));
             }
             setTokenAuthor(null);
+            // Cleared TOGETHER, always. This read also re-runs on every
+            // `updateTracker` tick, so a failure here can follow a success:
+            // clearing the author while leaving the decision "known" would turn
+            // an already-hidden token into a shown one and fetch its media.
+            setAuthorRead(false);
+            // Undecided is not a skeleton forever: this is the page's ordinary
+            // media-failure state, and its Retry re-runs the read.
+            setMediaError(CREATOR_UNCHECKED);
             return null;
         }
     };
@@ -380,8 +407,10 @@ function NFTDetail({ location }) {
         if (!newTokenData) return;
         // A hidden item's media is not merely not rendered: it is not fetched.
         // Nothing is gained by pulling the bytes of an unlawful image into the
-        // viewer's browser and then declining to paint them.
-        if (contentHidden) return;
+        // viewer's browser and then declining to paint them. `!== false` and
+        // not a falsy check: an undecided policy is not permission, and the
+        // effect below re-runs this once the creator read has landed.
+        if (contentHidden !== false) return;
 
         try {
             const tokenContent = await getTokenContent(
@@ -486,9 +515,12 @@ function NFTDetail({ location }) {
             setListingSellerBalances({});
             setEvents(null);
 
-            queryTokenURI()
-                .then((tURI) => queryTokenData(tURI))
-                .then((newTokenData) => queryTokenContent(newTokenData));
+            // Media is NOT chained onto the metadata here: it waits for the
+            // policy decision in the effect below. The chain that used to run
+            // it fired while `tokenAuthor` was still null, so a blocked
+            // creator's media was downloaded before the entry could apply.
+            queryTokenURI().then((tURI) => queryTokenData(tURI));
+            setAuthorRead(false);
             queryTokenAuthor().then((author) => queryBalances(author));
             queryRoyaltyInfo();
             queryTotalSupply();
@@ -502,6 +534,15 @@ function NFTDetail({ location }) {
         }
         resetInfo();
     }, [id, readProvider, reload]);
+
+    // Both conditions, or neither: the metadata to fetch from, and a decision
+    // that came back "show it". Keyed on the tri-state scalar rather than on
+    // `policyStatus`, which is a fresh object every render.
+    useEffect(() => {
+        if (contentHidden === false) {
+            queryTokenContent(tokenData);
+        }
+    }, [tokenData, contentHidden]);
 
     /*useEffect(() => queryTokenAuthor(), [id, readProvider])
     useEffect(() => queryRoyaltyInfo(), [id, readProvider])
@@ -522,13 +563,27 @@ function NFTDetail({ location }) {
             : null;
     };
 
+    // A listing whose seller, token or creator is blocklisted is not offered
+    // for sale here, on this page exactly as on the marketplace. The creator is
+    // this page's own `authorOf` read, so whatever `contentHidden` suppresses
+    // above is withdrawn from sale here too — hiding a token while still
+    // selling it through a reseller would be the policy in name only. Applied
+    // to the rendered groups rather than to `activeListings`, because the
+    // balance arithmetic below must still count every unit a seller has listed.
+    const offeredListings = () =>
+        visibleListings(activeListings(), {
+            nftType: macroNftType,
+            tokenId: id,
+            creator: tokenAuthor,
+        });
+
     const listingGroups = () => {
         if (!activeListings()) {
             return null;
         }
         const groups = {};
 
-        for (const listing of activeListings()) {
+        for (const listing of offeredListings().shown) {
             const seller = listing.seller;
             if (!groups[seller]) {
                 groups[seller] = [];
@@ -1019,6 +1074,16 @@ function NFTDetail({ location }) {
                                 .
                             </p>
                             <hr />
+                            {offeredListings().hiddenByPolicy > 0 ? (
+                                <p className="is-size-7 nft-muted">
+                                    {offeredListings().hiddenByPolicy}{" "}
+                                    listing(s) are not offered here under the
+                                    content policy. They still exist on chain
+                                    and can still be bought or delisted through
+                                    any other client — including by a seller
+                                    whose own row this page has withdrawn.
+                                </p>
+                            ) : null}
                             <Listings
                                 nftType={macroNftType}
                                 readProvider={readProvider}

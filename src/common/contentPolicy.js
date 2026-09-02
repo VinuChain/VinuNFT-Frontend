@@ -33,8 +33,10 @@ function matches(entry, { nftType, tokenId, addresses }) {
         );
     }
     if (entry.scope === "address") {
-        // Creator, owner or seller — the caller decides which addresses are
-        // implicated, because that differs between a card and a listing row.
+        // The creator, or a listing's seller — the caller decides which
+        // addresses are implicated, because that differs between a card and a
+        // listing row. Both are known before anything is rendered or fetched,
+        // which is what makes suppression before the fetch possible at all.
         return (addresses ?? []).some(
             (address) => address && lower(address) === lower(entry.key)
         );
@@ -65,7 +67,62 @@ export function evaluate(entries, target = {}) {
     };
 }
 
+/**
+ * Pure: the decision, and whether it is a decision yet.
+ *
+ * `hidden` is a tri-state. `null` means "not decided": an address entry can
+ * name the token's creator, the creator is an `authorOf` read, and until that
+ * read lands nothing here can rule the token in. Callers gate media loading on
+ * `hidden === false` — spending "unknown" as permission fetches exactly the
+ * bytes an entry exists to suppress, which is the one thing `hide` promises
+ * will not happen.
+ *
+ * A token-scoped hide is certain without the creator, so it never waits.
+ */
+export function decideContent(entries, target, { creatorKnown = true } = {}) {
+    const status = evaluate(entries, target);
+    return {
+        status,
+        hidden: status?.action === "hide" ? true : creatorKnown ? false : null,
+    };
+}
+
 /** The same decision against the list this build actually ships. */
-export function contentStatus(target) {
-    return evaluate(blocklist.entries, target);
+export function contentDecision(target, options) {
+    return decideContent(blocklist.entries, target, options);
+}
+
+/**
+ * Pure: the listings this deployment will offer, and how many it will not.
+ *
+ * A listing is withdrawn by an entry naming its token, its seller or its
+ * creator — the same scope the media decision uses, because a token this
+ * deployment will not show is one it must not sell either. Reselling is not a
+ * way around a hide. The count is returned rather than swallowed: a row that
+ * exists on chain but is not offered here still exists, and a page that drops
+ * it silently reports a smaller market than there is.
+ *
+ * `fallback` carries what a call site's rows do not. Marketplace rows already
+ * name their token and creator; the token page reads `listings(nftAddress, id,
+ * i)`, whose rows name only a seller and an amount, so the page supplies its
+ * own id and its own `authorOf` read.
+ */
+export function partitionListings(entries, listings, fallback = {}) {
+    const shown = (listings ?? []).filter(
+        (listing) =>
+            evaluate(entries, {
+                nftType: listing.nftType ?? fallback.nftType,
+                tokenId: listing.tokenId ?? fallback.tokenId,
+                addresses: [
+                    listing.seller,
+                    listing.creator ?? fallback.creator,
+                ],
+            })?.action !== "hide"
+    );
+    return { shown, hiddenByPolicy: (listings?.length ?? 0) - shown.length };
+}
+
+/** The same split against the list this build actually ships. */
+export function visibleListings(listings, fallback) {
+    return partitionListings(blocklist.entries, listings, fallback);
 }

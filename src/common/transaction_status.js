@@ -1,7 +1,55 @@
 import { useEffect } from "react";
+import { ethers } from "ethers";
 import { atom, useRecoilState } from "recoil";
+import { v1 } from "./abi";
+import config from "../config";
 import { formatError } from "./error";
 import { defaultReadProvider } from "./provider";
+
+/** The deployed contracts, by the address a receipt log carries. */
+const INTERFACES = Object.fromEntries(
+    Object.entries(config.contractAddresses.v1).map(([name, address]) => [
+        address.toLowerCase(),
+        new ethers.utils.Interface(v1[name]),
+    ])
+);
+
+/**
+ * A provider receipt, given the `events` array `tx.wait()` would have attached.
+ *
+ * A receipt fetched from the node carries raw logs; only a receipt that came
+ * back through a contract's `wait()` has them parsed. Callers — the mint flow
+ * above all — read `receipt.events` to learn WHICH token was minted, so a
+ * receipt without them reports a success it cannot describe. Decoding here, at
+ * the one seam that produces a raw receipt, keeps a single decoding path.
+ *
+ * Unparseable logs are kept as they arrived, exactly as ethers does: a log from
+ * another contract is not ours to describe, and dropping it would make the
+ * receipt lie about what the transaction did.
+ */
+const withParsedEvents = (receipt) => {
+    if (!receipt || receipt.events) {
+        return receipt;
+    }
+    const events = (receipt.logs ?? []).map((log) => {
+        const iface = INTERFACES[String(log.address).toLowerCase()];
+        if (!iface) {
+            return log;
+        }
+        try {
+            const parsed = iface.parseLog(log);
+            return {
+                ...log,
+                event: parsed.name,
+                eventSignature: parsed.signature,
+                args: parsed.args,
+            };
+        } catch (e) {
+            return log;
+        }
+    });
+    return { ...receipt, events };
+};
 
 const transactionStatusState = atom({
     key: "transactionStatus",
@@ -221,12 +269,12 @@ const classifyTransactionError = (e) => {
         const hash = e.replacement?.hash;
         if (e.reason === "repriced") {
             // This receipt comes straight from the provider, not from a
-            // contract's wait(), so it has no parsed `events` — and every
-            // content function reads that array unguarded.
+            // contract's wait(), so its logs are raw — and every content
+            // function reads the parsed `events` array unguarded.
             return {
                 status: "success",
                 hash,
-                receipt: { ...e.receipt, events: e.receipt?.events ?? [] },
+                receipt: withParsedEvents(e.receipt) ?? { events: [] },
             };
         }
         return {

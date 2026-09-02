@@ -1,13 +1,14 @@
 import { ethers } from "ethers";
 import config from "../config";
 import { v1 } from "./abi";
-import { queryFilterChunked } from "./eventScan";
+import { queryFilterChunked, REORG_RESCAN_DEPTH } from "./eventScan";
 import {
     annotateSale,
     emptyState,
     ingest,
     nftTypeOf,
     resolveCreators,
+    rewind,
     tokenKey,
 } from "./indexer";
 import { deriveTokenType } from "./nftInfo";
@@ -88,17 +89,43 @@ async function refresh(readProvider) {
             return {
                 address,
                 fromBlock,
+                // `rescanTail`: this fold is rewound and rebuilt from the
+                // tail below, which is only an improvement if the tail that
+                // comes back was actually re-read. Every other caller reads
+                // through the cache unchanged.
                 logs: await queryFilterChunked(
                     contract,
                     {},
                     fromBlock,
-                    headBlock
+                    headBlock,
+                    undefined,
+                    { rescanTail: true }
                 ),
             };
         })
     );
 
     let next = indexState ?? emptyState();
+    // The tail eventScan just re-read is the only part of the chain that can
+    // have changed shape. `ingest` adds and overwrites but never removes, so a
+    // log the chain has since orphaned would outlive its block; dropping the
+    // rescanned range first makes the fold a function of the canonical logs
+    // that came back. Rewind AFTER the scans resolve: a rejected scan must
+    // leave the previous index whole rather than truncated.
+    if (next.lastIndexedBlock !== null) {
+        next = rewind(next, next.lastIndexedBlock + 1 - REORG_RESCAN_DEPTH);
+        // `formatCache` is module state the fold cannot reach, and it caches a
+        // `textURI` READ per token for the tab's lifetime. `rewind` drops the
+        // creator of a token whose whole history it orphaned, for the reason
+        // that applies here too: the canonical chain can put different content
+        // behind that id. Every surviving token keeps its entry, so the cache
+        // still costs one read per token.
+        formatCache = Object.fromEntries(
+            Object.entries(formatCache).filter(
+                (entry) => entry[0] in next.tokens
+            )
+        );
+    }
     for (const { address, fromBlock, logs } of scans) {
         next = ingest(next, logs, { address, fromBlock, toBlock: headBlock });
     }

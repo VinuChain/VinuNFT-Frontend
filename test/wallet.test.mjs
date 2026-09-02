@@ -76,6 +76,12 @@ test("connecting reflects the connected state in the UI", { skip: !hasBuild }, a
         assert.ok(text.includes("Change Wallet"), "the connect control must reflect the new state");
         assert.ok(text.includes("Vault"), "wallet-only navigation must appear once connected");
 
+        // Waited for, not snapshotted: the chain read is issued by the provider
+        // hook, not by the header, so it is not ordered against the render this
+        // test waited on. Reading the list at that moment failed roughly one run
+        // in three — the assertion is unchanged, only its timing is now defined.
+        await waitForWalletCalls(page, "eth_requestAccounts", 1);
+        await waitForWalletCalls(page, "eth_chainId", 1);
         const methods = (await walletCalls(page)).map((c) => c.method);
         assert.ok(methods.includes("eth_requestAccounts"), "must request accounts");
         assert.ok(methods.includes("eth_chainId"), "must establish the chain");

@@ -54,6 +54,9 @@ function fakeProvider({
         counts,
         calls,
         head,
+        // Mutable like `head`: a reorg test stages different content for the
+        // same token id across two loads.
+        textUri,
         _isProvider: true,
         getNetwork: async () => ({ chainId: 207, name: "vinu" }),
         resolveName: async (name) => name,
@@ -94,7 +97,9 @@ function fakeProvider({
                 return textIface.encodeFunctionResult("authorOf", [ALICE]);
             }
             if (fragment.name === "textURI") {
-                return textIface.encodeFunctionResult("textURI", [textUri]);
+                return textIface.encodeFunctionResult("textURI", [
+                    provider.textUri,
+                ]);
             }
             if (fragment.name === "royaltyInfo") {
                 const base = ethers.BigNumber.from(args[1]);
@@ -524,4 +529,129 @@ test("settlements and formats are resolved once, not on every load", async () =>
     await loadIndex(provider);
     assert.equal(provider.counts.call - cold, 0);
     assert.equal(provider.counts.receipt - coldReceipts, 0);
+});
+
+test("a refresh after a reorg drops the orphaned listing instead of keeping it", async () => {
+    reset();
+    // Inside the 128-block tail eventScan re-reads, so the second pass gets a
+    // canonical answer for this very block rather than a cached one.
+    const ORPHAN_BLOCK = HEAD - 5;
+    const orphan = rawLog(
+        marketplaceIface,
+        MARKETPLACE,
+        "TokenListed",
+        [TEXT, 9, ALICE, 77, 1, WVC, ethers.utils.parseUnits("1", 18)],
+        ORPHAN_BLOCK,
+        7
+    );
+    const logs = [...ALL_LOGS, orphan];
+    const provider = fakeProvider({ logs });
+
+    const first = await loadIndex(provider);
+    assert.equal(
+        first.state.listings["text:9:77"]?.amount,
+        1,
+        "the listing must be folded while its block is canonical"
+    );
+
+    // The chain reorganises: that block is replaced and its log is gone. The
+    // head advances, or the scan would be served entirely from cache.
+    logs.splice(logs.indexOf(orphan), 1);
+    provider.head = HEAD + 1;
+
+    const second = await loadIndex(provider);
+    assert.equal(
+        second.state.listings["text:9:77"],
+        undefined,
+        "a listing whose log was orphaned must not survive the refresh"
+    );
+    assert.equal(
+        listingRowsFromIndex(second.state, second.formats).rows.filter(
+            (row) => row.listingId === 77
+        ).length,
+        0,
+        "no row may be rendered from an orphaned log"
+    );
+});
+
+test("a reorg that orphans a listed token re-reads its format, not the cached one", async () => {
+    reset();
+    // `formatCache` is a `textURI` READ cached per token for the lifetime of
+    // the tab, and it is module state the fold's rewind cannot reach. A token
+    // whose mint the rewind orphaned can come back from the canonical chain
+    // with different content, so its cached format has to go with it — or the
+    // marketplace keeps labelling the new token with the orphan's MIME type.
+    const orphanBlock = HEAD - 5;
+    const logs = [
+        ...ALL_LOGS,
+        rawLog(
+            textIface,
+            TEXT,
+            "TransferSingle",
+            [ALICE, ethers.constants.AddressZero, ALICE, 12, 1],
+            orphanBlock,
+            3
+        ),
+        rawLog(
+            marketplaceIface,
+            MARKETPLACE,
+            "TokenListed",
+            [TEXT, 12, ALICE, 91, 1, WVC, ethers.utils.parseUnits("1", 18)],
+            orphanBlock,
+            4
+        ),
+    ];
+    const provider = fakeProvider({ logs, textUri: "data:text/plain,orphan" });
+
+    const first = await loadIndex(provider);
+    assert.equal(first.formats["text:12"], "text/plain");
+
+    // The chain replaces that block: same token id, different content.
+    provider.textUri = "data:text/markdown,canonical";
+    provider.head = HEAD + 1;
+    const second = await loadIndex(provider);
+
+    assert.equal(
+        second.formats["text:12"],
+        "text/markdown",
+        "an orphaned token's format must be re-read, not remembered"
+    );
+});
+
+test("a reorg that leaves the head at the same height still drops the orphan", async () => {
+    reset();
+    // A reorg does not have to lengthen the chain. Block N can be replaced by a
+    // different block N between two loads, and then the head the loader sees is
+    // unchanged — so eventScan's "already scanned to this block" shortcut would
+    // hand back the very logs the rewind just dropped, and the orphan would
+    // survive the fix that exists to remove it.
+    const orphan = rawLog(
+        marketplaceIface,
+        MARKETPLACE,
+        "TokenListed",
+        [TEXT, 9, ALICE, 78, 1, WVC, ethers.utils.parseUnits("1", 18)],
+        HEAD - 5,
+        7
+    );
+    const logs = [...ALL_LOGS, orphan];
+    const provider = fakeProvider({ logs });
+
+    const first = await loadIndex(provider);
+    assert.equal(first.state.listings["text:9:78"]?.amount, 1);
+
+    logs.splice(logs.indexOf(orphan), 1);
+    // The head does NOT move. Everything else about the chain has.
+    const cold = provider.counts.getLogs;
+    const second = await loadIndex(provider);
+
+    assert.equal(
+        second.state.listings["text:9:78"],
+        undefined,
+        "an orphan must not survive a reorg the head height does not reveal"
+    );
+    assert.equal(
+        provider.counts.getLogs - cold,
+        3,
+        "and it must cost one tail range per contract, not a fresh full pass"
+    );
 });

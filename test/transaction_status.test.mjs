@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ethers } from "ethers";
+import { chainReceipt } from "./helpers/browserHarness.mjs";
 
 const mod = await import("../src/common/transaction_status.js");
 const { classifyTransactionError } = mod.default || mod;
@@ -31,6 +33,43 @@ test("a repriced transaction keeps events it already carries", () => {
     );
 
     assert.deepEqual(result.receipt.events, events);
+});
+
+test("a repriced mint's raw receipt still identifies the minted token", () => {
+    // A repriced receipt comes from the provider, so its logs are raw. This one
+    // is the harness's realistic TransferSingle — same encoding a wallet
+    // returns — and the assertions below are the predicate mint.js and
+    // minting.js actually run on `receipt.events`.
+    const receipt = chainReceipt({
+        transferSingle: { nft: "text", id: 7, amount: 1 },
+    });
+    const result = classifyTransactionError(replaced("repriced", { receipt }));
+
+    const minted = result.receipt.events.filter(
+        (event) =>
+            event.event === "TransferSingle" &&
+            event.args.from === ethers.constants.AddressZero
+    );
+    assert.equal(
+        minted.length,
+        1,
+        "a sped-up mint that mined must still name its token"
+    );
+    assert.equal(minted[0].args[3].toString(), "7");
+});
+
+test("a log no shipped ABI describes survives decoding as a raw entry", () => {
+    // ethers' own wait() leaves unparseable logs in place rather than dropping
+    // them, and a receipt that silently loses logs is worse than one with none.
+    const receipt = chainReceipt({ transferSingle: { nft: "text", id: 7 } });
+    const stranger = { ...receipt.logs[0], address: `0x${"11".repeat(20)}` };
+    const result = classifyTransactionError(
+        replaced("repriced", { receipt: { ...receipt, logs: [stranger] } })
+    );
+
+    assert.equal(result.receipt.events.length, 1);
+    assert.equal(result.receipt.events[0].event, undefined);
+    assert.equal(result.receipt.events[0].address, stranger.address);
 });
 
 test("a cancelled transaction is an error naming the replacement", () => {

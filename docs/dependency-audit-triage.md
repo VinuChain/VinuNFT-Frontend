@@ -195,3 +195,28 @@ measures it.
   `style` attributes or `data:` URLs.
 - `img-src` names the configured IPFS gateway origins instead of every `https:`
   host, and `form-action 'none'` is set.
+
+## Baseline moved 28 -> 32 moderate on 2026-09-03: `qs`
+
+Four moderate advisories appeared with no dependency change — `git diff` on
+`yarn.lock` is empty across the branch that raised this, so the tree is
+identical and the advisory database moved, not the code.
+
+All four are `qs`, which enters only through `gatsby` -> `express` and
+`gatsby` -> `body-parser`, i.e. the dev server:
+
+```
+gatsby@5.16.1
+├─┬ body-parser@2.3.0 └── qs@6.16.0
+└─┬ express@4.22.2    ├─┬ body-parser@1.20.6 └── qs@6.15.3 deduped
+                      └── qs@6.15.3
+```
+
+Nothing in `src/` imports `qs`, and it is absent from the built bundle. The
+deployed artifact is the static `public/` directory plus four serverless
+functions, none of which run Express. That is the same unreachable class as the
+twelve modules already carried above, so the baseline is ratcheted rather than
+the gate disabled.
+
+Route query strings in this app are parsed by `query-string`, a different
+package, which is not affected.

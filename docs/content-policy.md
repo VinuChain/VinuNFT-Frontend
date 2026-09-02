@@ -92,8 +92,22 @@ Every entry carries, and is validated in CI to carry
 | `addedAt`  | ISO 8601                                                        |
 | `appeal`   | how the affected creator gets the decision revisited            |
 
-`hide` outranks `warn` when both match. Address-scoped entries match a creator,
-owner or seller; token-scoped entries match one token in one collection.
+`hide` outranks `warn` when both match. Address-scoped entries match a token's
+creator or a listing's seller — the two addresses a page knows before it fetches
+or offers anything; token-scoped entries match one token in one collection. A
+current holder is not a scope: an entry naming one suppresses nothing, because
+holders are folded from the event history long after the page has decided what
+to show.
+
+Both address roles apply to a sale, so reselling is not a way around a `hide`: a
+listing is withdrawn when the entry names its seller **or** the token's creator,
+whoever is holding it. Two limits are worth stating plainly. A creator this app
+cannot read is not treated as a creator no entry names — the media is not
+fetched and the page says so — but a *listing* whose creator is still unresolved
+is offered, because blocking every row on a contract read that can fail would
+take the marketplace down rather than suppress anything. And a withdrawn row
+cannot be delisted from this frontend either; its seller keeps that ability
+through any other client.
 
 ## Appeals
 

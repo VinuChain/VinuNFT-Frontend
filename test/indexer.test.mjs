@@ -223,6 +223,76 @@ test("re-ingesting an overlapping tail after a rewind matches a clean ingest", (
     assert.equal(replayed.listings[TEXT_1_1].amount, 3);
 });
 
+test("a rewind drops the settlements of the events it drops", () => {
+    // An event id is (block, txIndex, logIndex, subIndex) — a POSITION, not a
+    // hash. After a reorg a different sale can occupy the position the old one
+    // held, and a settlement left behind would be re-attached to it: the wrong
+    // price, the wrong fee split and the wrong receipt reconciliation, silently,
+    // because `resolveSettlements` skips any sale that already has one.
+    let state = fullIndex();
+    const txHash = Object.keys(SALES)[0];
+    const id = saleIdFor(state, txHash);
+    state = annotateSale(state, id, {
+        platformFeeBps: fixture.liveReads.platformFeePercentage,
+        royaltyAmount: royaltyOf(
+            SALES[txHash].total,
+            fixture.liveReads.platformFeePercentage
+        ),
+        royaltyReceiver: ALICE,
+        receiptLegs: fixture.purchaseReceiptLegs[txHash],
+    });
+    assert.ok(state.settlements[id], "the sale must be annotated to begin with");
+
+    const rewound = rewind(state, Number(id.split(":")[0]));
+    assert.equal(
+        rewound.events[id],
+        undefined,
+        "anti-vacuity: the rewind must actually drop the sale"
+    );
+    assert.equal(
+        rewound.settlements[id],
+        undefined,
+        "an orphaned sale's fee split must not outlive its event"
+    );
+});
+
+test("a rewind that orphans a token's mint forgets the creator read for it", async () => {
+    // `authorOf` is a READ against whatever chain is canonical now, cached per
+    // token so it costs one call ever. A reorg can orphan a mint and let the
+    // replacement chain mint the same id to a different author, and
+    // `resolveCreators` skips any token that already has an entry — so a cache
+    // kept across the rewind would answer with the orphan chain's creator, on
+    // the marketplace row and in the creator-scoped content policy alike.
+    const state = await resolveCreators(fullIndex(), {
+        authorOf: async () => ALICE,
+    });
+    const doomed = Object.entries(state.tokens).reduce((a, b) =>
+        a[1].firstBlock > b[1].firstBlock ? a : b
+    )[0];
+    const survivor = Object.entries(state.tokens).reduce((a, b) =>
+        a[1].firstBlock < b[1].firstBlock ? a : b
+    )[0];
+    assert.notEqual(doomed, survivor, "the fixture must have two token ages");
+    assert.ok(state.creators[doomed] && state.creators[survivor]);
+
+    const rewound = rewind(state, state.tokens[doomed].firstBlock);
+
+    assert.equal(
+        rewound.tokens[doomed],
+        undefined,
+        "anti-vacuity: the rewind must actually orphan that token"
+    );
+    assert.equal(
+        rewound.creators[doomed],
+        undefined,
+        "a token whose whole history was orphaned must be re-read, not remembered"
+    );
+    assert.ok(
+        rewound.creators[survivor],
+        "and a token the reorg did not touch must not pay for another read"
+    );
+});
+
 test("a rewind past a purchase restores the pre-purchase listed amount", () => {
     const state = fullIndex();
     // Anti-vacuity for the test above: the rewind boundary must actually move

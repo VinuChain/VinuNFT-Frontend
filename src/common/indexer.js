@@ -377,6 +377,30 @@ export function rewind(state, fromBlock) {
             ([, record]) => record.blockNumber < fromBlock
         )
     );
+    // An event id is a POSITION (block, txIndex, logIndex, subIndex), so the
+    // replacement chain can put a DIFFERENT sale at the id an orphaned one
+    // held. `resolveSettlements` skips any sale that already carries one, so a
+    // settlement left behind here would be re-attached to that new sale: wrong
+    // price, wrong fee split, wrong receipt reconciliation, and silently.
+    const settlements = Object.fromEntries(
+        Object.entries(state.settlements).filter(([id]) => id in events)
+    );
+    // `creators` is an `authorOf` READ against whatever chain is canonical,
+    // cached per token and never re-read while the entry stands. A token the
+    // rewind leaves with no events at all had its mint orphaned, and the
+    // replacement chain can mint that id to someone else — so its entry has to
+    // go with it. A token whose older history survives keeps its creator and
+    // costs no further call: that read is what the cache exists for.
+    const survivingTokens = new Set(
+        Object.values(events).map((record) =>
+            tokenKey(record.nftAddress, record.tokenId)
+        )
+    );
+    const creators = Object.fromEntries(
+        Object.entries(state.creators).filter(([key]) =>
+            survivingTokens.has(key)
+        )
+    );
     const coverage = Object.fromEntries(
         Object.entries(state.coverage).map(([address, range]) => [
             address,
@@ -387,6 +411,8 @@ export function rewind(state, fromBlock) {
     return withDerived({
         ...state,
         events,
+        settlements,
+        creators,
         coverage,
         lastIndexedBlock:
             state.lastIndexedBlock === null

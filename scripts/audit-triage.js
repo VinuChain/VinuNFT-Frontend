@@ -26,7 +26,7 @@ const path = require("node:path");
 const baseline = {
     info: 0,
     low: 13,
-    moderate: 28,
+    moderate: 32,
     high: 28,
     critical: 2,
 };

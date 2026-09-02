@@ -121,14 +121,20 @@ export function _resetLogCache() {
     logCache.clear();
 }
 
-function allContractEvents(contract, fromBlock, toBlock, maxSpan) {
+function allContractEvents(contract, fromBlock, toBlock, maxSpan, rescanTail) {
     const key = `${contract.address.toLowerCase()}:${fromBlock}`;
     const pending = logCache.get(key);
 
     // The cache holds the in-flight promise, not just the settled result.
     // History fires many filters concurrently; without this every one of them
     // misses simultaneously and starts its own full pass.
-    if (pending && pending.toBlock >= toBlock) {
+    //
+    // `rescanTail` opts out of the shortcut, not out of the cache: a reorg can
+    // replace block N with a different block N, leaving the head height
+    // unchanged, and a caller whose fold must be canonical cannot tell that
+    // from "nothing happened". It still reuses everything below the rescan
+    // window, so the cost is the same one tail pass a head advance would buy.
+    if (pending && pending.toBlock >= toBlock && !rescanTail) {
         return pending.promise;
     }
 
@@ -222,7 +228,8 @@ export async function queryFilterChunked(
     filter,
     fromBlock,
     toBlock = "latest",
-    maxSpan = MAX_LOG_BLOCK_RANGE
+    maxSpan = MAX_LOG_BLOCK_RANGE,
+    { rescanTail = false } = {}
 ) {
     const resolvedTo =
         toBlock === "latest" || toBlock === undefined
@@ -233,7 +240,8 @@ export async function queryFilterChunked(
         contract,
         fromBlock,
         resolvedTo,
-        maxSpan
+        maxSpan,
+        rescanTail
     );
 
     return events

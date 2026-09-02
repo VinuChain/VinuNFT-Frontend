@@ -589,3 +589,182 @@ test(
         }
     }
 );
+
+test(
+    "media is not fetched until the creator policy decision is known",
+    { skip: !hasBuild },
+    async () => {
+        // The content policy can hide a token because of WHO created it, and
+        // the creator is an `authorOf` read. Until that read lands the page
+        // does not know whether this media may be shown, so it must not pull
+        // the bytes: "hidden" means not fetched, not fetched and then hidden.
+        // The metadata here is on-chain, so nothing but the policy stands
+        // between the page load and the media request.
+        const { server, origin } = await startStaticServer();
+        const browser = await chromium.launch();
+        const AUTHOR_OF = ethers.utils
+            .id("authorOf(uint256)")
+            .slice(0, 10)
+            .toLowerCase();
+        const CID = "QmRaceCanary";
+        let releaseAuthor;
+        const authorHeld = new Promise((resolve) => {
+            releaseAuthor = resolve;
+        });
+        try {
+            const answers = nftPageAnswers({
+                nftType: "image",
+                id: 1,
+                uri: onChain({
+                    name: "Canary",
+                    description: "d",
+                    image: `ipfs://${CID}`,
+                }),
+            });
+            const mediaRequests = [];
+            const page = await browser.newPage();
+            page.on("request", (request) => {
+                if (request.url().includes(CID)) {
+                    mediaRequests.push(request.url());
+                }
+            });
+            await routeOffline(page, origin, {
+                rpc: {
+                    eth_blockNumber: BLOCK,
+                    eth_call: async (body) => {
+                        const data = String(
+                            body?.params?.[0]?.data ?? ""
+                        ).toLowerCase();
+                        if (data.startsWith(AUTHOR_OF)) {
+                            await authorHeld;
+                        }
+                        return answerCall(answers, body);
+                    },
+                },
+            });
+            await installMockWallet(page, {
+                chain: { answers, blockNumber: BLOCK },
+            });
+            await page.goto(`${origin}/nft/?type=image&id=1`, {
+                waitUntil: "domcontentloaded",
+            });
+            await waitForHydration(page);
+            // The metadata is in hand: everything the media fetch needs except
+            // permission to run.
+            await waitUntil(
+                async () =>
+                    /Canary/.test(
+                        await page.evaluate(() => document.body.innerText)
+                    ),
+                { label: "the token's on-chain metadata" }
+            );
+
+            // Generous next to the milliseconds an unguarded fetch takes: on
+            // the unfixed page the request is already recorded by now.
+            const fetchedEarly = await waitUntil(
+                () => mediaRequests.length > 0,
+                { timeout: 3000 }
+            ).catch(() => false);
+            assert.equal(
+                fetchedEarly,
+                false,
+                `no media may be fetched while the creator is unknown, got: ${mediaRequests}`
+            );
+
+            releaseAuthor();
+            // Anti-vacuity: the same request must happen once the decision is
+            // known, or this test would pass against a page that never loads
+            // media at all.
+            await waitUntil(() => mediaRequests.length > 0, {
+                label: "the media request, once the creator is known",
+            });
+        } finally {
+            releaseAuthor();
+            await browser.close();
+            server.close();
+        }
+    }
+);
+
+test(
+    "a creator read that fails leaves the media unfetched, not unguarded",
+    { skip: !hasBuild },
+    async () => {
+        // The creator is the input an address-scoped entry is matched against.
+        // A failed `authorOf` is an UNKNOWN creator, not an absent one, so
+        // treating it as "no entry names them" would let any transient RPC
+        // failure fetch and paint the very media an entry exists to suppress —
+        // a suppression control that a flaky node switches off. The page fails
+        // closed and offers its Retry instead.
+        const { server, origin } = await startStaticServer();
+        const browser = await chromium.launch();
+        const AUTHOR_OF = ethers.utils
+            .id("authorOf(uint256)")
+            .slice(0, 10)
+            .toLowerCase();
+        const CID = "QmUncheckedCreator";
+        try {
+            const answers = nftPageAnswers({
+                nftType: "image",
+                id: 1,
+                uri: onChain({
+                    name: "Unchecked",
+                    description: "d",
+                    image: `ipfs://${CID}`,
+                }),
+            });
+            const mediaRequests = [];
+            const page = await browser.newPage();
+            page.on("request", (request) => {
+                if (request.url().includes(CID)) {
+                    mediaRequests.push(request.url());
+                }
+            });
+            await routeOffline(page, origin, {
+                rpc: {
+                    eth_blockNumber: BLOCK,
+                    eth_call: (body) => {
+                        const data = String(
+                            body?.params?.[0]?.data ?? ""
+                        ).toLowerCase();
+                        // Empty return data: the shape a reverting or
+                        // half-synced node actually answers with.
+                        return data.startsWith(AUTHOR_OF)
+                            ? "0x"
+                            : answerCall(answers, body);
+                    },
+                },
+            });
+            await installMockWallet(page, {
+                chain: { answers, blockNumber: BLOCK },
+            });
+            await page.goto(`${origin}/nft/?type=image&id=1`, {
+                waitUntil: "domcontentloaded",
+            });
+            await waitForHydration(page);
+            // Anti-vacuity: the page must reach a terminal state, or "no media
+            // was fetched" would only mean "the page never got that far". The
+            // metadata is on chain, so it lands whatever `authorOf` does.
+            await waitUntil(
+                async () =>
+                    /Unchecked/.test(
+                        await page.evaluate(() => document.body.innerText)
+                    ),
+                { label: "the token's on-chain metadata" }
+            );
+            await page
+                .locator(".nft-media-retry")
+                .first()
+                .waitFor({ timeout: CONDITION_TIMEOUT });
+
+            assert.deepEqual(
+                mediaRequests,
+                [],
+                `no media may be fetched when the creator could not be read, got: ${mediaRequests}`
+            );
+        } finally {
+            await browser.close();
+            server.close();
+        }
+    }
+);
