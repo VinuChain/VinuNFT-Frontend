@@ -85,6 +85,17 @@ export default async function handler(req, res) {
         );
         return sendJson(res, 200, payload);
     } catch (error) {
+        // Fixed text to the browser: the caught error can carry the upstream
+        // body, a DNS name or an AbortError, none of which it needs. The cause
+        // goes to the server log instead - swallowing it entirely is what made
+        // the production outage on this proxy impossible to diagnose remotely.
+        console.warn(
+            JSON.stringify({
+                event: "vinunft.wanbridge_proxy_failed",
+                route: "quota-and-fee",
+                cause: error?.message ?? String(error),
+            })
+        );
         return sendJson(res, 502, {
             message: "Could not load WanBridge quota",
         });

@@ -7,8 +7,21 @@ export const WANBRIDGE_PARTNER = "VinuNFT";
 export const VINUCHAIN_CHAIN_TYPE = "VC";
 export const VINUCHAIN_TOKEN_PRIORITY = ["USDT", "VINU", "VC"];
 
-const WANBRIDGE_TIMEOUT_MS = 10000;
+// The upstream tokenPairs response is ~212 KB and measured at 3.5s from a
+// developer machine; from a serverless region it is slower still. 10s was
+// close enough to that to abort legitimately-slow calls, which surfaced as a
+// bare 502 with no way to tell a timeout from a refusal. The platform
+// function ceiling is far above this, so the bound is still real.
+const WANBRIDGE_TIMEOUT_MS = Number(process.env.WANBRIDGE_TIMEOUT_MS || 20000);
 const WANBRIDGE_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+
+/** Carries why the upstream call failed, so a proxy can log a cause. */
+export class WanBridgeUpstreamError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "WanBridgeUpstreamError";
+    }
+}
 
 // Every proxy reaches the same third-party API, so the bound belongs here once
 // rather than three times. Without it a hung or hostile upstream holds the
@@ -16,10 +29,25 @@ const WANBRIDGE_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 // ponytail: a chunked response with no content-length is still fully buffered
 // by text() before the length check; stream it if this upstream goes chunked.
 export async function fetchWanBridgeJson(path, init = {}) {
-    const response = await fetch(`${WANBRIDGE_API_BASE}/${path}`, {
-        ...init,
-        signal: AbortSignal.timeout(WANBRIDGE_TIMEOUT_MS),
-    });
+    let response;
+    try {
+        response = await fetch(`${WANBRIDGE_API_BASE}/${path}`, {
+            ...init,
+            signal: AbortSignal.timeout(WANBRIDGE_TIMEOUT_MS),
+        });
+    } catch (error) {
+        // Name the cause. Every failure here previously collapsed into one
+        // opaque 502, so a timeout, a DNS failure and an upstream refusal were
+        // indistinguishable from a log — which is precisely what made the
+        // production outage on this endpoint impossible to diagnose remotely.
+        const cause =
+            error?.name === "TimeoutError" || error?.name === "AbortError"
+                ? `timed out after ${WANBRIDGE_TIMEOUT_MS}ms`
+                : `${error?.name ?? "Error"}: ${error?.message ?? "unknown"}`;
+        throw new WanBridgeUpstreamError(
+            `WanBridge ${path} unreachable (${cause})`
+        );
+    }
 
     if (
         Number(response.headers.get("content-length")) >

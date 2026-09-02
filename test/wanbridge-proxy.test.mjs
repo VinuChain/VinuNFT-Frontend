@@ -227,3 +227,57 @@ test("the token-pairs proxy bounds both of its upstream calls", async () => {
         );
     }
 });
+
+// ---------------------------------------------------------------------------
+// Upstream failures must name their cause
+// ---------------------------------------------------------------------------
+
+test("an upstream timeout is reported as a timeout, not as an opaque failure", async () => {
+    const { fetchWanBridgeJson } = await import("../src/common/wanbridge.js");
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+        const e = new Error("The operation was aborted due to timeout");
+        e.name = "TimeoutError";
+        throw e;
+    };
+    try {
+        await assert.rejects(
+            () => fetchWanBridgeJson("tokenPairs"),
+            (e) =>
+                e.name === "WanBridgeUpstreamError" &&
+                /timed out after \d+ms/.test(e.message) &&
+                e.message.includes("tokenPairs")
+        );
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+test("a non-timeout upstream failure names its own cause", async () => {
+    const { fetchWanBridgeJson } = await import("../src/common/wanbridge.js");
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+        const e = new Error("getaddrinfo ENOTFOUND bridge-api.wanchain.org");
+        e.name = "TypeError";
+        throw e;
+    };
+    try {
+        await assert.rejects(
+            () => fetchWanBridgeJson("tokenPairs"),
+            (e) => /ENOTFOUND/.test(e.message)
+        );
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+test("each proxy logs the cause of a 502 instead of swallowing it", async () => {
+    // The production outage on token-pairs could not be diagnosed remotely
+    // because the catch discarded the error entirely.
+    const { readFileSync } = await import("node:fs");
+    for (const route of ["token-pairs", "quota-and-fee", "create-tx"]) {
+        const src = readFileSync(`src/api/wanbridge-${route}.js`, "utf8");
+        assert.match(src, /vinunft\.wanbridge_proxy_failed/, route);
+        assert.match(src, /cause: error\?\.message/, route);
+    }
+});
