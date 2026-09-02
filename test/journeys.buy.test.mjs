@@ -8,6 +8,9 @@ import {
     installMockWallet,
     connectWallet,
     walletCalls,
+    waitUntil,
+    waitForTextMatch,
+    waitForWalletCalls,
     chainAnswers,
     chainMisses,
     chainReceipt,
@@ -99,7 +102,6 @@ async function openNft(answers, chainOverrides = {}) {
         waitUntil: "domcontentloaded",
     });
     await connectWallet(page);
-    await page.waitForTimeout(900);
     return { page, context, errors };
 }
 
@@ -113,7 +115,14 @@ const sentHash = (page) =>
 const openBuyModal = async (page) => {
     await page.locator("button", { hasText: /^Buy$/ }).first().click();
     await page.locator(".modal-card").waitFor();
-    await page.waitForTimeout(500);
+    await footerButton(page).waitFor({ state: "visible" });
+};
+
+// The footer offers Approve until the allowance read comes back, so a caller
+// that clicks on sight can sign an approval it never meant to.
+const clickBuyFooter = async (page) => {
+    await waitForTextMatch(footerButton(page), /^Buy$/);
+    await footerButton(page).click();
 };
 
 const footerButton = (page) => page.locator(".modal-card-foot button").first();
@@ -129,9 +138,11 @@ test(
         const { page, context, errors } = await openNft(answers);
         try {
             await openBuyModal(page);
+            const approveLabel = new RegExp(`Approve ${PRICE} ${WVC.symbol}`);
+            await waitForTextMatch(footerButton(page), approveLabel);
             assert.match(
                 await footerButton(page).textContent(),
-                new RegExp(`Approve ${PRICE} ${WVC.symbol}`),
+                approveLabel,
                 "a zero allowance must offer approval, not a purchase"
             );
 
@@ -144,7 +155,10 @@ test(
                 ])
             );
             await footerButton(page).click();
-            await page.waitForTimeout(3500);
+            await waitForWalletCalls(page, "eth_sendTransaction", 1);
+            // The footer re-reads the allowance once the approval mines, and
+            // that re-read is the last thing this test asserts on.
+            await waitForTextMatch(footerButton(page), /^Buy$/);
 
             const approvals = (await sends(page)).filter(
                 (c) => c.params[0].to.toLowerCase() === WVC.address.toLowerCase()
@@ -185,6 +199,10 @@ test(
         const { page, context } = await openNft(answers);
         try {
             await openBuyModal(page);
+            await waitForTextMatch(
+                page.locator(".modal-card-body"),
+                /Insufficient balance/
+            );
 
             assert.match(
                 await page.locator(".modal-card-body").textContent(),
@@ -231,8 +249,11 @@ test(
         const { page, context } = await openNft(answers);
         try {
             await openBuyModal(page);
-            await footerButton(page).click();
-            await page.waitForTimeout(1200);
+            await clickBuyFooter(page);
+            await waitForTextMatch(
+                page.locator(".standard-error-body"),
+                /price of this listing changed/i
+            );
 
             assert.match(
                 await page.locator(".standard-error-body").textContent(),
@@ -265,8 +286,11 @@ test(
         const { page, context } = await openNft(answers);
         try {
             await openBuyModal(page);
-            await footerButton(page).click();
-            await page.waitForTimeout(1200);
+            await clickBuyFooter(page);
+            await waitForTextMatch(
+                page.locator(".standard-error-body"),
+                /withdrawn the marketplace's permission/i
+            );
 
             assert.match(
                 await page.locator(".standard-error-body").textContent(),
@@ -291,9 +315,14 @@ test(
         try {
             await openBuyModal(page);
             await page.locator(".modal-card-body input[type=number]").fill("2");
-            await page.waitForTimeout(400);
-            await footerButton(page).click();
-            await page.waitForTimeout(2500);
+            // The lot total is recomputed from the typed quantity, so it is
+            // what says the form holds 2 rather than the default 1.
+            await waitForTextMatch(
+                page.locator(".modal-card-body"),
+                /Total:\s*6\.25\s*WVC/
+            );
+            await clickBuyFooter(page);
+            await waitForWalletCalls(page, "eth_sendTransaction", 1);
 
             const purchases = (await sends(page)).filter(
                 (c) =>
@@ -316,6 +345,7 @@ test(
 
             const hash = await sentHash(page);
             const toast = page.locator(".Toastify__toast").first();
+            await waitForTextMatch(toast, /mined/i);
             assert.match(await toast.textContent(), /mined/i);
             assert.equal(
                 await toast.locator("a").first().getAttribute("href"),

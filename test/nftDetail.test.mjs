@@ -7,6 +7,9 @@ import {
     startStaticServer,
     routeOffline,
     installMockWallet,
+    waitUntil,
+    waitForHydration,
+    CONDITION_TIMEOUT,
     nftPageAnswers,
     answerCall,
     appConfig as config,
@@ -23,7 +26,6 @@ import {
 // Just above the latest contract creation block, so the page's historical log
 // scan is one range instead of ~125 against a routed-offline provider.
 const BLOCK = "0x222e00";
-const SETTLE_MS = 4000;
 
 const METADATA_UNAVAILABLE = "Metadata unavailable";
 
@@ -31,7 +33,25 @@ const onChain = (metadata) =>
     "data:application/json;base64," +
     Buffer.from(JSON.stringify(metadata)).toString("base64");
 
-async function openPage(browser, origin, { route, answers, onCall }) {
+/**
+ * What each caller is here to read, as a condition.
+ *
+ * A CSS selector for an element the route must mount, or a regular expression
+ * over the same `document.body.innerText` the assertions below read.
+ */
+async function waitForReady(page, until) {
+    if (until instanceof RegExp) {
+        await waitUntil(
+            async () =>
+                until.test(await page.evaluate(() => document.body.innerText)),
+            { label: `body text matching ${until}` }
+        );
+        return;
+    }
+    await page.locator(until).first().waitFor({ timeout: CONDITION_TIMEOUT });
+}
+
+async function openPage(browser, origin, { route, answers, onCall, until }) {
     const page = await browser.newPage();
     await routeOffline(page, origin, {
         rpc: {
@@ -48,7 +68,8 @@ async function openPage(browser, origin, { route, answers, onCall }) {
         chain: { answers: answers ?? {}, blockNumber: BLOCK },
     });
     await page.goto(`${origin}${route}`, { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(SETTLE_MS);
+    await waitForHydration(page);
+    if (until) await waitForReady(page, until);
     return page;
 }
 
@@ -73,6 +94,7 @@ test(
             const page = await openPage(browser, origin, {
                 route: "/nft/?type=text&id=1",
                 answers,
+                until: new RegExp(METADATA_UNAVAILABLE),
             });
             const text = await page.evaluate(() => document.body.innerText);
             assert.ok(
@@ -112,6 +134,9 @@ test(
             const page = await openPage(browser, origin, {
                 route: "/nft/?type=text&id=1",
                 answers,
+                // The metadata fetch is refused, so the on-chain figure is the
+                // last thing this page has to say.
+                until: /Edition size:\s*100/,
             });
             const text = await page.evaluate(() => document.body.innerText);
             assert.match(
@@ -157,6 +182,7 @@ test(
             const page = await openPage(browser, origin, {
                 route: "/nft/?type=image&id=1",
                 answers,
+                until: ".nft-media-unavailable",
             });
             assert.equal(
                 await page.locator(".nft-media-unavailable").count(),
@@ -199,6 +225,7 @@ test(
             const page = await openPage(browser, origin, {
                 route: "/nft/?type=text&id=1",
                 answers,
+                until: /Metadata\s*On-chain/i,
             });
             const text = await page.evaluate(() => document.body.innerText);
             assert.match(
@@ -243,6 +270,9 @@ test(
                     route,
                     onCall: (body) =>
                         calls.push(String(body?.params?.[0]?.data ?? "")),
+                    // The refusal is rendered from the parsed route, so once
+                    // it is on screen the page has decided what to read.
+                    until: ".nft-unsupported-route",
                 });
                 assert.ok(
                     !calls.some((data) => data.startsWith(uriSelector)),
@@ -271,7 +301,10 @@ test(
                 "/nft/?type=marketplace&id=1",
                 "/nft/?type=text&id=-1",
             ]) {
-                const page = await openPage(browser, origin, { route });
+                const page = await openPage(browser, origin, {
+                    route,
+                    until: ".nft-unsupported-route",
+                });
                 assert.equal(
                     await page.locator(".nft-unsupported-route").count(),
                     1,
@@ -296,6 +329,9 @@ test(
                         text_uri: "data:text/plain,hi",
                     }),
                 }),
+                // The token has to have rendered before "no refusal here"
+                // means anything.
+                until: /Token ID\s*1/,
             });
             assert.equal(
                 await page.locator(".nft-unsupported-route").count(),
@@ -329,7 +365,22 @@ test(
             const page = await openPage(browser, origin, {
                 route: "/nft/?type=text&id=1",
                 answers,
+                until: "iframe",
             });
+            // The sanitised content is put into the frame after it mounts, and
+            // the frame sizes itself off that content.
+            await waitUntil(
+                async () =>
+                    /click/.test(
+                        await page
+                            .locator("iframe")
+                            .first()
+                            .evaluate(
+                                (el) => el.contentDocument?.body?.innerText ?? ""
+                            )
+                    ),
+                { label: "the sanitised content in the viewer" }
+            );
             // The built page shipped `sandbox` with no value, which React drops
             // for a string attribute, so no sandbox reached the browser at all.
             // The value has to be exactly this: `allow-same-origin` alone keeps
@@ -408,6 +459,10 @@ test(
                 "function totalSupply(uint256) view returns (uint256)",
             ]).getSighash("totalSupply");
 
+            // The stale read, counted at both ends: a navigation that happens
+            // before it is issued proves nothing, and an assertion made before
+            // its answer lands cannot see the overwrite it is looking for.
+            const stale = { issued: 0, answered: 0 };
             const page = await browser.newPage();
             await routeOffline(page, origin, {
                 rpc: {
@@ -423,7 +478,9 @@ test(
                         ) {
                             // The slow read the user navigated away from: it
                             // lands well after token 2 has already answered.
+                            stale.issued += 1;
                             await new Promise((r) => setTimeout(r, 1500));
+                            stale.answered += 1;
                         }
                         return answerCall(answers, body, []);
                     },
@@ -435,7 +492,10 @@ test(
             await page.goto(`${origin}/nft/?type=text&id=1`, {
                 waitUntil: "domcontentloaded",
             });
-            await page.waitForTimeout(500);
+            await waitForHydration(page);
+            await waitUntil(() => stale.issued > 0, {
+                label: "the slow token-1 read to be in flight",
+            });
 
             assert.equal(
                 await page.evaluate(() => typeof window.___navigate),
@@ -445,11 +505,26 @@ test(
             await page.evaluate(() =>
                 window.___navigate("/nft?type=text&id=2")
             );
-            await page.waitForTimeout(4000);
+            await waitUntil(() => stale.answered > 0, {
+                label: "the abandoned read to answer",
+            });
+            const bodyText = async () =>
+                (await page.evaluate(() => document.body.innerText)).replace(
+                    /\s+/g,
+                    " "
+                );
+            await waitUntil(async () => /Edition size: 10\b/.test(await bodyText()), {
+                label: "token 2 to render",
+            });
+            // Bounded on purpose: the stale answer has left the harness, but
+            // the render it could corrupt is a task or two later in the page
+            // and nothing on screen marks a value that must never appear.
+            // Measured rather than guessed: widening this to 4000 changed
+            // nothing at load average ~45, so the overwrite does not land late,
+            // it does not land.
+            await page.waitForTimeout(300);
 
-            const text = (
-                await page.evaluate(() => document.body.innerText)
-            ).replace(/\s+/g, " ");
+            const text = await bodyText();
             assert.match(text, /Edition size: 10\b/);
             assert.doesNotMatch(text, /Edition size: 100\b/);
         } finally {
@@ -470,6 +545,7 @@ test(
             const page = await openPage(browser, origin, {
                 route: "/nft/?type=text&id=1",
                 answers,
+                until: ".tabs li",
             });
 
             const reached = [];
@@ -493,13 +569,17 @@ test(
 
             // Focus is on History; the tab must respond to a key, not only a click.
             await page.keyboard.press("Enter");
-            await page.waitForTimeout(400);
-            assert.equal(
-                await page.evaluate(() =>
+            const historyIsActive = () =>
+                page.evaluate(() =>
                     document
                         .querySelector(".tabs li:nth-child(2)")
                         ?.className.includes("is-active")
-                ),
+                );
+            await waitUntil(historyIsActive, {
+                label: "the History tab to become active",
+            });
+            assert.equal(
+                await historyIsActive(),
                 true,
                 "Enter did not switch to the History tab"
             );

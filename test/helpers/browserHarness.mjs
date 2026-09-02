@@ -487,6 +487,82 @@ export const setChainAnswers = (page, answers) =>
 /** eth_calls the table did not cover: the first thing to check on a zero read. */
 export const chainMisses = (page) => page.evaluate(() => window.__chainState.misses);
 
+/**
+ * The ceiling for every condition wait below.
+ *
+ * These runs share the machine with whatever else is building on it, so a wait
+ * sized for an idle box expires while the app is still working. A condition
+ * that is already true costs nothing to check, so the number is only ever
+ * spent on a genuine failure.
+ *
+ * 30s rather than 20s because 20s was measured to expire: at load average ~40
+ * on this ten-core box, `connectWallet` lost the status dot it waits for.
+ */
+export const CONDITION_TIMEOUT = 30000;
+
+/** Poll an async predicate until it holds, or fail naming what never arrived. */
+export async function waitUntil(
+    predicate,
+    { timeout = CONDITION_TIMEOUT, label = "condition" } = {}
+) {
+    const deadline = Date.now() + timeout;
+    for (;;) {
+        const value = await predicate();
+        if (value) return value;
+        if (Date.now() > deadline) {
+            throw new Error(`timed out after ${timeout}ms waiting for ${label}`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+}
+
+/**
+ * Wait until `locator` reads something `re` matches.
+ *
+ * Deliberately the same `textContent()` the assertions use, so a wait can
+ * never accept text the assertion beside it would reject.
+ */
+export async function waitForTextMatch(locator, re, options = {}) {
+    let last = null;
+    await waitUntil(
+        async () => {
+            last = await locator.textContent().catch(() => null);
+            return last !== null && re.test(last);
+        },
+        { label: `text matching ${re}`, ...options }
+    ).catch((error) => {
+        throw new Error(`${error.message}; last read: ${JSON.stringify(last)}`);
+    });
+    return last;
+}
+
+/** Wait until the mock wallet has been asked for `method` at least `count` times. */
+export const waitForWalletCalls = (
+    page,
+    method,
+    count,
+    { timeout = CONDITION_TIMEOUT } = {}
+) =>
+    page.waitForFunction(
+        ([m, n]) =>
+            (window.__walletCalls ?? []).filter((c) => c.method === m).length >= n,
+        [method, count],
+        { timeout }
+    );
+
+/**
+ * Wait for Gatsby's client runtime, which is the floor under everything React
+ * does on the page.
+ *
+ * A floor, not a settle: it says the bundle has loaded and hydration is under
+ * way, not that any chain read has come back. Anything that depends on data
+ * needs its own condition on top.
+ */
+export const waitForHydration = (page) =>
+    page.waitForFunction(() => typeof window.___navigate === "function", null, {
+        timeout: CONDITION_TIMEOUT,
+    });
+
 /** Drive the Web3Modal picker through to the injected wallet. */
 export async function connectWallet(page) {
     // Below the desktop breakpoint the header collapses and the wallet control
@@ -510,7 +586,14 @@ export async function connectWallet(page) {
         .waitFor({ state: "visible", timeout: 2000 })
         .then(() => picker.click())
         .catch(() => {});
-    await page.waitForTimeout(1200);
+    // The status dot is driven by the provider the app stores on connection,
+    // so it is the app's own account of being connected rather than a guess at
+    // how long that takes. The chain id lands one render later, and a caller
+    // that depends on it has to say so itself.
+    await page
+        .locator(".vinunft-wallet__status.is-connected")
+        .first()
+        .waitFor({ timeout: CONDITION_TIMEOUT });
 }
 
 export const walletCalls = (page) => page.evaluate(() => window.__walletCalls ?? []);

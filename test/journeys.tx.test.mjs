@@ -7,6 +7,8 @@ import {
     routeOffline,
     installMockWallet,
     connectWallet,
+    waitUntil,
+    waitForTextMatch,
     chainAnswers,
     chainReceipt,
     answerCall,
@@ -82,7 +84,6 @@ async function openNft({ chain = {}, reject = [], rpc = {} } = {}) {
         waitUntil: "domcontentloaded",
     });
     await connectWallet(page);
-    await page.waitForTimeout(900);
     return { page, context };
 }
 
@@ -93,8 +94,11 @@ const sentHash = (page) =>
 async function clickBuy(page) {
     await page.locator("button", { hasText: /^Buy$/ }).first().click();
     await page.locator(".modal-card").waitFor();
-    await page.waitForTimeout(500);
-    await page.locator(".modal-card-foot button").first().click();
+    // The footer reads Approve until the allowance has been re-read, so
+    // clicking on sight can sign the wrong transaction.
+    const footer = page.locator(".modal-card-foot button").first();
+    await waitForTextMatch(footer, /^Buy$/);
+    await footer.click();
 }
 
 test(
@@ -106,9 +110,9 @@ test(
         });
         try {
             await clickBuy(page);
-            await page.waitForTimeout(1500);
 
             const toast = toasts(page).first();
+            await waitForTextMatch(toast, /failed/i);
             assert.match(await toast.textContent(), /failed/i);
             assert.match(await toast.textContent(), /User rejected/i);
             assert.equal(
@@ -142,9 +146,9 @@ test(
             });
 
             await clickBuy(page);
-            await page.waitForTimeout(1200);
 
             const toast = toasts(page).first();
+            await waitForTextMatch(toast, /Waiting for approval/i);
             assert.match(await toast.textContent(), /Waiting for approval/i);
             assert.equal(
                 await toast.locator("a").count(),
@@ -152,7 +156,7 @@ test(
                 "there is no hash to link to before the wallet answers"
             );
 
-            await page.waitForTimeout(4000);
+            await waitForTextMatch(toast, /mined/i);
             assert.match(await toast.textContent(), /mined/i);
         } finally {
             await context.close();
@@ -180,9 +184,9 @@ for (const [status, outcome, notOutcome] of [
             });
             try {
                 await clickBuy(page);
-                await page.waitForTimeout(3000);
 
                 const toast = toasts(page).first();
+                await waitForTextMatch(toast, outcome);
                 assert.match(await toast.textContent(), outcome);
                 assert.doesNotMatch(await toast.textContent(), notOutcome);
                 assert.equal(
@@ -218,7 +222,8 @@ test(
         });
         try {
             await clickBuy(page);
-            await page.waitForTimeout(2000);
+            // The link appears only once the wallet has answered with a hash.
+            await toasts(page).first().locator("a").waitFor();
             const hash = await sentHash(page);
             const explorerLink = `${config.blockExplorer.url}/tx/${hash}`;
             assert.equal(
@@ -227,9 +232,9 @@ test(
             );
 
             await page.reload({ waitUntil: "domcontentloaded" });
-            await page.waitForTimeout(2000);
 
             const restored = toasts(page).first();
+            await waitForTextMatch(restored, /approved/i);
             assert.equal(
                 await restored.locator("a").getAttribute("href"),
                 explorerLink,
@@ -239,9 +244,9 @@ test(
 
             mined = true;
             await page.reload({ waitUntil: "domcontentloaded" });
-            await page.waitForTimeout(2500);
 
             const resolved = toasts(page).first();
+            await waitForTextMatch(resolved, /mined/i);
             assert.match(
                 await resolved.textContent(),
                 /mined/i,
@@ -278,11 +283,20 @@ test(
             });
 
             await clickBuy(page);
-            await page.waitForTimeout(1500);
+            await waitForTextMatch(toasts(page).first(), /failed/i);
             assert.match(await toasts(page).first().textContent(), /failed/i);
 
             await clickBuy(page);
-            await page.waitForTimeout(3000);
+            // Both the second toast and its mined outcome have to have landed
+            // before "only one transaction reached the chain" means anything.
+            await toasts(page).nth(1).waitFor();
+            await waitUntil(
+                async () =>
+                    (await toasts(page).allTextContents()).some((t) =>
+                        /mined/i.test(t)
+                    ),
+                { label: "the retry to be mined" }
+            );
 
             assert.equal(
                 await toasts(page).count(),
@@ -317,7 +331,7 @@ test(
         });
         try {
             await clickBuy(page);
-            await page.waitForTimeout(1500);
+            await waitForTextMatch(toasts(page).first(), /failed/i);
             assert.equal(await toasts(page).count(), 1);
 
             const dismiss = page.getByRole("button", {
@@ -325,7 +339,7 @@ test(
             });
             assert.equal(await dismiss.count(), 1);
             await dismiss.press("Enter");
-            await page.waitForTimeout(1200);
+            await toasts(page).first().waitFor({ state: "detached" });
             assert.equal(await toasts(page).count(), 0);
         } finally {
             await context.close();

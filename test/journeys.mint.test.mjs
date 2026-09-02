@@ -8,6 +8,8 @@ import {
     installMockWallet,
     connectWallet,
     walletCalls,
+    waitUntil,
+    waitForTextMatch,
     chainReceipt,
     appConfig as config,
     TEST_ACCOUNT,
@@ -79,7 +81,6 @@ async function openMint({ chain = {}, reject = [], uploads = null } = {}) {
     }
     await page.goto(`${origin}/mint/`, { waitUntil: "domcontentloaded" });
     await connectWallet(page);
-    await page.waitForTimeout(900);
     return { page, context };
 }
 
@@ -90,6 +91,20 @@ const sends = async (page) =>
     (await walletCalls(page)).filter((c) => c.method === "eth_sendTransaction");
 
 const mintButton = (page) => page.locator("button", { hasText: /Mint|Upload/ });
+
+const FEE_LINE = new RegExp(
+    `Estimated network fee: 0\\.0002 ${config.nativeCurrency.symbol}`
+);
+
+/**
+ * The quote is computed from the whole form, so its arrival is the one signal
+ * that every field the creator typed has reached the mint the button submits.
+ */
+const waitForQuote = (page) =>
+    waitUntil(
+        async () => FEE_LINE.test(await page.textContent("main, body")),
+        { label: "the fee quote" }
+    );
 
 async function fillCommon(page, { title, description, editionSize = "1" }) {
     await page.locator('input[name="title"]').fill(title);
@@ -109,14 +124,9 @@ test(
                 description: "A text NFT",
             });
             await page.locator("textarea.textarea").fill("Hello world");
-            await page.waitForTimeout(1500);
+            await waitForQuote(page);
 
-            assert.match(
-                await page.textContent("main, body"),
-                new RegExp(
-                    `Estimated network fee: 0\\.0002 ${config.nativeCurrency.symbol}`
-                )
-            );
+            assert.match(await page.textContent("main, body"), FEE_LINE);
 
             // A node that will not quote is not a fee of zero: the line has to
             // disappear rather than claim the mint is free.
@@ -124,7 +134,15 @@ test(
                 window.__chainState.estimateGasError = "execution reverted";
             });
             await page.locator("textarea.textarea").fill("Hello world!");
-            await page.waitForTimeout(1500);
+            // A transition, not an absence poll: the line was on screen a
+            // moment ago and has to come off once the re-quote fails.
+            await waitUntil(
+                async () =>
+                    !/Estimated network fee/.test(
+                        await page.textContent("main, body")
+                    ),
+                { label: "the fee line to be withdrawn" }
+            );
 
             assert.doesNotMatch(
                 await page.textContent("main, body"),
@@ -157,9 +175,9 @@ test(
             });
             await page.locator('input[name="royaltyPercentage"]').fill("10");
             await page.locator("textarea.textarea").fill("Hello world");
-            await page.waitForTimeout(600);
+            await waitForQuote(page);
             await mintButton(page).click();
-            await page.waitForTimeout(3500);
+            await page.waitForURL(/\/nft\/?\?type=text&id=7/);
 
             const decoded = textIface.decodeFunctionData(
                 "mint",
@@ -204,9 +222,12 @@ test(
             await page.locator("select#content").selectOption("text/plain");
             await fillCommon(page, { title: "Declined", description: "Nope" });
             await page.locator("textarea.textarea").fill("Hello");
-            await page.waitForTimeout(600);
+            await waitForQuote(page);
             await mintButton(page).click();
-            await page.waitForTimeout(2000);
+            await waitForTextMatch(
+                page.locator(".standard-error-body"),
+                /User rejected the request/
+            );
 
             const banner = await page.textContent(".standard-error-body");
             assert.match(banner, /User rejected the request/);
@@ -234,7 +255,7 @@ test(
                 mimeType: "image/png",
                 buffer: PNG,
             });
-            await page.waitForTimeout(600);
+            await page.locator('img[src^="blob:"]').first().waitFor();
 
             assert.ok(
                 await page.locator('img[src^="blob:"]').first().isVisible(),
@@ -262,7 +283,10 @@ test(
                 mimeType: "image/png",
                 buffer: Buffer.alloc(config.maxIpfsUploadBytes + 1),
             });
-            await page.waitForTimeout(600);
+            await waitForTextMatch(
+                page.locator(".standard-error-body"),
+                /larger than the 10 MiB upload limit/
+            );
 
             assert.match(
                 await page.textContent(".standard-error-body"),
@@ -319,15 +343,22 @@ test(
                 mimeType: "image/png",
                 buffer: PNG,
             });
-            await page.waitForTimeout(600);
+            await page.locator('img[src^="blob:"]').first().waitFor();
 
             await mintButton(page).click();
-            await page.waitForTimeout(2500);
+            // The refusal banner is the end of the first attempt: both uploads
+            // and both payload signatures happen before the wallet is asked.
+            // (The decline is raised by the stub above, which never reaches
+            // the recorder, so the wallet call log cannot be the anchor here.)
+            await waitForTextMatch(
+                page.locator(".standard-error-body"),
+                /User rejected the request/
+            );
             assert.equal(uploads.count, 2, "image and metadata, once each");
             assert.equal((await signatures(page)).length, 2);
 
             await mintButton(page).click();
-            await page.waitForTimeout(3500);
+            await page.waitForURL(/\/nft\/?\?type=image&id=4/);
             assert.match(page.url(), /\/nft\/?\?type=image&id=4/);
 
             assert.equal(

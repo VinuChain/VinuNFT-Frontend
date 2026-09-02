@@ -5,6 +5,7 @@ import {
     hasBuild,
     startStaticServer,
     routeOffline,
+    waitUntil,
     appConfig as config,
 } from "./helpers/browserHarness.mjs";
 
@@ -324,7 +325,14 @@ async function openMarketplace({ logs = MIXED_LOGS, failLogs = false } = {}) {
             { timeout: 60000 }
         )
         .catch(() => {});
-    await page.waitForTimeout(1500);
+    // The scan ends in exactly one of two renders: the row count that heads
+    // the grid, or the notice that says the scan failed. Either one means the
+    // "Loading listings..." state is over and the rows below are the whole of
+    // what the index found.
+    await page
+        .locator(".marketplace-listings__count, .notification.is-danger")
+        .first()
+        .waitFor({ timeout: 60000 });
 
     return { page, context, misses, counts, chain };
 }
@@ -355,18 +363,21 @@ test(
                 new RegExp(`Showing ${PAGE_SIZE} of ${MANY_COUNT}`)
             );
 
+            const cards = page.locator("article.marketplace-listing");
             const more = page.getByRole("button", { name: "Load more" });
             assert.equal(await more.count(), 1);
             await more.click();
-            await page.waitForTimeout(200);
-            assert.equal(
-                await page.locator("article.marketplace-listing").count(),
-                PAGE_SIZE * 2
-            );
+            await waitUntil(async () => (await cards.count()) === PAGE_SIZE * 2, {
+                label: "the second page of rows",
+            });
+            assert.equal(await cards.count(), PAGE_SIZE * 2);
 
             while ((await more.count()) > 0) {
+                const shown = await cards.count();
                 await more.click();
-                await page.waitForTimeout(200);
+                await waitUntil(async () => (await cards.count()) > shown, {
+                    label: `more than ${shown} rows`,
+                });
             }
             assert.equal(
                 await page.locator("article.marketplace-listing").count(),
@@ -490,15 +501,23 @@ test(
             assert.equal(await box.count(), 1);
 
             await box.fill(String(FULFILLABLE_ID));
-            await page.waitForTimeout(200);
+            await waitUntil(
+                async () => (await cardFor(page, FULFILLABLE_ID).count()) === 1,
+                { label: "the searched token id" }
+            );
             assert.equal(
                 await page.locator("article.marketplace-listing").count(),
                 1
             );
             assert.equal(await cardFor(page, FULFILLABLE_ID).count(), 1);
 
+            // A different row, so this is a real change of what is on screen
+            // rather than the previous single result standing still.
             await box.fill(BOB.slice(0, 8));
-            await page.waitForTimeout(200);
+            await waitUntil(
+                async () => (await cardFor(page, UNPRICED_ID).count()) === 1,
+                { label: "the seller's own listing" }
+            );
             assert.equal(await cardFor(page, UNPRICED_ID).count(), 1);
             assert.equal(
                 await page.locator("article.marketplace-listing").count(),
@@ -517,17 +536,6 @@ test(
     async () => {
         const { page, context } = await openMarketplace();
         try {
-            await page
-                .getByRole("checkbox", { name: "Fulfillable only" })
-                .check();
-            await page.waitForTimeout(200);
-
-            const rendered = await page.$$eval(
-                "article.marketplace-listing a[href^='/nft?type=text']",
-                (els) =>
-                    els.map((e) => Number(new URL(e.href).searchParams.get("id")))
-            );
-
             // Recomputed here from the same rows, not restated as a literal:
             // an unknown balance is unknown availability, which rowMatchesFilters
             // shows and labels rather than hides.
@@ -541,6 +549,22 @@ test(
             const expected = rows
                 .filter((row) => rowMatchesFilters(row, { fulfillableOnly: true }))
                 .map((row) => row.tokenId);
+
+            await page
+                .getByRole("checkbox", { name: "Fulfillable only" })
+                .check();
+            await waitUntil(
+                async () =>
+                    (await page.locator("article.marketplace-listing").count()) ===
+                    expected.length,
+                { label: `${expected.length} fulfillable rows` }
+            );
+
+            const rendered = await page.$$eval(
+                "article.marketplace-listing a[href^='/nft?type=text']",
+                (els) =>
+                    els.map((e) => Number(new URL(e.href).searchParams.get("id")))
+            );
 
             assert.deepEqual(rendered.sort((a, b) => a - b), expected.sort((a, b) => a - b));
         } finally {

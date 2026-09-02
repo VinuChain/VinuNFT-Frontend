@@ -9,6 +9,8 @@ import {
     installMockWallet,
     connectWallet,
     walletCalls,
+    waitUntil,
+    waitForWalletCalls,
     appConfig,
     TEST_ACCOUNT,
 } from "./helpers/browserHarness.mjs";
@@ -95,6 +97,13 @@ const api = (page, origin, createBody, quotas = ["1000000000"]) => {
     return seen;
 };
 
+/** The same `document.body.innerText` every assertion below reads. */
+const waitForBody = (page, re, label) =>
+    waitUntil(
+        async () => re.test(await page.evaluate(() => document.body.innerText)),
+        { label }
+    );
+
 async function runBridge(browser, origin, createBody, options = {}) {
     const page = await browser.newPage();
     await installMockWallet(page, {
@@ -112,21 +121,26 @@ async function runBridge(browser, origin, createBody, options = {}) {
         waitUntil: "domcontentloaded",
     });
     await connectWallet(page);
-    await page.waitForTimeout(1200);
     await page
         .locator("button", { hasText: /Out of VinuChain/ })
         .first()
         .click();
-    await page.waitForTimeout(500);
+    // The route's live quota is fetched from the API; until it renders there is
+    // no route to price an amount against.
+    await page.locator(".bridge-metrics").waitFor();
     // First input is the amount; the destination is prefilled with the connected
     // account because the target chain is EVM.
     await page.locator("input").first().fill("5");
-    await page.waitForTimeout(500);
+    // No wait here on purpose: measured, not assumed. The fees on this route are
+    // flat, so nothing rendered is computed from the amount, and the submit
+    // button below is auto-waited for by its own label. Setting the sleep that
+    // used to sit here to zero left the file green at load average ~45, so it
+    // was buying nothing.
     await page
         .locator("button", { hasText: /Bridge with WanBridge/i })
         .first()
         .click();
-    await page.waitForTimeout(2500);
+    // Each caller waits for the outcome it is about to assert on.
     return page;
 }
 
@@ -156,6 +170,8 @@ test(
                 { chain: { receipt: null } }
             );
 
+            // Held pending, so this is the prompt still being on screen.
+            await waitForWalletCalls(page, "eth_sendTransaction", 1);
             const sends = (await walletCalls(page)).filter(
                 (call) => call.method === "eth_sendTransaction"
             );
@@ -243,6 +259,7 @@ test(
             const explorerLink = page.locator(
                 `a[href="${appConfig.blockExplorer.url}/tx/${BRIDGE_TX_HASH}"]`
             );
+            await explorerLink.waitFor();
             assert.equal(
                 await explorerLink.count(),
                 1,
@@ -290,6 +307,9 @@ test(
                 },
             });
 
+            // The refusal names the token it refused, and it is what says the
+            // check has run — "nothing was signed" is true before it does.
+            await waitForBody(page, /0x0*c0de/i, "the refused token");
             const sends = (await walletCalls(page)).filter(
                 (call) => call.method === "eth_sendTransaction"
             );
@@ -324,6 +344,11 @@ test(
                 quotas: ["1000000000", "1"],
             });
 
+            await waitForBody(
+                page,
+                /quota for this route changed/i,
+                "the stale-quota refusal"
+            );
             assert.equal(
                 page.seen.createTx,
                 0,

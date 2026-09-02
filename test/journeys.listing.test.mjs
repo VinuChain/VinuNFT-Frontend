@@ -8,6 +8,9 @@ import {
     installMockWallet,
     connectWallet,
     walletCalls,
+    waitUntil,
+    waitForTextMatch,
+    waitForWalletCalls,
     chainMisses,
     chainReceipt,
     answerCall,
@@ -87,7 +90,6 @@ async function openNft(answers) {
         waitUntil: "domcontentloaded",
     });
     await connectWallet(page);
-    await page.waitForTimeout(900);
     return { page, context, errors };
 }
 
@@ -99,7 +101,8 @@ const footerButton = (page) => page.locator(".modal-card-foot button").first();
 async function openModal(page, label) {
     await page.locator("button", { hasText: label }).first().click();
     await page.locator(".modal-card").waitFor();
-    await page.waitForTimeout(400);
+    // The footer is what every caller acts on, and it mounts last.
+    await footerButton(page).waitFor({ state: "visible" });
 }
 
 async function fillListing(page, { paymentToken, price, amount = "1" }) {
@@ -108,7 +111,6 @@ async function fillListing(page, { paymentToken, price, amount = "1" }) {
         .selectOption(paymentToken);
     await page.locator('.modal-card-body input[name="amount"]').fill(amount);
     await page.locator('.modal-card-body input[name="price"]').fill(price);
-    await page.waitForTimeout(400);
 }
 
 test(
@@ -120,6 +122,9 @@ test(
         );
         try {
             await openModal(page, /^List$/);
+            // The label is decided by an isApprovedForAll read, so it settles
+            // after the card is on screen.
+            await waitForTextMatch(footerButton(page), /Approve Marketplace/);
             assert.match(
                 await footerButton(page).textContent(),
                 /Approve Marketplace/
@@ -139,6 +144,7 @@ test(
         const { page, context, errors } = await openNft(listingFixture());
         try {
             await openModal(page, /^List$/);
+            await waitForTextMatch(footerButton(page), /^List$/);
             assert.match(await footerButton(page).textContent(), /^List$/);
 
             await fillListing(page, {
@@ -147,7 +153,7 @@ test(
                 amount: "2",
             });
             await footerButton(page).click();
-            await page.waitForTimeout(2500);
+            await waitForWalletCalls(page, "eth_sendTransaction", 1);
 
             const listings = await sends(page);
             assert.equal(listings.length, 1);
@@ -165,10 +171,9 @@ test(
             );
             assert.equal(decoded[4].toNumber(), 2);
 
-            assert.match(
-                await page.locator(".Toastify__toast").first().textContent(),
-                /mined/i
-            );
+            const toast = page.locator(".Toastify__toast").first();
+            await waitForTextMatch(toast, /mined/i);
+            assert.match(await toast.textContent(), /mined/i);
             assert.deepEqual(await chainMisses(page), []);
             assert.deepEqual(errors, []);
         } finally {
@@ -188,7 +193,7 @@ test(
             await openModal(page, /^List$/);
             await fillListing(page, { paymentToken: "wvc", price: "2.5" });
             await footerButton(page).click();
-            await page.waitForTimeout(2500);
+            await waitForWalletCalls(page, "eth_sendTransaction", 1);
 
             const decoded = marketplaceIface.decodeFunctionData(
                 "listToken",
@@ -214,6 +219,10 @@ test(
                 price: "0.0000001",
             });
 
+            await waitForTextMatch(
+                page.locator(".modal-card-body"),
+                /at most 6 decimal places/i
+            );
             assert.match(
                 await page.locator(".modal-card-body").textContent(),
                 /at most 6 decimal places/i
@@ -226,6 +235,12 @@ test(
                 paymentToken: "wvc",
                 price: "0.0000001",
             });
+            // The refusal was on screen a moment ago; the same price becoming
+            // submittable in WVC is the transition that ends this wait.
+            await waitUntil(
+                async () => !(await footerButton(page).isDisabled()),
+                { label: "the WVC price to become submittable" }
+            );
             assert.doesNotMatch(
                 await page.locator(".modal-card-body").textContent(),
                 /at most 6 decimal places/i
@@ -252,9 +267,8 @@ test(
             await page
                 .locator('.modal-card-body input[name="price"]')
                 .fill("4.25");
-            await page.waitForTimeout(400);
             await footerButton(page).click();
-            await page.waitForTimeout(2500);
+            await waitForWalletCalls(page, "eth_sendTransaction", 1);
 
             const decoded = marketplaceIface.decodeFunctionData(
                 "editListing",
@@ -283,7 +297,7 @@ test(
         const { page, context } = await openNft(listingFixture());
         try {
             await page.locator("button", { hasText: /^Delist$/ }).click();
-            await page.waitForTimeout(2500);
+            await waitForWalletCalls(page, "eth_sendTransaction", 1);
 
             const decoded = marketplaceIface.decodeFunctionData(
                 "delistToken",
@@ -293,10 +307,9 @@ test(
                 [decoded[0], decoded[1].toNumber(), decoded[2].toNumber()],
                 [NFT, 1, 0]
             );
-            assert.match(
-                await page.locator(".Toastify__toast").first().textContent(),
-                /mined/i
-            );
+            const toast = page.locator(".Toastify__toast").first();
+            await waitForTextMatch(toast, /mined/i);
+            assert.match(await toast.textContent(), /mined/i);
         } finally {
             await context.close();
         }

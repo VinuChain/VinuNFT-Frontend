@@ -153,7 +153,6 @@ async function openRoute({ route, answers }, viewport) {
     });
     await page.goto(`${origin}${route}`, { waitUntil: "domcontentloaded" });
     await connectWallet(page);
-    await page.waitForTimeout(900);
     return { page, context };
 }
 
@@ -262,7 +261,11 @@ for (const modal of MODALS) {
                 }
 
                 await page.keyboard.press("Escape");
-                await page.waitForTimeout(300);
+                // The dialog was open a moment ago, so this is a transition to
+                // wait for rather than an absence to poll.
+                await page
+                    .locator(".modal.is-active")
+                    .waitFor({ state: "detached" });
                 assert.equal(
                     await page.locator(".modal.is-active").count(),
                     0,
@@ -301,7 +304,9 @@ for (const modal of MODALS) {
                     "the dialog needs one close control"
                 );
                 await close.press("Enter");
-                await page.waitForTimeout(300);
+                await page
+                    .locator(".modal.is-active")
+                    .waitFor({ state: "detached" });
                 assert.equal(await page.locator(".modal.is-active").count(), 0);
             } finally {
                 await context.close();

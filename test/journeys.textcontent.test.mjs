@@ -9,6 +9,7 @@ import {
     nftPageAnswers,
     answerCall,
     appConfig as config,
+    waitUntil,
 } from "./helpers/browserHarness.mjs";
 
 /**
@@ -56,9 +57,19 @@ test("a text NFT renders its on-chain body against the shipped CSP", { skip: !ha
         });
         await installMockWallet(page, { chain: { answers, blockNumber: BLOCK } });
         await page.goto(`${origin}/nft/?type=text&id=1`, { waitUntil: "domcontentloaded" });
-        await page.waitForTimeout(4000);
-
+        // Both data: hops have to complete before the body exists, and on a
+        // loaded box that takes as long as it takes. Waiting on the decoded
+        // text itself means the wait can never accept a value the assertion
+        // below would reject.
         const pre = page.locator("pre.nft-plain");
+        await waitUntil(
+            async () => (await pre.textContent().catch(() => null))?.trim() === body,
+            { label: "the on-chain text body to decode and render" }
+            // Swallowed: if the refusal this test hunts for happens the body
+            // never arrives, and the assertions below name the cause. A
+            // timeout here would replace that diagnosis with "timed out".
+        ).catch(() => {});
+
         assert.equal(await pre.count(), 1, "the text body element must render");
         assert.equal((await pre.textContent()).trim(), body);
 

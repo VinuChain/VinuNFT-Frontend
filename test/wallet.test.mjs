@@ -7,6 +7,9 @@ import {
     installMockWallet,
     connectWallet,
     walletCalls,
+    waitUntil,
+    waitForHydration,
+    waitForWalletCalls,
     TEST_ACCOUNT,
 } from "./helpers/browserHarness.mjs";
 
@@ -34,11 +37,21 @@ async function openPage(path = "/", walletOptions = {}, rpc = {}) {
     await installMockWallet(page, walletOptions);
     await routeOffline(page, origin, { rpc });
     await page.goto(`${origin}${path}`, { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(900);
+    await waitForHydration(page);
     return { page, context, errors };
 }
 
 const bodyText = async (page) => (await page.textContent("body")).replace(/\s+/g, " ");
+
+/**
+ * `connectWallet` returns when the provider reports itself connected; the
+ * header that reads off that provider lands a render later, and every
+ * assertion below reads the header. This is that arrival.
+ */
+const waitForConnectedHeader = (page) =>
+    waitUntil(async () => (await bodyText(page)).includes("Change Wallet"), {
+        label: "the header to show the connected state",
+    });
 
 test("before connecting, the app offers to connect and hides wallet-only navigation", { skip: !hasBuild }, async () => {
     const { page, context } = await openPage();
@@ -57,6 +70,7 @@ test("connecting reflects the connected state in the UI", { skip: !hasBuild }, a
     const { page, context, errors } = await openPage();
     try {
         await connectWallet(page);
+        await waitForConnectedHeader(page);
 
         const text = await bodyText(page);
         assert.ok(text.includes("Change Wallet"), "the connect control must reflect the new state");
@@ -81,6 +95,9 @@ test("a wallet on the wrong chain is reported rather than silently used", { skip
         // Assert the specific alert element, not a substring: "VinuChain" is in
         // the header on every page, so a text match would pass vacuously.
         const alert = page.locator(".vinunft-header__network-alert");
+        // The alert is rendered off the chain id the provider reports, which
+        // lands a render after the wallet itself connects.
+        await alert.waitFor();
         assert.equal(await alert.count(), 1, "the wrong-network alert must appear");
         assert.match(await alert.textContent(), /please switch to/i);
         assert.deepEqual(errors, [], "wrong network must not crash the page");
@@ -98,10 +115,13 @@ test("the wrong-network alert offers a working switch, not just an instruction",
         const button = page
             .locator(".vinunft-header__network-alert button", { hasText: /switch to/i })
             .first();
+        // Same render as the alert above: it is driven by the chain id, which
+        // arrives after the wallet reports itself connected.
+        await button.waitFor();
         assert.equal(await button.count(), 1, "the alert must offer a switch control");
 
         await button.click();
-        await page.waitForTimeout(400);
+        await waitForWalletCalls(page, "wallet_switchEthereumChain", 1);
 
         const methods = (await walletCalls(page)).map((c) => c.method);
         assert.ok(
@@ -120,6 +140,10 @@ test("the wrong-network alert stays hidden on the correct chain", { skip: !hasBu
     const { page, context } = await openPage("/", { chainId: "0xcf" });
     try {
         await connectWallet(page);
+        // Bounded on purpose: the correct chain renders nothing at all, so
+        // there is no arrival that proves the chain check has run and the
+        // alert would already be on screen if it were coming.
+        await page.waitForTimeout(600);
         assert.equal(
             await page.locator(".vinunft-header__network-alert").count(),
             0,
@@ -135,7 +159,8 @@ test("declining the connection leaves the app usable and still offering to conne
     try {
         await page.locator("button", { hasText: /connect wallet/i }).first().click();
         await page.locator("text=Connect to your MetaMask Wallet").first().click();
-        await page.waitForTimeout(1200);
+        // The refusal the app has to survive is the answer to this request.
+        await waitForWalletCalls(page, "eth_requestAccounts", 1);
 
         // A refused connection is a normal outcome, not a broken page.
         assert.equal(
@@ -167,6 +192,10 @@ test("the connected account is used for chain reads, not a hard-coded address", 
     const { page, context } = await openPage("/", { account: other });
     try {
         await connectWallet(page);
+        // Anchors the negative below: the header has to have rendered from the
+        // connected account before "the built-in test address is absent" says
+        // anything about which account was used.
+        await waitForConnectedHeader(page);
         const accounts = (await walletCalls(page)).filter(
             (c) => c.method === "eth_requestAccounts"
         );
@@ -194,10 +223,13 @@ test("a disconnect from the wallet returns the app to its unconnected state", { 
     const { page, context, errors } = await openPage();
     try {
         await connectWallet(page);
+        await waitForConnectedHeader(page);
         assert.ok((await bodyText(page)).includes("Change Wallet"));
 
         await emit(page, "disconnect");
-        await page.waitForTimeout(600);
+        await waitUntil(async () => (await bodyText(page)).includes("Connect Wallet"), {
+            label: "the header to return to its unconnected state",
+        });
 
         const text = await bodyText(page);
         assert.ok(text.includes("Connect Wallet"), "must offer to reconnect");
@@ -218,7 +250,9 @@ test("clearing the selected account is treated as a disconnection", { skip: !has
             window.ethereum.selectedAddress = null;
         });
         await emit(page, "accountsChanged", []);
-        await page.waitForTimeout(600);
+        await waitUntil(async () => (await bodyText(page)).includes("Connect Wallet"), {
+            label: "the header to return to its unconnected state",
+        });
 
         assert.ok((await bodyText(page)).includes("Connect Wallet"));
         assert.deepEqual(errors, []);
@@ -231,11 +265,17 @@ test("switching to another account keeps the session connected", { skip: !hasBui
     const { page, context, errors } = await openPage();
     try {
         await connectWallet(page);
+        // The session has to be visibly connected before an event can be shown
+        // not to have ended it.
+        await waitForConnectedHeader(page);
         const next = "0x000000000000000000000000000000000000BEEF";
         await page.evaluate((account) => {
             window.ethereum.selectedAddress = account;
         }, next);
         await emit(page, "accountsChanged", [next]);
+        // Bounded on purpose: a switch that keeps the session changes nothing
+        // this page renders, so the only honest test is to give the handler
+        // room to break it and then look.
         await page.waitForTimeout(600);
 
         assert.ok(

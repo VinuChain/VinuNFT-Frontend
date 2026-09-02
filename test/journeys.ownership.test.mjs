@@ -8,6 +8,9 @@ import {
     installMockWallet,
     connectWallet,
     walletCalls,
+    waitUntil,
+    waitForTextMatch,
+    waitForWalletCalls,
     chainMisses,
     chainReceipt,
     answerCall,
@@ -86,7 +89,6 @@ async function openNft() {
         waitUntil: "domcontentloaded",
     });
     await connectWallet(page);
-    await page.waitForTimeout(900);
     return { page, context, errors };
 }
 
@@ -98,8 +100,9 @@ const modalBody = (page) => page.locator(".modal-card-body");
 
 async function openModal(page, label) {
     await page.locator("button", { hasText: label }).first().click();
-    await page.locator(".modal-card").waitFor();
-    await page.waitForTimeout(400);
+    // The footer is the control every caller acts on, and it is the last part
+    // of the card to mount.
+    await footerButton(page).waitFor({ state: "visible" });
 }
 
 test(
@@ -108,7 +111,14 @@ test(
     async () => {
         const { page, context, errors } = await openNft();
         try {
-            const text = (await page.textContent("body")).replace(/\s+/g, " ");
+            // The two figures are read from the chain after the wallet
+            // connects, so the later of them is what says the block is done.
+            const bodyText = async () =>
+                (await page.textContent("body")).replace(/\s+/g, " ");
+            await waitUntil(async () => /Not listed: 2/.test(await bodyText()), {
+                label: "the owner block",
+            });
+            const text = await bodyText();
             assert.match(text, /Owned: 5/);
             assert.match(text, /Not listed: 2/);
             assert.deepEqual(await chainMisses(page), []);
@@ -153,6 +163,9 @@ test(
             await openModal(page, /^Gift$/);
             const amount = modalBody(page).locator('input[name="amount"]');
 
+            // Bounded on purpose: a quantity inside the free balance renders
+            // nothing at all, so there is no arrival to wait for and polling
+            // for the absent warning would pass before the form re-rendered.
             await amount.fill("2");
             await page.waitForTimeout(300);
             assert.equal(
@@ -162,16 +175,21 @@ test(
             );
 
             await amount.fill("3");
-            await page.waitForTimeout(300);
+            const warning = page.locator(".notification.is-warning");
+            await warning.waitFor({ state: "visible" });
             assert.match(
-                await page.locator(".notification.is-warning").textContent(),
+                await warning.textContent(),
                 /tied to existing listings/i
             );
 
             await amount.fill("6");
-            await page.waitForTimeout(300);
+            const danger = page.locator(".notification.is-danger");
+            await waitForTextMatch(
+                danger,
+                /Cannot gift more tokens than you own \(5\)/
+            );
             assert.match(
-                await page.locator(".notification.is-danger").textContent(),
+                await danger.textContent(),
                 /Cannot gift more tokens than you own \(5\)/
             );
             assert.equal(await footerButton(page).isDisabled(), true);
@@ -191,9 +209,8 @@ test(
             await openModal(page, /^Gift$/);
             await modalBody(page).locator('input[name="amount"]').fill("2");
             await modalBody(page).locator('input[name="to"]').fill(RECIPIENT);
-            await page.waitForTimeout(400);
             await footerButton(page).click();
-            await page.waitForTimeout(2500);
+            await waitForWalletCalls(page, "eth_sendTransaction", 1);
 
             const decoded = nftIface.decodeFunctionData(
                 "safeTransferFrom",
@@ -204,10 +221,9 @@ test(
             assert.equal(decoded[2].toNumber(), 1);
             assert.equal(decoded[3].toNumber(), 2);
             assert.equal(decoded[4], "0x");
-            assert.match(
-                await page.locator(".Toastify__toast").first().textContent(),
-                /mined/i
-            );
+            const toast = page.locator(".Toastify__toast").first();
+            await waitForTextMatch(toast, /mined/i);
+            assert.match(await toast.textContent(), /mined/i);
         } finally {
             await context.close();
         }
@@ -222,9 +238,8 @@ test(
         try {
             await openModal(page, /^Burn$/);
             await modalBody(page).locator('input[name="amount"]').fill("1");
-            await page.waitForTimeout(400);
             await footerButton(page).click();
-            await page.waitForTimeout(2500);
+            await waitForWalletCalls(page, "eth_sendTransaction", 1);
 
             const decoded = nftIface.decodeFunctionData(
                 "burn",
@@ -249,9 +264,10 @@ test(
             const to = modalBody(page).locator('input[name="to"]');
 
             await to.fill("0x123");
-            await page.waitForTimeout(400);
+            const help = page.locator("p.help.is-danger");
+            await waitForTextMatch(help, /valid Ethereum name or address/);
             assert.match(
-                await page.locator("p.help.is-danger").textContent(),
+                await help.textContent(),
                 /valid Ethereum name or address/
             );
             assert.equal(await footerButton(page).isDisabled(), true);
@@ -262,12 +278,20 @@ test(
             // false and the button is live again — the submit itself has to
             // refuse.
             await to.fill("");
-            await page.waitForTimeout(400);
+            // The message is already on screen from "0x123", so it is the
+            // button coming back to life that says the empty field has been
+            // revalidated.
+            await waitUntil(async () => !(await footerButton(page).isDisabled()), {
+                label: "the submit button to go live on the restored default",
+            });
             assert.match(
-                await page.locator("p.help.is-danger").textContent(),
+                await help.textContent(),
                 /valid Ethereum name or address/
             );
             await footerButton(page).click();
+            // Bounded on purpose: a submit that refuses renders nothing and
+            // navigates nowhere, so there is no arrival that proves the
+            // handler ran and declined.
             await page.waitForTimeout(1000);
 
             assert.deepEqual(await sends(page), []);
@@ -288,12 +312,12 @@ test(
         try {
             await openModal(page, /^Gift$/);
             await modalBody(page).locator('input[name="to"]').fill("nobody.eth");
-            await page.waitForTimeout(400);
             await footerButton(page).click();
-            await page.waitForTimeout(2000);
+            const error = page.locator(".standard-error-body");
+            await waitForTextMatch(error, /Could not resolve ENS name/);
 
             assert.match(
-                await page.locator(".standard-error-body").textContent(),
+                await error.textContent(),
                 /Could not resolve ENS name/
             );
             assert.deepEqual(await sends(page), []);

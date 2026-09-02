@@ -4,6 +4,8 @@ import {
     hasBuild,
     startStaticServer,
     routeOffline,
+    waitForHydration,
+    waitUntil,
 } from "./helpers/browserHarness.mjs";
 
 const ROUTES = [
@@ -38,10 +40,11 @@ after(async () => {
 });
 
 /** Open a route with chain traffic stubbed, collecting console and page errors. */
-async function open(path, { viewport } = {}) {
-    const context = await browser.newContext(
-        viewport ? { viewport, hasTouch: true, isMobile: true } : {}
-    );
+async function open(path, { viewport, reducedMotion } = {}) {
+    const context = await browser.newContext({
+        ...(viewport ? { viewport, hasTouch: true, isMobile: true } : {}),
+        ...(reducedMotion ? { reducedMotion } : {}),
+    });
     const page = await context.newPage();
     const errors = [];
     page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
@@ -51,6 +54,22 @@ async function open(path, { viewport } = {}) {
 
     await routeOffline(page, origin);
     await page.goto(`${origin}${path}`, { waitUntil: "domcontentloaded" });
+    // Hydration is a load-scaled floor, not a settle: it waits as long as a
+    // busy box needs to run the bundle, where the flat sleep below used to be
+    // the whole wait and expired before the shell existed.
+    //
+    // Swallowed because `errors` is this helper's product: a bundle that
+    // crashes must be reported by the assertions that read it, not as a
+    // timeout here.
+    await waitForHydration(page).catch(() => {});
+    // Bounded on purpose, and kept: nine routes share this helper and most of
+    // what follows is negative — no unnamed control, no image without alt, no
+    // horizontal overflow, no fatal console error. There is no one arrival
+    // common to all nine that says the last chain-driven render has landed, so
+    // polling for those absences would pass before the offending node existed.
+    // Load-bearing, not cargo: at zero this file goes red under load, and with
+    // the tail in place it still catches an alt attribute deleted from a real
+    // component.
     await page.waitForTimeout(700);
     return { page, context, errors };
 }
@@ -427,11 +446,9 @@ test(
     "no element animates indefinitely when reduced motion is requested",
     { skip: !hasBuild },
     async () => {
-        const context = await browser.newContext({ reducedMotion: "reduce" });
-        const page = await context.newPage();
-        await routeOffline(page, origin);
-        await page.goto(`${origin}/`, { waitUntil: "domcontentloaded" });
-        await page.waitForTimeout(700);
+        // Same floor-plus-bounded-tail as every other route here, so the
+        // reduced-motion check reads a page at the same stage they do.
+        const { page, context } = await open("/", { reducedMotion: "reduce" });
         try {
             const animating = await page.$$eval("*", (nodes) =>
                 nodes
@@ -471,9 +488,27 @@ async function openWithRoutes(path, register) {
     await routeOffline(page, origin);
     await register(page);
     await page.goto(`${origin}${path}`, { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(2500);
+    await waitForHydration(page).catch(() => {});
+    // Unlike `open`, every caller below asserts on a specific string, so each
+    // waits for its own — no blanket settle can be shorter than the slowest
+    // route or longer than the fastest without lying about one of them.
     return { page, context };
 }
+
+/**
+ * Wait for `re` to match the body, raw or whitespace-collapsed — the two forms
+ * the assertions below read, so the wait can never accept text one of them
+ * would reject. Swallowed on timeout: the assertion is the check and says what
+ * the page actually held.
+ */
+const waitForBody = (page, re) =>
+    waitUntil(
+        async () => {
+            const body = (await page.textContent("body")) ?? "";
+            return re.test(body) || re.test(body.replace(/\s+/g, " "));
+        },
+        { label: `body text matching ${re}` }
+    ).catch(() => {});
 
 test(
     "Activity says there is nothing rather than holding a skeleton",
@@ -486,6 +521,7 @@ test(
             async () => {}
         );
         try {
+            await waitForBody(page, /no activity/i);
             assert.match(await page.textContent("body"), /no activity/i);
         } finally {
             await context.close();
@@ -501,6 +537,9 @@ test(
             page.route("**rpc.vinuchain.org**", (route) => route.abort())
         );
         try {
+            // The retry button ships with the failure notice, so the notice
+            // arriving is what says the count below is reading a settled page.
+            await waitForBody(page, /(failed|could not|unavailable)/i);
             const body = await page.textContent("body");
             assert.match(body, /(failed|could not|unavailable)/i);
             assert.equal(
@@ -530,10 +569,13 @@ for (const [path, label] of [
                 path,
                 async () => {}
             );
+            const freshness =
+                /indexed through block \d+ \(\d+ blocks behind the head\)/;
             try {
+                await waitForBody(page, freshness);
                 assert.match(
                     (await page.textContent("body")).replace(/\s+/g, " "),
-                    /indexed through block \d+ \(\d+ blocks behind the head\)/
+                    freshness
                 );
             } finally {
                 await context.close();
