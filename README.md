@@ -134,8 +134,14 @@ The legacy PHP social-preview route was removed because it fetched user-controll
 
 ## Marketplace, profiles, and bridge
 
-- `/marketplace` shows active listings from a bounded recent-token client-only window. It is not a global indexer.
-- `/address?address=0x...` shows a bounded owned/created NFT profile and keeps an explicit explorer link.
+- `/marketplace` shows every active listing, folded from the complete marketplace
+  event history starting at each contract's verified first block. It is not a
+  bounded recent-token window. There is no shared server-side index: the fold is
+  rebuilt per browser tab, so a cold load costs ~375 `eth_getLogs` and a warm one
+  ~3. The page states the block it is indexed through and how far behind the head
+  that is, and reports a failed scan rather than rendering an empty marketplace.
+- `/address?address=0x...` shows owned, created, listed, bought and sold from the
+  same index, with cursor pagination and an explicit explorer link.
 - `/bridge` ports the VinuSwap WanBridge experience into VinuNFT with server-side WanBridge API proxies for token pairs, quota/fee, and transaction creation.
 
 See `docs/marketplace-discovery.md`, `docs/address-profiles.md`, and `docs/vinuswap-bridge-port.md` for scope and limits.
