@@ -51,6 +51,51 @@ if (!recordPath || !artifactsRoot) {
 
 const record = JSON.parse(readFileSync(resolve(recordPath), "utf8"));
 
+// src/config.js is edited textually rather than reserialised: it is hand-written
+// ES module source carrying comments that explain every value, and a
+// round-trip through JSON would delete them.
+const configPath = resolve(root, "src/config.js");
+let configSrc = readFileSync(configPath, "utf8");
+
+const problems = [];
+
+// The record names the chain it was deployed to; src/config.js names the chain
+// this build talks to. Nothing below would notice a mismatch — `chainId` and
+// `rpc` are not among the values this script writes — so a testnet record
+// syncs cleanly into the mainnet config and produces addresses that exist
+// nowhere.
+const configChainId = Number(
+    (configSrc.match(/main:\s*\{[\s\S]*?chainId:\s*(\d+)/) ?? [])[1]
+);
+if (Number(record.chainId) !== configChainId) {
+    problems.push(
+        `record is for chain ${record.chainId}, but src/config.js is configured for chain ${configChainId} — ` +
+            `syncing it would write addresses that exist on neither`
+    );
+}
+
+// Every contract the target generation already has must be in the record. A
+// partial record syncs what it names and reports success, leaving the omitted
+// contract's old address, first block and ABI in place: the mixed-generation
+// frontend this script exists to prevent.
+const generationContracts = (section) => {
+    const body = configSrc.match(
+        new RegExp(
+            `${section}:\\s*\\{(?:(?!contractAddresses:|firstBlocks:)[\\s\\S])*?\\b${generation}:\\s*\\{([\\s\\S]*?)\\}`
+        )
+    );
+    return body ? [...body[1].matchAll(/(\w+)\s*:/g)].map((m) => m[1]) : [];
+};
+const missing = generationContracts("contractAddresses").filter(
+    (name) => !record.contracts?.[name]
+);
+if (missing.length) {
+    problems.push(
+        `record names no ${missing.join(", ")} contract, but src/config.js ${generation} has ${missing.length === 1 ? "it" : "them"} — ` +
+            `a partial sync leaves the omitted contract on the previous generation`
+    );
+}
+
 const jsFiles = (dir) =>
     readdirSync(dir).flatMap((entry) => {
         const full = join(dir, entry);
@@ -59,10 +104,9 @@ const jsFiles = (dir) =>
     });
 const sources = jsFiles(resolve(root, "src")).map((f) => [f, readFileSync(f, "utf8")]);
 
-const problems = [];
 const writes = [];
 
-for (const [key, entry] of Object.entries(record.contracts)) {
+for (const [key, entry] of Object.entries(record.contracts ?? {})) {
     const { contractName } = entry;
     const artifactPath = resolve(
         artifactsRoot,
@@ -100,11 +144,6 @@ for (const [key, entry] of Object.entries(record.contracts)) {
     ]);
 }
 
-// src/config.js is edited textually rather than reserialised: it is hand-written
-// ES module source carrying comments that explain every value, and a
-// round-trip through JSON would delete them.
-const configPath = resolve(root, "src/config.js");
-let configSrc = readFileSync(configPath, "utf8");
 const replaceInSection = (section, key, value, quoted) => {
     const re = new RegExp(
         // The lookahead keeps the search inside one section: without it, asking

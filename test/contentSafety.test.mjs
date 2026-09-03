@@ -267,10 +267,12 @@ test("an empty blocklist withdraws nothing and counts nothing", () => {
     assert.deepEqual(partitionListings([], listings), {
         shown: listings,
         hiddenByPolicy: 0,
+        withheldUnknownCreator: 0,
     });
     assert.deepEqual(partitionListings([], undefined), {
         shown: [],
         hiddenByPolicy: 0,
+        withheldUnknownCreator: 0,
     });
 });
 
@@ -299,6 +301,11 @@ test("every place that offers a listing applies the policy through one helper", 
         readFileSync("src/pages/nft/index.js", "utf8"),
         /visibleListings\([\s\S]{0,200}?creator: tokenAuthor/,
         "the token page must offer listings against the creator it resolved"
+    );
+    assert.match(
+        readFileSync("src/pages/nft/index.js", "utf8"),
+        /visibleListings\([\s\S]{0,600}?creatorKnown: authorRead/,
+        "and must say whether that read landed: a failed authorOf otherwise puts a hidden creator's token back on sale"
     );
 });
 
@@ -334,7 +341,7 @@ test("a listing row with no creator of its own inherits the page's", () => {
             tokenId: 7,
             creator: CREATOR,
         }),
-        { shown: [], hiddenByPolicy: 1 }
+        { shown: [], hiddenByPolicy: 1, withheldUnknownCreator: 0 }
     );
     assert.equal(
         partitionListings([HIDE_CREATOR], [{ seller: OTHER_SELLER }], {
@@ -515,5 +522,31 @@ test("the takedown procedure names the unpin step and what it does not achieve",
         doc,
         /third[- ]party pin/i,
         "a CID pinned elsewhere survives our unpin"
+    );
+});
+
+test("a listing whose creator could not be read is withheld, not offered", () => {
+    // Same failure shape the token page already closed: a throttled `authorOf`
+    // is not "a creator no entry names". Offering the row anyway is how an
+    // address-scoped hide is bypassed by reselling through another address.
+    const unread = {
+        nftType: "text",
+        tokenId: 1,
+        seller: OTHER_SELLER,
+        creator: null,
+        creatorKnown: false,
+    };
+    assert.deepEqual(partitionListings([HIDE_CREATOR], [unread]), {
+        shown: [],
+        // Withheld, but not as a moderation decision: the page says which.
+        hiddenByPolicy: 0,
+        withheldUnknownCreator: 1,
+    });
+    // And a row that carries the read stays on sale, so this is not a blanket
+    // withdrawal.
+    assert.equal(
+        partitionListings([HIDE_CREATOR], [{ ...unread, creatorKnown: true }])
+            .shown.length,
+        1
     );
 });

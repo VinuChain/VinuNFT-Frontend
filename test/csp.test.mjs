@@ -188,3 +188,30 @@ test("every built page hash-allows its own inline scripts", { skip: !hasBuild },
         }
     }
 });
+
+// The one directive a meta tag cannot carry. The browser says so itself: "The
+// Content Security Policy directive 'frame-ancestors' is ignored when delivered
+// via a <meta> element", so a policy that declares it only in the HTML ships no
+// clickjacking protection at all while looking like it does.
+const frameAncestorsHeader = () => {
+    const vercel = JSON.parse(readFileSync("vercel.json", "utf8"));
+    const rule = (vercel.headers ?? []).find((r) => r.source === "/(.*)");
+    assert.ok(rule, "vercel.json must set response headers on every path");
+    const header = rule.headers.find(
+        (h) => h.key.toLowerCase() === "content-security-policy"
+    );
+    assert.ok(header, "vercel.json serves no Content-Security-Policy header");
+    return directive(header.value, "frame-ancestors");
+};
+
+test("frame-ancestors is served as an HTTP response header", () => {
+    assert.match(frameAncestorsHeader(), /'self'/);
+});
+
+test("the meta policy cannot drift from the enforced header", { skip: !hasBuild }, () => {
+    // add_csp.js reads the directive out of vercel.json rather than repeating
+    // it, so the shipped page and the enforced header are one value. Byte
+    // equality is the check: a grep for the text in the HTML is what let the
+    // ignored meta copy stand in for protection in the first place.
+    assert.equal(directive(builtCsp(), "frame-ancestors"), frameAncestorsHeader());
+});

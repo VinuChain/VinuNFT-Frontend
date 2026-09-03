@@ -3,7 +3,11 @@ import { ethers } from "ethers";
 import { Helmet } from "react-helmet";
 import { Header, NFTCard } from "../components";
 import Address from "../components/Address";
-import { loadAddressProfileNfts } from "../common/addressProfile";
+import {
+    loadAddressProfileNfts,
+    profileSection,
+    PROFILE_PAGE_SIZE,
+} from "../common/addressProfile";
 import { useReadProvider } from "../common/provider";
 import config from "../config";
 
@@ -39,6 +43,36 @@ function coverageLine(profile) {
     );
 }
 
+/**
+ * One section's cards, bounded, with what is not shown stated rather than
+ * quietly cut off.
+ */
+function SectionCards({ section, refs, shown, onShowMore }) {
+    const { rows, remaining } = profileSection(refs, shown);
+    return (
+        <>
+            <div className="address-profile__grid">
+                {rows.map((nft) => (
+                    <NFTCard
+                        key={`${nft.type}-${nft.id}`}
+                        type={nft.type}
+                        id={nft.id}
+                    />
+                ))}
+            </div>
+            {remaining > 0 ? (
+                <button
+                    type="button"
+                    className="button is-light mt-3"
+                    onClick={onShowMore}
+                >
+                    Show {remaining} more in {section}
+                </button>
+            ) : null}
+        </>
+    );
+}
+
 export default function AddressPage({ location }) {
     const [readProvider] = useReadProvider();
     const query = useMemo(
@@ -52,6 +86,10 @@ export default function AddressPage({ location }) {
         : null;
 
     const [profile, setProfile] = useState(EMPTY_PROFILE);
+    // How many cards each section is currently showing. Every card reads its
+    // own URI and author, so a section that renders a whole profile at once is
+    // hundreds of simultaneous RPC and gateway requests.
+    const [shown, setShown] = useState({});
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -65,6 +103,7 @@ export default function AddressPage({ location }) {
 
             setLoading(true);
             setError(null);
+            setShown({});
             try {
                 const nextProfile = await loadAddressProfileNfts(
                     readProvider,
@@ -146,15 +185,20 @@ export default function AddressPage({ location }) {
                                         {profile[key].length === 0 ? (
                                             <p>None in the index.</p>
                                         ) : (
-                                            <div className="address-profile__grid">
-                                                {profile[key].map((nft) => (
-                                                    <NFTCard
-                                                        key={`${nft.type}-${nft.id}`}
-                                                        type={nft.type}
-                                                        id={nft.id}
-                                                    />
-                                                ))}
-                                            </div>
+                                            <SectionCards
+                                                section={heading}
+                                                refs={profile[key]}
+                                                shown={shown[key]}
+                                                onShowMore={() =>
+                                                    setShown((current) => ({
+                                                        ...current,
+                                                        [key]:
+                                                            (current[key] ??
+                                                                PROFILE_PAGE_SIZE) +
+                                                            PROFILE_PAGE_SIZE,
+                                                    }))
+                                                }
+                                            />
                                         )}
                                     </section>
                                 ))}

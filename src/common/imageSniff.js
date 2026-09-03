@@ -36,15 +36,71 @@ function sniffPng(b) {
     };
 }
 
+/**
+ * The largest image descriptor in a GIF, or null if the blocks cannot be walked.
+ *
+ * A GIF's logical screen is only the canvas its frames composite onto; each
+ * frame carries its own width and height. A file can therefore declare a 1x1
+ * canvas — passing any bound on the canvas alone — while asking a decoder that
+ * allocates per frame for 65535x65535. Walking the block structure is enough to
+ * see that, and costs no decoding.
+ *
+ * Best effort by design: a file whose blocks do not parse falls back to the
+ * canvas, exactly as before. A frame hidden behind bytes no walker can follow
+ * is a frame no decoder reaches either, and rejecting every unparseable GIF
+ * would reject the polyglots and truncated files this sniffer exists to
+ * identify rather than trust.
+ */
+function largestGifFrame(b) {
+    const colourTableSize = (flags) =>
+        flags & 0x80 ? 3 * 2 ** ((flags & 7) + 1) : 0;
+    // Header (6) + logical screen descriptor (7), then the global colour table.
+    let offset = 13 + colourTableSize(b[10]);
+    let largest = null;
+
+    while (offset < b.length) {
+        const block = b[offset];
+        if (block === 0x3b) break; // trailer
+        if (block === 0x21) {
+            // Extension: introducer, label, then data sub-blocks.
+            offset += 2;
+        } else if (block === 0x2c) {
+            const width = readU16LE(b, offset + 5);
+            const height = readU16LE(b, offset + 7);
+            if (offset + 10 > b.length) return largest;
+            if (!largest || width * height > largest.width * largest.height) {
+                largest = { width, height };
+            }
+            // Descriptor, local colour table, LZW minimum code size, then data.
+            offset += 10 + colourTableSize(b[offset + 9]) + 1;
+        } else {
+            return largest;
+        }
+        // Skip the block's data sub-blocks: each is a length byte and that many
+        // bytes, terminated by a zero length.
+        while (offset < b.length && b[offset] !== 0) {
+            offset += b[offset] + 1;
+        }
+        offset += 1;
+    }
+
+    return largest;
+}
+
 function sniffGif(b) {
     if (b.length < 10) return null;
     const magic = ascii(b, 0, 6);
     if (magic !== "GIF87a" && magic !== "GIF89a") return null;
-    return {
-        mediaType: "image/gif",
-        width: readU16LE(b, 6),
-        height: readU16LE(b, 8),
-    };
+    const canvas = { width: readU16LE(b, 6), height: readU16LE(b, 8) };
+    // The geometry the pixel bound is applied to is whichever is larger: an
+    // oversized frame costs the decoder what it declares, wherever the canvas
+    // sits.
+    const frame = largestGifFrame(b);
+    const geometry =
+        frame && frame.width * frame.height > canvas.width * canvas.height
+            ? frame
+            : canvas;
+    return { mediaType: "image/gif", ...geometry };
 }
 
 function sniffJpeg(b) {

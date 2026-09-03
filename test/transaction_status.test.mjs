@@ -149,3 +149,94 @@ test("a reverted receipt resolves to error with a message the toast can render",
 test("no receipt means no news, so the transaction stays pending", () => {
     assert.equal(statusFromReceipt(stored(NOW), null), null);
 });
+
+// === what survives a reload ===
+
+const { nextStoredTransactions, restoreUnresolved, RESTORE_WATCH_MS } =
+    mod.default || mod;
+
+test("a finished transaction is not kept for the next reload to replay", () => {
+    // Every status carrying a hash used to be stored, and restoration replays
+    // every stored entry into a toast. A completed purchase therefore raised
+    // its "Transaction mined" toast again on every reload for 24 hours.
+    const pending = nextStoredTransactions({}, 4, {
+        status: "approved",
+        name: "Buy NFTs #1",
+        hash: `0x${"33".repeat(32)}`,
+    }, NOW);
+    assert.deepEqual(Object.keys(pending), ["4"]);
+
+    for (const terminal of ["success", "error"]) {
+        assert.deepEqual(
+            nextStoredTransactions(pending, 4, {
+                status: terminal,
+                name: "Buy NFTs #1",
+                hash: `0x${"33".repeat(32)}`,
+            }, NOW),
+            {},
+            `a ${terminal} transaction has nothing left to re-resolve`
+        );
+    }
+});
+
+test("a restored transaction is watched until it settles", async () => {
+    // The reload lost the original tx.wait(). One getTransactionReceipt on a
+    // transaction still in the mempool returns null, and nothing ever asked
+    // again: the notification stayed "approved" forever even after it mined.
+    const seen = [];
+    const provider = {
+        getTransactionReceipt: async () => {
+            seen.push("receipt");
+            return null;
+        },
+        waitForTransaction: async (hash) => {
+            seen.push(hash);
+            // Never settles for the first entry, mines for the second.
+            if (hash.startsWith("0xaa")) return new Promise(() => {});
+            return { status: 1 };
+        },
+    };
+    const entries = [
+        { id: 1, status: "approved", hash: `0x${"aa".repeat(32)}` },
+        { id: 2, status: "pending", hash: `0x${"bb".repeat(32)}` },
+        { id: 3, status: "success", hash: `0x${"cc".repeat(32)}` },
+    ];
+
+    const updates = [];
+    restoreUnresolved(entries, provider, (id, status) =>
+        updates.push([id, status.status])
+    );
+    // The unsettled first entry must not starve the second: the loop used to
+    // await each transaction in turn.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.deepEqual(updates, [[2, "success"]]);
+    assert.equal(seen.includes("receipt"), false, "a single receipt query gives up too early");
+    assert.equal(seen.length, 2, "a settled transaction is not re-watched");
+    assert.ok(RESTORE_WATCH_MS > 0, "the watch is bounded, so a dropped transaction stops polling");
+});
+
+test("a sped-up transaction is described by the hash that mined", () => {
+    // The mint content function renders its own explorer link from
+    // `transaction.hash`, overriding the default one. Handed the superseded
+    // original, it sent the user to a hash the chain no longer has.
+    const original = { hash: `0x${"11".repeat(32)}`, nonce: 7 };
+    const result = classifyTransactionError(
+        replaced("repriced", { receipt: { status: 1, blockNumber: 42, logs: [] } }),
+        original
+    );
+
+    assert.equal(result.transaction.hash, REPLACEMENT);
+    assert.equal(result.transaction.nonce, 7, "the rest of the transaction is unchanged");
+    assert.equal(original.hash, `0x${"11".repeat(32)}`, "and the original is not mutated");
+});
+
+test("an ordinary failure still describes the transaction it was given", () => {
+    const original = { hash: `0x${"11".repeat(32)}` };
+    const result = classifyTransactionError(
+        { code: "UNPREDICTABLE_GAS_LIMIT", message: "reverted" },
+        original
+    );
+
+    assert.equal(result.transaction, original);
+});

@@ -359,6 +359,14 @@ function NFTDetail({ location }) {
         try {
             const author = await getNftAuthor(nftContract, id);
             setTokenAuthor(author);
+            // This read answered the same question a concurrent one may have
+            // just failed. Clearing only that error: a metadata or media
+            // failure is a different fact, and the render prefers mediaError
+            // over the content, so a stale one hides media this page went on
+            // to fetch.
+            setMediaError((current) =>
+                current === CREATOR_UNCHECKED ? null : current
+            );
             // Only here. A read that FAILED leaves the decision open on
             // purpose: an unknown creator is not "a creator no entry names",
             // and resolving it to that would let one flaky RPC response switch
@@ -575,6 +583,10 @@ function NFTDetail({ location }) {
             nftType: macroNftType,
             tokenId: id,
             creator: tokenAuthor,
+            // Handed over for the same reason `contentHidden` is a tri-state:
+            // a failed read leaves the creator unknown, and offering the token
+            // anyway would sell exactly what the media decision withheld.
+            creatorKnown: authorRead,
         });
 
     const listingGroups = () => {
@@ -1082,6 +1094,20 @@ function NFTDetail({ location }) {
                                     and can still be bought or delisted through
                                     any other client — including by a seller
                                     whose own row this page has withdrawn.
+                                </p>
+                            ) : null}
+                            {/* Only once the read has FAILED. `authorRead`
+                            is also false while it is still in flight, and
+                            "could not be read" is not true of a read that has
+                            not finished. */}
+                            {mediaError === CREATOR_UNCHECKED &&
+                            offeredListings().withheldUnknownCreator > 0 ? (
+                                <p className="is-size-7 nft-muted">
+                                    {offeredListings().withheldUnknownCreator}{" "}
+                                    listing(s) are held back because this
+                                    token&apos;s creator could not be read, so
+                                    the content policy could not be applied.
+                                    Retrying the media read above re-runs it.
                                 </p>
                             ) : null}
                             <Listings

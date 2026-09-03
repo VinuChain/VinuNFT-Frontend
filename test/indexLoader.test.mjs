@@ -252,6 +252,7 @@ test("listing rows reproduce the live chain state, with the balance folded not r
                 fixture.liveReads[`balanceOf(text,${ALICE},1)`],
             supply: 100,
             creator: fixture.liveReads["authorOf(text,1)"],
+            creatorKnown: true,
             format: "text/markdown",
         },
     ]);
@@ -413,6 +414,7 @@ test("a row carries the raw price, the token's whole supply, its creator and its
 
     assert.equal(row.creator, fixture.liveReads["authorOf(text,1)"]);
     assert.equal(row.format, "text/markdown");
+    assert.equal(row.creatorKnown, true);
 });
 
 test("an image listing needs no extra read to state its format", async () => {
@@ -436,6 +438,9 @@ test("a failed format read degrades the field, never the listing", async () => {
     assert.equal(rows.length, 1, "the listing survives every failed read");
     assert.equal(rows[0].format, null);
     assert.equal(rows[0].creator, null);
+    // The row must say the creator was not READ. Handing the content policy a
+    // plain null lets an address-scoped hide be bypassed by a reseller.
+    assert.equal(rows[0].creatorKnown, false);
     assert.equal(rows[0].supply, 100, "supply is folded, so no read can lose it");
 });
 
@@ -654,4 +659,48 @@ test("a reorg that leaves the head at the same height still drops the orphan", a
         3,
         "and it must cost one tail range per contract, not a fresh full pass"
     );
+});
+
+test("a profile omits collections this app cannot render", async () => {
+    reset();
+    // `listToken` accepts any NFT address, so an indexed token can carry an
+    // nftType that is just a contract address. AddressPage hands each reference
+    // to NFTCard, which looks up config and ABI by type and throws on
+    // contract construction — one such listing broke the whole profile.
+    const provider = fakeProvider({
+        logs: [
+            ...ALL_LOGS,
+            rawLog(
+                textIface,
+                UNKNOWN_COLLECTION,
+                "TransferSingle",
+                [ALICE, ethers.constants.AddressZero, ALICE, 5, 3],
+                3700000
+            ),
+            rawLog(
+                marketplaceIface,
+                MARKETPLACE,
+                "TokenListed",
+                [UNKNOWN_COLLECTION, 5, ALICE, 0, 1, WVC, ethers.utils.parseUnits("1", 18)],
+                3700001
+            ),
+        ],
+    });
+
+    const { state } = await loadIndex(provider);
+    const alice = profileFromIndex(state, ALICE);
+
+    assert.ok(
+        state.tokens[`${UNKNOWN_COLLECTION.toLowerCase()}:5`],
+        "anti-vacuity: the index must actually hold that token"
+    );
+    for (const [section, refs] of Object.entries(alice)) {
+        assert.deepEqual(
+            refs.filter((ref) => !["text", "image"].includes(ref.type)),
+            [],
+            `${section} must carry no reference the card cannot render`
+        );
+    }
+    // The renderable relationships survive.
+    assert.ok(alice.owned.some((ref) => ref.type === "text" && ref.id === 1));
 });

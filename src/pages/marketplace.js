@@ -308,10 +308,11 @@ export default function Marketplace() {
     // the content". The count is kept because the metrics above are computed
     // from the unfiltered index, and rows that disagree with a total without
     // saying why are dishonest coverage.
-    const { shown: shownListings, hiddenByPolicy } = useMemo(
-        () => visibleListings(listings),
-        [listings]
-    );
+    const {
+        shown: shownListings,
+        hiddenByPolicy,
+        withheldUnknownCreator,
+    } = useMemo(() => visibleListings(listings), [listings]);
 
     // One filter implementation, shared with every other consumer and with the
     // tests. The page used to re-implement all four predicates and disagree
@@ -323,10 +324,12 @@ export default function Marketplace() {
             fulfillableOnly,
             query,
         };
-        const direction = priceSort === "desc" ? -1 : 1;
+        const descending = priceSort === "desc";
         return shownListings
             .filter((listing) => rowMatchesFilters(listing, filters))
-            .sort((left, right) => compareListingRows(left, right) * direction);
+            .sort((left, right) =>
+                compareListingRows(left, right, { descending })
+            );
     }, [
         shownListings,
         nftType,
@@ -362,6 +365,9 @@ export default function Marketplace() {
                             : coverageLine(coverage)}
                         {hiddenByPolicy > 0
                             ? ` ${hiddenByPolicy} listing(s) are not shown here under the content policy. They still exist on chain and can still be bought or delisted through any other client.`
+                            : ""}
+                        {withheldUnknownCreator > 0
+                            ? ` ${withheldUnknownCreator} listing(s) are held back because their creator could not be read, so the content policy could not be applied to them. Reload to try again.`
                             : ""}
                     </p>
                     <h1 className="title">Marketplace</h1>

@@ -123,6 +123,38 @@ const readStoredTransactions = () => {
     }
 };
 
+/**
+ * Pure: what the store holds after one status change.
+ *
+ * Only UNRESOLVED transactions are kept. Restoration replays every stored entry
+ * into a toast, so keeping a finished one raised its "Transaction mined" toast
+ * again on every reload for the next 24 hours, as though it had just happened —
+ * and there is nothing left to re-resolve either way.
+ */
+const nextStoredTransactions = (stored, transactionId, status, now) => {
+    const next = { ...stored };
+    if (status.status === "success" || status.status === "error") {
+        delete next[transactionId];
+        return next;
+    }
+    const previous = stored[transactionId];
+    next[transactionId] = {
+        id: Number(transactionId),
+        name: status.name,
+        status: status.status,
+        hash: status.hash,
+        errorMessage: status.errorMessage,
+        // Age is measured from the last real change, not from the last
+        // write. Restoring rewrites every entry, so a `now` here
+        // would keep a transaction that never mines alive forever.
+        updatedAt:
+            previous && previous.status === status.status
+                ? previous.updatedAt
+                : now,
+    };
+    return next;
+};
+
 const writeStoredTransaction = (transactionId, status) => {
     // Only a transaction that reached the chain is worth restoring: without a
     // hash there is nothing to re-resolve, and the wallet prompt it was
@@ -131,31 +163,67 @@ const writeStoredTransaction = (transactionId, status) => {
         return;
     }
     try {
-        const stored = readStoredTransactions();
-        const previous = stored[transactionId];
-        stored[transactionId] = {
-            id: Number(transactionId),
-            name: status.name,
-            status: status.status,
-            hash: status.hash,
-            errorMessage: status.errorMessage,
-            // Age is measured from the last real change, not from the last
-            // write. Restoring rewrites every entry, so a Date.now() here
-            // would keep a transaction that never mines alive forever.
-            updatedAt:
-                previous && previous.status === status.status
-                    ? previous.updatedAt
-                    : Date.now(),
-        };
         window.localStorage.setItem(
             TRANSACTION_STORAGE_KEY,
-            JSON.stringify(stored)
+            JSON.stringify(
+                nextStoredTransactions(
+                    readStoredTransactions(),
+                    transactionId,
+                    status,
+                    Date.now()
+                )
+            )
         );
     } catch {
         // A full or blocked localStorage must not break the transaction the
         // user is actually running.
     }
 };
+
+/**
+ * Re-resolve the transactions a reload interrupted, all at once.
+ *
+ * `tx.wait()` died with the page, so nothing else is watching these. A single
+ * `getTransactionReceipt` is not enough: a transaction still in the mempool has
+ * no receipt yet, and the recovery used to end there and leave the notification
+ * "approved" forever even after it mined. `waitForTransaction` keeps asking.
+ *
+ * In parallel, because one transaction that never mines would otherwise starve
+ * every entry behind it, and bounded, because a dropped transaction would poll
+ * for the life of the tab. On timeout the entry stays pending — an outcome we
+ * do not know is not an outcome — and the next reload picks it up again, since
+ * only unresolved transactions are stored.
+ */
+const RESTORE_WATCH_MS = 10 * 60 * 1000;
+
+const restoreUnresolved = (entries, provider, update) =>
+    Promise.all(
+        entries
+            .filter(
+                (entry) =>
+                    entry.status === "pending" || entry.status === "approved"
+            )
+            .map(async (entry) => {
+                try {
+                    const resolved = statusFromReceipt(
+                        entry,
+                        await provider.waitForTransaction(
+                            entry.hash,
+                            1,
+                            RESTORE_WATCH_MS
+                        )
+                    );
+                    if (resolved) {
+                        update(entry.id, resolved);
+                    }
+                } catch (e) {
+                    // An unreachable RPC or an expired watch leaves the entry
+                    // pending, which is the honest answer: we do not know the
+                    // outcome.
+                    console.log(e);
+                }
+            })
+    );
 
 // Restoring is once per page, not once per component: every component that
 // calls this hook would otherwise replay the same toasts.
@@ -217,28 +285,11 @@ const useTransactionStatus = () => {
             updateTransactionStatus(entry.id, entry);
         }
 
-        (async () => {
-            for (const entry of entries) {
-                if (entry.status !== "pending" && entry.status !== "approved") {
-                    continue;
-                }
-                try {
-                    const resolved = statusFromReceipt(
-                        entry,
-                        await defaultReadProvider.getTransactionReceipt(
-                            entry.hash
-                        )
-                    );
-                    if (resolved) {
-                        updateTransactionStatus(entry.id, resolved);
-                    }
-                } catch (e) {
-                    // An unreachable RPC leaves the entry pending, which is
-                    // the honest answer: we do not know the outcome.
-                    console.log(e);
-                }
-            }
-        })();
+        restoreUnresolved(
+            entries,
+            defaultReadProvider,
+            updateTransactionStatus
+        );
     }, [transactionListeners]);
 
     const getTransactionStatus = (transactionId) => {
@@ -264,9 +315,14 @@ const useTransactionStatus = () => {
  * the user to pay for the same NFT twice. Kept pure so the branches are
  * testable without block-replacement machinery.
  */
-const classifyTransactionError = (e) => {
+const classifyTransactionError = (e, transaction) => {
     if (e?.code === "TRANSACTION_REPLACED") {
         const hash = e.replacement?.hash;
+        // The replacement is the transaction that MINED. Content functions
+        // render their own explorer link from `transaction.hash` — the mint one
+        // does — so describing the superseded original sends the user to a hash
+        // the chain does not have.
+        const replacement = hash ? { ...transaction, hash } : transaction;
         if (e.reason === "repriced") {
             // This receipt comes straight from the provider, not from a
             // contract's wait(), so its logs are raw — and every content
@@ -274,12 +330,14 @@ const classifyTransactionError = (e) => {
             return {
                 status: "success",
                 hash,
+                transaction: replacement,
                 receipt: withParsedEvents(e.receipt) ?? { events: [] },
             };
         }
         return {
             status: "error",
             hash,
+            transaction: replacement,
             errorMessage:
                 e.reason === "cancelled"
                     ? "Transaction cancelled from your wallet."
@@ -287,7 +345,7 @@ const classifyTransactionError = (e) => {
         };
     }
 
-    return { status: "error", errorMessage: formatError(e) };
+    return { status: "error", transaction, errorMessage: formatError(e) };
 };
 
 let nextTransactionId = 0;
@@ -344,8 +402,15 @@ const useTransactionHelper = () => {
                 success: true,
             };
         } catch (e) {
-            const { status, hash, errorMessage, receipt } =
-                classifyTransactionError(e);
+            // `mined` is the original unless the wallet replaced it, in which
+            // case it is the transaction that actually reached the chain.
+            const {
+                status,
+                hash,
+                errorMessage,
+                receipt,
+                transaction: mined,
+            } = classifyTransactionError(e, transaction);
 
             if (status === "success") {
                 updateTransactionStatus(transactionId, {
@@ -353,15 +418,10 @@ const useTransactionHelper = () => {
                     name: transactionName,
                     hash,
                     content: contentFunction
-                        ? await contentFunction(
-                              "success",
-                              transaction,
-                              true,
-                              receipt
-                          )
+                        ? await contentFunction("success", mined, true, receipt)
                         : null,
                 });
-                return { transaction, receipt, success: true };
+                return { transaction: mined, receipt, success: true };
             }
 
             console.log(e);
@@ -371,7 +431,7 @@ const useTransactionHelper = () => {
                 hash: hash ?? transaction?.hash,
                 errorMessage,
                 content: contentFunction
-                    ? await contentFunction("success", transaction, false)
+                    ? await contentFunction("success", mined, false)
                     : null,
             });
 
@@ -390,6 +450,9 @@ const useTransactionHelper = () => {
 
 export {
     useTransactionStatus,
+    nextStoredTransactions,
+    restoreUnresolved,
+    RESTORE_WATCH_MS,
     useTransactionHelper,
     classifyTransactionError,
     pruneTransactions,

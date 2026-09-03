@@ -368,6 +368,10 @@ export function listingRowsFromIndex(state, formats = {}) {
                 ? Object.values(owners).reduce((sum, held) => sum + held, 0)
                 : null,
             creator: state.tokens[key]?.creator ?? null,
+            // Whether that null is an answer or a failed read. The content
+            // policy withholds a row whose creator is unknown, so the two must
+            // not arrive here as the same value.
+            creatorKnown: state.tokens[key]?.creatorKnown ?? false,
             format: formats[key] ?? null,
         });
     }
@@ -387,9 +391,13 @@ export function profileFromIndex(state, address) {
     const wanted = String(address).toLowerCase();
     const is = (candidate) =>
         Boolean(candidate) && String(candidate).toLowerCase() === wanted;
+    // The same renderable filter `listingRowsFromIndex` applies. The
+    // marketplace accepts any NFT address, so an indexed token's type can be a
+    // raw contract address; AddressPage hands every reference to NFTCard, which
+    // looks its config and ABI up BY TYPE and throws building the contract.
     const refOf = (key) => {
         const token = state.tokens[key];
-        return token
+        return token && RENDERABLE.includes(token.nftType)
             ? { type: token.nftType, id: Number(token.tokenId) }
             : null;
     };
@@ -407,11 +415,18 @@ export function profileFromIndex(state, address) {
     }
 
     const created = Object.values(state.tokens)
-        .filter((token) => is(token.creator))
+        .filter(
+            (token) => is(token.creator) && RENDERABLE.includes(token.nftType)
+        )
         .map((token) => ({ type: token.nftType, id: Number(token.tokenId) }));
 
     const listed = Object.values(state.listings)
-        .filter((listing) => listing.amount > 0 && is(listing.seller))
+        .filter(
+            (listing) =>
+                listing.amount > 0 &&
+                is(listing.seller) &&
+                RENDERABLE.includes(listing.nftType)
+        )
         .map((listing) => ({
             type: listing.nftType,
             id: Number(listing.tokenId),

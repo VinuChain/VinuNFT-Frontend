@@ -34,7 +34,12 @@ function deriveTokenType(textUri) {
  * gateway serving it, and the viewer cannot tell those apart from the render.
  */
 async function fetchTokenMetadata(uri) {
-    const response = await maybeFetchIpfs(uri);
+    const response = await maybeFetchIpfs(uri, {
+        // Parsed inside the gateway loop, not after it: a gateway answering
+        // with an HTML error page still answers 200, and rejecting it here is
+        // what lets the next configured gateway serve the document.
+        validate: (candidate) => candidate.json(),
+    });
     const raw = await response.json();
 
     const { value, error } = schemas.tokenMetadata.validate(raw);
@@ -71,7 +76,22 @@ async function getTokenContent(nftType, tokenData) {
 
         // console.log("Token data URI: ", tokenData.image);
 
-        const response = await maybeFetchIpfs(tokenData.image);
+        const response = await maybeFetchIpfs(tokenData.image, {
+            // Only enough to tell a gateway's error page from the file, so the
+            // next gateway is tried instead of an HTML body becoming a broken
+            // blob URL. The header is NOT trusted to decide what is rendered —
+            // that comes from the on-chain URI — and the body is not read, so
+            // images still stream under the byte cap.
+            validate: (candidate) => {
+                if (
+                    (candidate.headers.get("content-type") ?? "").startsWith(
+                        "text/html"
+                    )
+                ) {
+                    throw new Error("Gateway served a page, not the file.");
+                }
+            },
+        });
         // console.log("Token data response:", response);
         const blob = await response.blob();
         // console.log("Blob:", blob);

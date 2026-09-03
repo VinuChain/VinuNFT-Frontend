@@ -154,7 +154,13 @@ export default function Header() {
                     <button
                         type="button"
                         className="button is-small mt-2"
-                        onClick={() => switchToVinuChain(window.ethereum)}
+                        // The connected wallet, not whatever the page has
+                        // injected: Web3Modal also serves Frame and other
+                        // non-injected wallets, where the injected object is
+                        // absent or is a different wallet entirely.
+                        onClick={() =>
+                            switchToVinuChain(walletProvider?.provider)
+                        }
                     >
                         Switch to {config.networks.main.name}
                     </button>

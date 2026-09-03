@@ -255,3 +255,49 @@ test("images are not retained, so a grid of large pictures cannot fill the tab",
     });
     await assert.rejects(() => maybeFetchIpfs("ipfs://QmCacheImage"));
 });
+
+// --- a 200 that is not the payload ------------------------------------------
+
+test("a gateway that answers 200 with something else falls through to the next", async () => {
+    // Gateways serve HTML error pages and interstitials with a 200. The loop
+    // used to stop at the first HTTP success, so the caller then failed to
+    // parse it OUTSIDE the loop and the remaining gateways were never tried.
+    const calls = stubFetch((url) =>
+        url.startsWith(config.ipfsGateways[0])
+            ? okResponse("<html>rate limited</html>", { "content-type": "text/html" })
+            : okResponse('{"name":"real"}', { "content-type": "application/json" })
+    );
+
+    const res = await maybeFetchIpfs("ipfs://QmInterstitial", {
+        validate: async (response) => {
+            const body = await response.json();
+            if (!body || typeof body !== "object") throw new Error("not metadata");
+        },
+    });
+
+    assert.deepEqual(await res.json(), { name: "real" });
+    assert.equal(calls.length, 2, "the second gateway must be tried");
+});
+
+test("a rejected body is not cached, so a later read is not stuck with it", async () => {
+    // Only successes are cached; a validated-away answer must not be one.
+    let served = 0;
+    stubFetch((url) => {
+        served += 1;
+        return url.startsWith(config.ipfsGateways[0])
+            ? okResponse("<html>nope</html>")
+            : okResponse('{"name":"real"}');
+    });
+    const validate = async (response) => {
+        JSON.parse(await response.text());
+    };
+
+    await maybeFetchIpfs("ipfs://QmNotCached", { validate });
+    const before = served;
+    // The good answer IS cached, so no gateway is asked again.
+    assert.deepEqual(await (await maybeFetchIpfs("ipfs://QmNotCached", { validate })).json(), {
+        name: "real",
+    });
+    assert.equal(served, before, "a validated answer is cached like any other");
+    assert.equal(before, 2, "anti-vacuity: the bad gateway was actually tried");
+});

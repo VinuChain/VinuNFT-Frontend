@@ -95,9 +95,10 @@ export function rowMatchesFilters(row, filters) {
  * parseFloat, which collapses prices below double resolution.
  *
  * A row with no price sorts last instead of throwing: one listing in an unknown
- * denomination must not take the whole marketplace page down.
+ * denomination must not take the whole marketplace page down — and it stays
+ * last under `descending`, which reverses the price magnitude and nothing else.
  */
-export function compareListingRows(left, right) {
+export function compareListingRows(left, right, { descending = false } = {}) {
     const leftToken = left.paymentToken ?? null;
     const rightToken = right.paymentToken ?? null;
     if (leftToken !== rightToken) {
@@ -114,7 +115,12 @@ export function compareListingRows(left, right) {
             return leftPrice === null ? 1 : -1;
         }
     } else if (!leftPrice.eq(rightPrice)) {
-        return leftPrice.lt(rightPrice) ? -1 : 1;
+        // Only the price magnitude reverses. Negating the whole comparator
+        // reversed the rules that are not about magnitude at all — an unpriced
+        // row would lead the page, and the tie-break key that makes a cursor
+        // page boundary stable would flip with it.
+        const order = leftPrice.lt(rightPrice) ? -1 : 1;
+        return descending ? -order : order;
     }
 
     // Equal prices need a total order, or two pages of the same result set can

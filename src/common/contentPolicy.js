@@ -98,9 +98,11 @@ export function contentDecision(target, options) {
  * A listing is withdrawn by an entry naming its token, its seller or its
  * creator — the same scope the media decision uses, because a token this
  * deployment will not show is one it must not sell either. Reselling is not a
- * way around a hide. The count is returned rather than swallowed: a row that
+ * way around a hide. The counts are returned rather than swallowed: a row that
  * exists on chain but is not offered here still exists, and a page that drops
- * it silently reports a smaller market than there is.
+ * it silently reports a smaller market than there is. They are two counts
+ * because there are two reasons — a hide, and a creator this load could not
+ * read — and only one of them is a decision about the content.
  *
  * `fallback` carries what a call site's rows do not. Marketplace rows already
  * name their token and creator; the token page reads `listings(nftAddress, id,
@@ -108,18 +110,45 @@ export function contentDecision(target, options) {
  * own id and its own `authorOf` read.
  */
 export function partitionListings(entries, listings, fallback = {}) {
-    const shown = (listings ?? []).filter(
-        (listing) =>
-            evaluate(entries, {
+    const shown = [];
+    let hiddenByPolicy = 0;
+    let withheldUnknownCreator = 0;
+
+    for (const listing of listings ?? []) {
+        const { hidden } = decideContent(
+            entries,
+            {
                 nftType: listing.nftType ?? fallback.nftType,
                 tokenId: listing.tokenId ?? fallback.tokenId,
                 addresses: [
                     listing.seller,
                     listing.creator ?? fallback.creator,
                 ],
-            })?.action !== "hide"
-    );
-    return { shown, hiddenByPolicy: (listings?.length ?? 0) - shown.length };
+            },
+            {
+                // The same tri-state the media decision uses, for the same
+                // reason: a creator that could not be READ is not a creator no
+                // entry names, and spending "unknown" as permission offers
+                // exactly the token an entry exists to withdraw. Rows that
+                // state nothing are treated as read, so callers whose creator
+                // is not in question are unaffected.
+                creatorKnown:
+                    listing.creatorKnown ?? fallback.creatorKnown ?? true,
+            }
+        );
+        if (hidden === false) {
+            shown.push(listing);
+        } else if (hidden === true) {
+            hiddenByPolicy += 1;
+        } else {
+            // Counted apart from a policy hide, because the two are different
+            // facts and a page that reports an unreadable creator as a
+            // moderation decision is telling the visitor something untrue.
+            withheldUnknownCreator += 1;
+        }
+    }
+
+    return { shown, hiddenByPolicy, withheldUnknownCreator };
 }
 
 /** The same split against the list this build actually ships. */

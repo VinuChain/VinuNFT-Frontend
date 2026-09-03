@@ -160,6 +160,66 @@ test("the wrong-network alert stays hidden on the correct chain", { skip: !hasBu
     }
 });
 
+/**
+ * Connect, then press the marketplace's own Refresh so a scan definitely starts
+ * AFTER the wallet is connected: the first load is already in flight when the
+ * wallet arrives, and `loadIndex` hands concurrent callers that same promise.
+ * `eth_blockNumber` is the tell — only the index refresh asks for it, and it
+ * asks the READ provider.
+ */
+async function refreshAfterConnect(page) {
+    await connectWallet(page);
+    await waitForWalletCalls(page, "eth_chainId", 1);
+    const refresh = page.locator("button", { hasText: /^Refresh$/ }).first();
+    await refresh.waitFor();
+    await waitUntil(() => refresh.isEnabled(), {
+        label: "the marketplace to finish its first load",
+    });
+    await refresh.click();
+}
+
+test("a wallet on the wrong chain is never used as the read provider", { skip: !hasBuild }, async () => {
+    // The read path is a whole-history fold cached per contract address and
+    // block height. Pointed at another chain it continues a VinuChain fold up
+    // to a foreign head, and the mixed events and impossible lastIndexedBlock
+    // outlive the disconnect.
+    const { page, context, errors } = await openPage("/marketplace/", {
+        chainId: "0x1",
+    });
+    try {
+        await refreshAfterConnect(page);
+        // Bounded: the correct behaviour is a call that never arrives.
+        await page.waitForTimeout(1500);
+
+        const methods = (await walletCalls(page)).map((c) => c.method);
+        assert.equal(
+            methods.includes("eth_blockNumber"),
+            false,
+            `the wrong chain must not be read from, saw ${methods.join(", ")}`
+        );
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("a wallet on VinuChain does become the read provider", { skip: !hasBuild }, async () => {
+    // The counterpart, and the anti-vacuity check for the test above: reads DO
+    // move to a wallet that is on the right chain, so "no eth_blockNumber"
+    // there is a decision and not an absence of any read at all.
+    const { page, context } = await openPage("/marketplace/", {
+        chainId: "0xcf",
+    });
+    try {
+        await refreshAfterConnect(page);
+        await waitForWalletCalls(page, "eth_blockNumber", 1);
+        const methods = (await walletCalls(page)).map((c) => c.method);
+        assert.ok(methods.includes("eth_blockNumber"), methods.join(", "));
+    } finally {
+        await context.close();
+    }
+});
+
 test("declining the connection leaves the app usable and still offering to connect", { skip: !hasBuild }, async () => {
     const { page, context, errors } = await openPage("/", { reject: ["eth_requestAccounts"] });
     try {

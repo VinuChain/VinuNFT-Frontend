@@ -137,3 +137,28 @@ test("metadata that is not JSON at all is refused", async () => {
         fetchTokenMetadata("data:application/json,not json")
     );
 });
+
+test("a gateway serving an error page with a 200 does not end the metadata fetch", async () => {
+    // The fallback loop stopped at the first HTTP success, and the parse
+    // happened outside it: one gateway's rate-limit interstitial made the token
+    // unreadable even though the next configured gateway had the document.
+    const cfg = await import("../src/config.js");
+    const config = cfg.default || cfg;
+    const seen = [];
+    globalThis.fetch = async (url) => {
+        seen.push(String(url));
+        return String(url).startsWith(config.ipfsGateways[0])
+            ? new Response("<html>Rate limited</html>", {
+                  status: 200,
+                  headers: { "content-type": "text/html" },
+              })
+            : new Response(JSON.stringify({ name: "Recovered" }), {
+                  status: 200,
+                  headers: { "content-type": "application/json" },
+              });
+    };
+
+    const result = await fetchTokenMetadata("ipfs://QmMetaInterstitial");
+    assert.equal(result.metadata.name, "Recovered");
+    assert.equal(seen.length, 2, "the working gateway must be reached");
+});

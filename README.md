@@ -141,7 +141,10 @@ The legacy PHP social-preview route was removed because it fetched user-controll
   ~3. The page states the block it is indexed through and how far behind the head
   that is, and reports a failed scan rather than rendering an empty marketplace.
 - `/address?address=0x...` shows owned, created, listed, bought and sold from the
-  same index, with cursor pagination and an explicit explorer link.
+  same index, and an explicit explorer link. Each section renders a bounded page
+  of cards and states how many it is holding back: every card reads its own URI
+  and author, so rendering a whole profile at once is thousands of simultaneous
+  requests.
 - `/bridge` ports the VinuSwap WanBridge experience into VinuNFT with server-side WanBridge API proxies for token pairs, quota/fee, and transaction creation.
 
 See `docs/marketplace-discovery.md`, `docs/address-profiles.md`, and `docs/vinuswap-bridge-port.md` for scope and limits.
@@ -188,6 +191,11 @@ yarn build
 - `buildCommand: yarn build`, which is `gatsby build` **plus** `node add_csp.js`.
   The default `gatsby build` would ship pages with an unexpanded
   `script-src 'self'` and no working policy.
+- a `Content-Security-Policy: frame-ancestors 'self'` response header on every
+  path. Browsers **ignore** `frame-ancestors` in a `<meta>` element, so this is
+  the only copy that protects anything; `add_csp.js` reads the directive out of
+  this file for the meta policy and refuses to build without it, so the two
+  cannot drift.
 
 There is deliberately no `outputDirectory`. Vercel auto-installs
 `@vercel/gatsby-plugin-vercel-builder` (do not add it to `gatsby-config.js`

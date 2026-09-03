@@ -30,6 +30,12 @@ rather than rendering an empty profile.
 RPC cost is the shared index scan documented in `marketplace-discovery.md`: 375
 `eth_getLogs` cold, 3 warm, plus one `authorOf` per token ever sighted.
 
+The index is unbounded; the RENDER is not. Each section shows a bounded page of
+cards and states how many it is holding back, because every card reads its own
+URI and author and may then fetch metadata and media — a profile of several
+hundred tokens would otherwise open with thousands of simultaneous requests, and
+a throttled `authorOf` is what withholds a listing from sale.
+
 ## Remaining Gaps
 
 Address-wide activity feeds, marketplace volume and per-sale fee history are

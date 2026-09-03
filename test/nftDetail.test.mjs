@@ -768,3 +768,89 @@ test(
         }
     }
 );
+
+/** A 1x1 PNG, inline: media that needs no gateway and cannot fail offline. */
+const PIXEL_PNG =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+
+test(
+    "one creator read failing does not strand the page after the other succeeds",
+    { skip: !hasBuild },
+    async () => {
+        // Two `authorOf` reads run on load. The failure sets the page's creator
+        // error; the success permits and fetches the media. The render prefers
+        // mediaError over the content, so a stale error left the visitor with
+        // "creator could not be read" over media the page had already fetched,
+        // until they hit Retry by hand.
+        const { server, origin } = await startStaticServer();
+        const browser = await chromium.launch();
+        const AUTHOR_OF = ethers.utils
+            .id("authorOf(uint256)")
+            .slice(0, 10)
+            .toLowerCase();
+        try {
+            const answers = nftPageAnswers({
+                nftType: "image",
+                id: 1,
+                uri: onChain({
+                    name: "Recovered",
+                    description: "d",
+                    // On chain, so the media resolves with no network at all.
+                    // A gateway image fails offline and its own error would
+                    // REPLACE the creator error, which is the same visible
+                    // recovery for the wrong reason.
+                    image: PIXEL_PNG,
+                }),
+            });
+            const page = await browser.newPage();
+            let authorCalls = 0;
+            await routeOffline(page, origin, {
+                rpc: {
+                    eth_blockNumber: BLOCK,
+                    eth_call: async (body) => {
+                        const data = String(
+                            body?.params?.[0]?.data ?? ""
+                        ).toLowerCase();
+                        if (data.startsWith(AUTHOR_OF)) {
+                            authorCalls += 1;
+                            // The first read fails and lands first; every later
+                            // one answers, so the failure is the stale fact.
+                            if (authorCalls === 1) return "0x";
+                            await new Promise((r) => setTimeout(r, 400));
+                        }
+                        return answerCall(answers, body);
+                    },
+                },
+            });
+            await installMockWallet(page, {
+                chain: { answers, blockNumber: BLOCK },
+            });
+            await page.goto(`${origin}/nft/?type=image&id=1`, {
+                waitUntil: "domcontentloaded",
+            });
+            await waitForHydration(page);
+
+            // Anti-vacuity: the failing read must actually have stranded the
+            // page first, or the recovery below proves nothing.
+            await page
+                .locator(".nft-media-retry")
+                .first()
+                .waitFor({ timeout: CONDITION_TIMEOUT });
+            assert.ok(authorCalls >= 2, `both reads must run, saw ${authorCalls}`);
+
+            await waitUntil(
+                async () =>
+                    !/creator could not be read/i.test(
+                        await page.evaluate(() => document.body.innerText)
+                    ),
+                {
+                    label:
+                        "the stale creator error to clear once the other read succeeded",
+                }
+            );
+        } finally {
+            await browser.close();
+            server.close();
+        }
+    }
+);

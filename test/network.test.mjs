@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 
 const net = await import("../src/common/network.js");
 const { switchToVinuChain } = net.default || net;
@@ -88,4 +89,19 @@ test("the added network matches the app's own chain configuration", () => {
     assert.equal(config.nativeCurrency.decimals, 18);
     assert.match(config.rpc, /^https:\/\//);
     assert.match(config.blockExplorer.url, /^https:\/\//);
+});
+
+test("the wrong-network button switches the wallet that is actually connected", () => {
+    // WalletButton connects through Web3Modal, which also serves non-injected
+    // wallets such as Frame. `window.ethereum` is then absent, or it is a
+    // DIFFERENT wallet: the button either did nothing or switched an unrelated
+    // wallet while the connected one stayed on the wrong chain. The bridge flow
+    // already passes `walletProvider.provider`; this is the same seam.
+    const source = readFileSync("src/components/Header.js", "utf8");
+    assert.match(source, /switchToVinuChain\(walletProvider\?\.provider\)/);
+    assert.equal(
+        source.includes("window.ethereum"),
+        false,
+        "the injected provider is not necessarily the connected one"
+    );
 });

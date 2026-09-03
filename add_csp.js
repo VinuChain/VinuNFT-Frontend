@@ -126,6 +126,34 @@ const CONNECT_SRC_ORIGINS = [
     "https://eth-mainnet.alchemyapi.io",
 ];
 
+// frame-ancestors is IGNORED in a <meta> element — the browser console says so
+// in as many words — so the copy that actually protects anything is the Vercel
+// response header in vercel.json, which Vercel reads before this build runs.
+// The meta copy is derived from that header rather than written twice: two
+// declarations of one policy drift, and the one that silently stops mattering
+// is this one.
+function frameAncestorsDirective() {
+    const vercel = JSON.parse(
+        fs.readFileSync(path.join(path.resolve(), "vercel.json"), {
+            encoding: "utf-8",
+        })
+    );
+    const rule = (vercel.headers ?? []).find((r) => r.source === "/(.*)");
+    const header = (rule?.headers ?? []).find(
+        (h) => h.key.toLowerCase() === "content-security-policy"
+    );
+    const directive = (header?.value ?? "")
+        .split(";")
+        .map((part) => part.trim())
+        .find((part) => part.startsWith("frame-ancestors "));
+    if (!directive) {
+        throw new Error(
+            "add_csp: vercel.json serves no frame-ancestors response header — the deploy would ship no clickjacking protection"
+        );
+    }
+    return directive;
+}
+
 // The whole `content=` value of the CSP meta tag, whether it still holds the
 // `script-src 'self'` seed from Wrapper.js or an already-expanded policy from
 // an earlier run. Matching only the seed made this script silently do nothing
@@ -153,7 +181,7 @@ function addHashesToHtmlFile(inputFilePath, hashes) {
         `default-src 'self'; ` +
         `object-src 'none'; ` +
         `base-uri 'self'; ` +
-        `frame-ancestors 'self'; ` +
+        `${frameAncestorsDirective()}; ` +
         // blob: is required: token images are fetched with a byte cap and
         // handed to <img> via URL.createObjectURL, so without it every image
         // NFT is blocked by the policy. The gateway origins replace a bare

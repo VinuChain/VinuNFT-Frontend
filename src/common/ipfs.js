@@ -310,14 +310,26 @@ async function retain(url, response) {
  * blanking every image. A plain https URL is only fetched when it is already
  * one of those gateways. Anything else is refused, and callers surface that
  * honestly rather than silently showing nothing.
+ *
+ * `validate` is how a caller rejects an answer that arrived with a 200. A
+ * gateway serving an HTML error page or an interstitial is an HTTP success, and
+ * parsing it after the loop had ended left the remaining gateways untried. It
+ * is given a clone, so it may consume the body.
  */
-async function maybeFetchIpfs(url) {
+async function maybeFetchIpfs(url, { validate } = {}) {
+    const checked = async (response) => {
+        if (validate) {
+            await validate(response.clone());
+        }
+        return response;
+    };
+
     if (typeof url !== "string" || url.length === 0) {
         throw new UnsupportedMediaSource(url);
     }
 
     if (url.startsWith("data:")) {
-        return responseFromDataUri(url);
+        return checked(responseFromDataUri(url));
     }
 
     if (url.startsWith("ipfs://")) {
@@ -332,9 +344,11 @@ async function maybeFetchIpfs(url) {
         let lastError;
         for (const gateway of config.ipfsGateways) {
             try {
+                // Validated BEFORE it is retained: a body the caller rejects
+                // must not be cached as this CID's answer for the session.
                 return await retain(
                     url,
-                    await fetchWithLimits(`${gateway}/${path}`)
+                    await checked(await fetchWithLimits(`${gateway}/${path}`))
                 );
             } catch (error) {
                 if (error instanceof MediaTooLarge) throw error;
@@ -345,7 +359,7 @@ async function maybeFetchIpfs(url) {
     }
 
     if (isAllowedHttpsUrl(url)) {
-        return fetchWithLimits(url);
+        return checked(await fetchWithLimits(url));
     }
 
     throw new UnsupportedMediaSource(url);

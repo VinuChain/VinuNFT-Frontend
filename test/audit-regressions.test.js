@@ -360,7 +360,13 @@ test("CSP policy in add_csp.js includes required restrictive directives", () => 
     assert.equal(cspScript.includes("object-src 'none'"), true);
     assert.equal(cspScript.includes("base-uri 'self'"), true);
     assert.equal(cspScript.includes("default-src 'self'"), true);
-    assert.equal(cspScript.includes("frame-ancestors 'self'"), true);
+    // frame-ancestors moved to the vercel.json response header: browsers
+    // IGNORE it in a <meta> element, so the copy this script writes protected
+    // nothing. It is now DERIVED from that header, and add_csp.js refuses to
+    // build without one — test/csp.test.mjs pins the header itself and that the
+    // built page's directive matches it byte for byte.
+    assert.equal(cspScript.includes("frameAncestorsDirective()"), true);
+    assert.match(read("vercel.json"), /"frame-ancestors 'self'"/);
     // img-src must permit blob:, which is how token images reach <img> after
     // being fetched with a byte cap via URL.createObjectURL.
     assert.equal(cspScript.includes("blob:"), true);

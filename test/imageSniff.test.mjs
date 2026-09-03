@@ -130,3 +130,55 @@ test("reports the declared geometry of a decompression bomb without decoding", (
 test("rejects empty input", () => {
     assert.equal(sniffImage(Buffer.alloc(0)), null);
 });
+
+/** A GIF with a logical screen and real image descriptors after it. */
+function animatedGif(canvas, frames) {
+    // The logical screen descriptor is 7 bytes: the two dimensions the `gif`
+    // helper writes, then flags (no global colour table), background index and
+    // pixel aspect ratio.
+    const parts = [
+        gif(canvas.width, canvas.height),
+        Buffer.from([0x00, 0x00, 0x00]),
+    ];
+    for (const frame of frames) {
+        const descriptor = Buffer.alloc(10);
+        descriptor.writeUInt8(0x2c, 0);
+        descriptor.writeUInt16LE(frame.left ?? 0, 1);
+        descriptor.writeUInt16LE(frame.top ?? 0, 3);
+        descriptor.writeUInt16LE(frame.width, 5);
+        descriptor.writeUInt16LE(frame.height, 7);
+        descriptor.writeUInt8(0, 9); // no local colour table
+        // LZW minimum code size, one data sub-block, block terminator.
+        parts.push(descriptor, Buffer.from([0x02, 0x01, 0x00, 0x00]));
+    }
+    parts.push(Buffer.from([0x3b]));
+    return Buffer.concat(parts);
+}
+
+test("a GIF is bounded by its frames, not only by its logical canvas", () => {
+    // The logical screen is the canvas frames composite onto; each frame
+    // carries its own geometry. A 1x1 canvas passes any pixel bound while a
+    // decoder that allocates per frame is asked for 65535x65535.
+    const bomb = animatedGif({ width: 1, height: 1 }, [
+        { width: 65535, height: 65535 },
+    ]);
+    const sniffed = sniffImage(bomb);
+
+    assert.equal(sniffed.mediaType, "image/gif");
+    assert.ok(
+        sniffed.width * sniffed.height >= 65535 * 65535,
+        `the geometry the guard sees must include the frame, got ${sniffed.width}x${sniffed.height}`
+    );
+});
+
+test("an ordinary animated GIF still reports its own size", () => {
+    const normal = animatedGif({ width: 40, height: 30 }, [
+        { width: 40, height: 30 },
+        { left: 4, top: 4, width: 8, height: 8 },
+    ]);
+    assert.deepEqual(sniffImage(normal), {
+        mediaType: "image/gif",
+        width: 40,
+        height: 30,
+    });
+});

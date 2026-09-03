@@ -219,6 +219,9 @@ function withDerived(state) {
             firstBlock: record.blockNumber,
             lastBlock: record.blockNumber,
             creator: state.creators[key]?.creator ?? null,
+            // Null creator means two things — "read, and there is none" and
+            // "not read" — and the content policy has to tell them apart.
+            creatorKnown: Boolean(state.creators[key]),
             creatorReadAtBlock: state.creators[key]?.blockNumber ?? null,
         };
         token.firstBlock = Math.min(token.firstBlock, record.blockNumber);
@@ -526,11 +529,15 @@ export async function resolveCreators(state, readers) {
                 blockNumber: state.lastIndexedBlock,
             };
         } catch (e) {
-            // An unknown creator is stored as unknown, never guessed.
-            creators[key] = {
-                creator: null,
-                blockNumber: state.lastIndexedBlock,
-            };
+            // Nothing is stored: an entry here is what makes the pass above
+            // skip the token forever, and a throttled read cached as an
+            // ordinary null creator is a creator the content policy believes
+            // was read. Leaving the key absent keeps it unknown and re-asks on
+            // the next load.
+            //
+            // ponytail: one retried call per unreadable token per load. A token
+            // whose authorOf genuinely reverts is re-asked every time; batch it
+            // into the multicall this loop already wants if that ever costs.
         }
     }
 

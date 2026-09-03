@@ -27,3 +27,20 @@ export async function loadAddressProfileNfts(readProvider, address) {
         lag: lag(state, headBlock),
     };
 }
+
+/**
+ * How many cards one profile section renders before the visitor asks for more.
+ *
+ * Each card independently reads its URI and its author and may then fetch
+ * metadata and media, so a section is not a list of rows but a list of request
+ * fans. An address with a few hundred tokens mounted every one of them at once,
+ * which is thousands of simultaneous RPC and gateway requests — enough to be
+ * throttled, and a throttled `authorOf` is what withholds a listing.
+ */
+export const PROFILE_PAGE_SIZE = 24;
+
+/** A bounded page of one section, and how many it is not showing. */
+export function profileSection(refs, shown = PROFILE_PAGE_SIZE) {
+    const rows = (refs ?? []).slice(0, Math.max(shown, 0));
+    return { rows, remaining: (refs ?? []).length - rows.length };
+}

@@ -28,6 +28,27 @@ export default function WalletButton() {
         },
     };
 
+    /**
+     * Read through the wallet only while it is on VinuChain; otherwise keep the
+     * configured RPC and return the chain it is actually on.
+     *
+     * Web3Modal connects a wallet on whatever chain it happens to be, and the
+     * read path is a whole-history fold cached per contract address and block
+     * height. Pointed at another chain it continues a VinuChain fold up to a
+     * foreign head, and the mixed events and impossible `lastIndexedBlock`
+     * survive the disconnect. Writes still go to the wallet, which is what the
+     * wrong-network banner is about.
+     */
+    const readThrough = async (provider) => {
+        const network = await provider.getNetwork();
+        if (network?.chainId === config.networks.main.chainId) {
+            setReadProvider(provider);
+        } else {
+            restoreDefaultReadProvider();
+        }
+        return network?.chainId;
+    };
+
     const connectWallet = async () => {
         const web3Modal = new Web3Modal({
             network: config.networks.main.chainId,
@@ -74,8 +95,8 @@ export default function WalletButton() {
                 const regeneratedProvider = new ethers.providers.Web3Provider(
                     wallet
                 );
-                setReadProvider(regeneratedProvider);
                 setWalletProvider(regeneratedProvider);
+                await readThrough(regeneratedProvider);
             } else {
                 // If the provider is connected but no addresses are selected, treat it as a disconnection
                 handleDisconnect();
@@ -97,10 +118,8 @@ export default function WalletButton() {
         });
 
         const newProvider = new ethers.providers.Web3Provider(wallet);
-        setReadProvider(newProvider);
         setWalletProvider(newProvider);
-        const network = await newProvider.getNetwork();
-        setChainId(network?.chainId);
+        setChainId(await readThrough(newProvider));
     };
 
     return (

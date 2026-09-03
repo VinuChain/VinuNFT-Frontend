@@ -279,3 +279,23 @@ test("pageListings: a cursor that no longer matches any row restarts at the top"
     const page = pageListings(pageRows, { cursor: "text:404:0", pageSize: 2 });
     assert.deepEqual(page.rows.map((r) => r.tokenId), [1, 2]);
 });
+
+test("compareListingRows: high-to-low keeps unpriced listings last", () => {
+    // Multiplying the whole comparator by -1 reversed its null handling too, so
+    // a listing in a token this app cannot price — the one row whose price is
+    // unstated — jumped ahead of every priced listing on "High to low".
+    const unpriced = priceRow(null, { paymentToken: null, listingId: 2 });
+    const cheap = priceRow("1.0", { paymentToken: "wvc", listingId: 0 });
+    const dear = priceRow("9.0", { paymentToken: "wvc", listingId: 1 });
+
+    const descending = (l, r) => compareListingRows(l, r, { descending: true });
+    assert.deepEqual(
+        [cheap, unpriced, dear].sort(descending).map((r) => r.price),
+        ["9.0", "1.0", null]
+    );
+    // And the ascending order is unchanged.
+    assert.deepEqual(
+        [dear, unpriced, cheap].sort(compareListingRows).map((r) => r.price),
+        ["1.0", "9.0", null]
+    );
+});

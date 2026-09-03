@@ -471,6 +471,35 @@ test("a reverting authorOf yields creator null, not a fabricated address", async
     assert.equal(resolved.tokens["text:1"].creator, null);
 });
 
+test("a failed authorOf is retried, not cached as a resolved null", async () => {
+    // A throttled read is not an answer. Caching it as an ordinary null creator
+    // makes every later pass skip the token — and an address-scoped hide is
+    // then bypassed by reselling through another address, because the row
+    // offers a creator the policy believes was read.
+    const state = fullIndex();
+    const throttled = await resolveCreators(state, {
+        authorOf: async () => {
+            throw new Error("429 too many requests");
+        },
+    });
+    assert.equal(
+        throttled.tokens["text:1"].creatorKnown,
+        false,
+        "an unread creator must not look like a resolved one"
+    );
+
+    let calls = 0;
+    const recovered = await resolveCreators(throttled, {
+        authorOf: async () => {
+            calls += 1;
+            return ALICE;
+        },
+    });
+    assert.ok(calls > 0, "the next pass must re-ask, not skip a cached failure");
+    assert.equal(recovered.tokens["text:1"].creator, ALICE);
+    assert.equal(recovered.tokens["text:1"].creatorKnown, true);
+});
+
 // ---------------------------------------------------------------------------
 // fees per sale
 // ---------------------------------------------------------------------------

@@ -153,3 +153,48 @@ test("a first block that disagrees with src/config.js is a change, not a no-op",
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+/** The fixture record, with one field changed, written beside it. */
+function variantRecord(dir, mutate, name = "variant.json") {
+    const record = JSON.parse(readFileSync(join(dir, "record.json"), "utf8"));
+    writeFileSync(join(dir, name), JSON.stringify(mutate(record), null, 2));
+    return name;
+}
+
+test("refuses a record from another chain", () => {
+    // A chain-206 record carries valid-looking addresses that exist nowhere on
+    // 207. Nothing else in this script would notice: networks.main.chainId and
+    // rpc are not written, so the result is a coherent, unusable frontend.
+    const dir = fixture();
+    try {
+        const name = variantRecord(dir, (r) => ({ ...r, chainId: 206 }));
+        const { code, output } = run(dir, name);
+        assert.equal(code, 1);
+        assert.match(output, /REFUSED/);
+        assert.match(output, /chain 206.*chain 207|206.*207/s);
+        assert.equal(output.includes("wrote "), false);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test("refuses a record missing one of the deployed contracts", () => {
+    // A partial record syncs the contracts it names and reports success, while
+    // the omitted one keeps its old address, first block and ABI — exactly the
+    // mixed-generation frontend this script exists to prevent.
+    const dir = fixture();
+    try {
+        const name = variantRecord(dir, (r) => {
+            const contracts = { ...r.contracts };
+            delete contracts.image;
+            return { ...r, contracts };
+        });
+        const { code, output } = run(dir, name);
+        assert.equal(code, 1);
+        assert.match(output, /REFUSED/);
+        assert.match(output, /image/);
+        assert.equal(output.includes("wrote "), false);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
