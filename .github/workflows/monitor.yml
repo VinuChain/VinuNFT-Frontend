@@ -1,0 +1,60 @@
+# Drift monitor for state that changes without anyone pushing a commit.
+#
+# CI only runs on pull_request and push, so a pause flip, a fee change, an
+# ownership transfer or a gateway going dark is invisible until somebody
+# happens to open a PR. This runs the two read-only gates that can see those
+# things on a clock instead.
+#
+# Deliberately not a schedule trigger on ci.yml: re-running lint, test, build,
+# Playwright and audit:triage daily against a moving advisory baseline produces
+# the alert fatigue that gets monitors muted.
+#
+# The production host is Vercel. Uptime, deployed-SHA-vs-branch-head and API
+# route presence are checked by scripts/check-production.mjs below; it exits 1
+# when its repository variable is unset rather than skipping quietly.
+#
+# NOT covered here: production frontend error volume. Browser errors reach
+# /api/client-error and the Vercel runtime log, which this workflow cannot
+# query. README records that log's retention and alerting limits.
+name: Monitor
+
+on:
+  schedule:
+    # 07:00 UTC daily. Drift that matters (fee, pause, owner) is acted on by a
+    # human, so hourly buys nothing and costs a run every hour.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - run: yarn install --frozen-lockfile
+      - name: Deployed contract state matches scripts/deployed-invariants.json
+        run: yarn verify:deployed
+      # always(): a drifted pin must not hide the gateway result, they are
+      # independent failures.
+      - name: Configured IPFS gateways are reachable
+        if: always()
+        run: node scripts/check-gateways.mjs
+      # The journeys themselves, read-only, against the deployed contracts.
+      # Independent of the two above for the same reason: a paused marketplace
+      # and an unreachable gateway are different incidents.
+      - name: Product journeys still work against the deployed contracts
+        if: always()
+        run: yarn verify:readiness
+      # github.sha on a schedule trigger is the default branch head, which is
+      # what production should be serving. Not `git rev-parse origin/main`:
+      # actions/checkout is a shallow single-branch clone and that ref may not
+      # resolve. VINUNFT_PRODUCTION_URL is a public hostname, so it is a
+      # repository variable rather than a secret, and visible in settings.
+      - name: Production is up and serving this branch head
+        if: always()
+        env:
+          VINUNFT_PRODUCTION_URL: ${{ vars.VINUNFT_PRODUCTION_URL }}
+          EXPECTED_COMMIT_SHA: ${{ github.sha }}
+        run: node scripts/check-production.mjs

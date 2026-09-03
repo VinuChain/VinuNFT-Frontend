@@ -7,23 +7,35 @@ process.env.PINATA_MAX_GLOBAL_UPLOADS_PER_WINDOW = "50";
 
 const { default: handler } = await import("../src/api/upload-ipfs.js");
 
-function uploadMessage(address, issuedAt) {
-    return [
-        "VinuNFT IPFS upload",
-        `Address: ${ethers.utils.getAddress(address)}`,
-        `Issued At: ${issuedAt}`,
-        "Purpose: mint-image",
-    ].join("\n");
+const { createUploadMessage, uploadPayloadDigest } = await import(
+    "../src/common/uploadIntent.js"
+);
+
+const UPLOAD_ACTION = { file: "mint-image", json: "mint-metadata" };
+
+/** Strip `auth` exactly as the server does before digesting. */
+function digested({ auth, ...rest }) {
+    return rest;
 }
 
-async function signedAuth(wallet) {
+/**
+ * Sign an intent bound to the payload the test actually sends. Signing
+ * anything else is precisely what the server must now reject.
+ */
+async function signedAuth(wallet, payload = jsonPayload(null)) {
     const issuedAt = new Date().toISOString();
 
     return {
         address: wallet.address,
         issuedAt,
         signature: await wallet.signMessage(
-            uploadMessage(wallet.address, issuedAt)
+            createUploadMessage({
+                address: ethers.utils.getAddress(wallet.address),
+                issuedAt,
+                chainId: 207,
+                action: UPLOAD_ACTION[payload.type],
+                digest: uploadPayloadDigest(digested(payload)),
+            })
         ),
     };
 }
@@ -273,4 +285,24 @@ test("upload audit reasons ignore attacker-controlled error text", async () => {
     assert.equal(res.statusCode, 400);
     assert.equal(events.length, 1);
     assert.equal(events[0].reason, "upload_rejected");
+});
+
+test("a malformed body is a 400 that does not echo the JSON parser", async () => {
+    // There were two byte-identical parseBody copies, both unguarded. This one
+    // was safe only because its call site happens to sit inside the handler's
+    // try — the other, in wanbridge-create-tx, did not, and returned a 500.
+    // Both now use the shared guarded parseBody, and the rejection is the
+    // handler's own sentence rather than "Unexpected end of JSON input".
+    const res = response();
+    const events = await captureAuditEvents(() => handler(request("{"), res));
+
+    assert.equal(res.statusCode, 400);
+    const body = JSON.parse(res.body);
+    assert.equal(body.error, "Malformed request body.");
+    assert.equal(/JSON|token|Unexpected/i.test(body.error), false);
+    assert.equal(
+        events.some((event) => event.reason === "malformed_body"),
+        true,
+        "a rejected upload must be audited with its reason"
+    );
 });

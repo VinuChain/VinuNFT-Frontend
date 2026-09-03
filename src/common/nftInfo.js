@@ -1,7 +1,10 @@
 import { maybeFetchIpfs } from "./ipfs";
+import schemas from "./schemas";
 
 // Derive the render MIME type from the on-chain URI — never from the remote
-// Content-Type header, which can be attacker-controlled.
+// Content-Type header, which can be attacker-controlled. Exported because the
+// marketplace card states the same format the token page renders, and two
+// parsers would eventually disagree about the same token.
 function deriveTokenType(textUri) {
     if (textUri.startsWith("data:")) {
         // data:<mime>[;base64],<data> — parse the declared MIME
@@ -16,6 +19,43 @@ function deriveTokenType(textUri) {
     }
     // Non-ipfs, non-data URLs: render as plain text to prevent renderer hijacking
     return "text/plain";
+}
+
+/**
+ * Read a token's metadata document, and say where it physically came from.
+ *
+ * One seam, because both the card and the detail page used to parse this
+ * themselves and neither validated it. The returned `metadata` is Joi's
+ * stripped value, never the parsed body: validating and then storing the
+ * original would leave the hostile field in React state and change nothing.
+ *
+ * `source` is provenance the page must state — an on-chain `data:` document is
+ * as durable as the token itself, an external one is only as available as the
+ * gateway serving it, and the viewer cannot tell those apart from the render.
+ */
+async function fetchTokenMetadata(uri) {
+    const response = await maybeFetchIpfs(uri, {
+        // Parsed inside the gateway loop, not after it: a gateway answering
+        // with an HTML error page still answers 200, and rejecting it here is
+        // what lets the next configured gateway serve the document.
+        validate: (candidate) => candidate.json(),
+    });
+    const raw = await response.json();
+
+    const { value, error } = schemas.tokenMetadata.validate(raw);
+    if (error) {
+        // Deliberately fixed copy: the metadata is attacker-controlled, and
+        // Joi's message would quote parts of it back into the page.
+        throw new Error(
+            "This NFT's metadata does not match the expected format, so it cannot be displayed."
+        );
+    }
+
+    return {
+        metadata: value,
+        source: uri.startsWith("data:") ? "on-chain" : "external",
+        uri,
+    };
 }
 
 async function getTokenContent(nftType, tokenData) {
@@ -36,7 +76,22 @@ async function getTokenContent(nftType, tokenData) {
 
         // console.log("Token data URI: ", tokenData.image);
 
-        const response = await maybeFetchIpfs(tokenData.image);
+        const response = await maybeFetchIpfs(tokenData.image, {
+            // Only enough to tell a gateway's error page from the file, so the
+            // next gateway is tried instead of an HTML body becoming a broken
+            // blob URL. The header is NOT trusted to decide what is rendered —
+            // that comes from the on-chain URI — and the body is not read, so
+            // images still stream under the byte cap.
+            validate: (candidate) => {
+                if (
+                    (candidate.headers.get("content-type") ?? "").startsWith(
+                        "text/html"
+                    )
+                ) {
+                    throw new Error("Gateway served a page, not the file.");
+                }
+            },
+        });
         // console.log("Token data response:", response);
         const blob = await response.blob();
         // console.log("Blob:", blob);
@@ -49,4 +104,4 @@ async function getTokenContent(nftType, tokenData) {
     }
 }
 
-export { getTokenContent };
+export { deriveTokenType, fetchTokenMetadata, getTokenContent };

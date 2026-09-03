@@ -1,0 +1,22 @@
+{
+  "_note": "Live state of the deployed contracts, pinned so drift fails loudly. verify-deployed-truth.mjs compares every value here against chain 207 on each run. Editing this file is how an intentional admin action (fee change, ownership transfer, pause) is authorised; an unexplained diff is an unauthorised contract state change, not a stale file. lastTokenId is deliberately absent from every contract: it moves on every legitimate mint.",
+  "_captured": "2026-09-01 from https://rpc.vinuchain.org, chain 207",
+  "marketplace": {
+    "codeHash": "0x6b26a4d6e48bbe140f1008215d56bc0e07fd54b6815d00ac9adbe6bd5bc95049",
+    "views": {
+      "paused": "false",
+      "platformFeePercentage": "500",
+      "commissionAccount": "0x12BD0b15D5010De455DCe7944265Fe1D35a84023",
+      "owner": "0x12BD0b15D5010De455DCe7944265Fe1D35a84023",
+      "lock": "0",
+      "newPlatformFeePercentage": "0",
+      "PLATFORM_FEE_TIMELOCK": "604800"
+    }
+  },
+  "text": {
+    "codeHash": "0xa62b1f681acff97af273b052b1fcc40b4fb796c943ea7f971c8b22323f098a25"
+  },
+  "image": {
+    "codeHash": "0x3810bf037782bb21e620f96c3e9eddde3391ca11d3709ca7329eb1137a4ad2c0"
+  }
+}

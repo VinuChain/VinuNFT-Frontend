@@ -37,7 +37,14 @@ function isPrivateOrLoopbackAddress(value) {
     );
 }
 
-function clientKey(req) {
+/**
+ * A stable per-client bucket key.
+ *
+ * Exported because the IPFS upload endpoint needs the same answer: behind
+ * Vercel's proxy `req.socket.remoteAddress` is the proxy itself and identical
+ * for every request, so a per-IP limit keyed on it is one shared global bucket.
+ */
+export function clientKey(req) {
     const trustedHeader = process.env.TRUSTED_CLIENT_IP_HEADER?.toLowerCase();
     if (trustedHeader) {
         const trustedIp = firstHeader(req.headers[trustedHeader]);
@@ -100,9 +107,22 @@ export function applyApiRateLimit(req, res, options) {
     return activeBucket.count <= options.limit;
 }
 
+/**
+ * The request body as an object, or null if it is not parseable.
+ *
+ * Returning null rather than throwing is the point: a host that hands the
+ * handler a raw string body puts the parse before any try block a caller has
+ * opened, so an unguarded JSON.parse turns a malformed request into a 500 from
+ * outside the handler instead of the 400 every other bad input gets. Callers
+ * must treat null as a 400.
+ */
 export function parseBody(req) {
     if (typeof req.body === "string") {
-        return JSON.parse(req.body);
+        try {
+            return JSON.parse(req.body);
+        } catch (error) {
+            return null;
+        }
     }
 
     return req.body || {};

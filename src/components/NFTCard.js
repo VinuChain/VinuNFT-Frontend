@@ -15,8 +15,9 @@ import MarkdownViewer from "./MarkdownViewer";
 import Address from "./Address";
 import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
-import { maybeFetchIpfs } from "../common/ipfs";
-import { getTokenContent } from "../common/nftInfo";
+import { fetchTokenMetadata, getTokenContent } from "../common/nftInfo";
+import { contentDecision } from "../common/contentPolicy";
+import ContentNotice from "./ContentNotice";
 
 const styles = {
     card: {
@@ -50,14 +51,28 @@ export default function NFTCard({ id, type }) {
     const [tokenURI, setTokenURI] = useState(null);
     const [tokenData, setTokenData] = useState(null);
     const [tokenAuthor, setTokenAuthor] = useState(null);
+    // "Not read yet" and "no author" are both a null author, and the policy
+    // has to tell them apart before it can let any media load.
+    const [authorRead, setAuthorRead] = useState(false);
     const [readProvider, setReadProvider] = useReadProvider();
     const [tokenType, setTokenType] = useState(null);
     const [tokenContent, setTokenContent] = useState(null);
     const [exists, setExists] = useState(true);
+    // A card lives in a grid: one token whose media is gone must state its own
+    // failure rather than take over the page-level error banner for all of them.
+    const [mediaError, setMediaError] = useState(null);
     const [_, setStandardError] = useRecoilState(standardErrorState);
 
     const contractAddress = config.contractAddresses.v1[type];
     const contractABI = v1[type];
+
+    // From the card's own props and the on-chain author, never from metadata.
+    // `contentHidden` is a tri-state: null until the author read has landed,
+    // and the media gate below waits for a real decision.
+    const { status: policyStatus, hidden: contentHidden } = contentDecision(
+        { nftType: type, tokenId: id, addresses: [tokenAuthor] },
+        { creatorKnown: authorRead }
+    );
 
     const queryTokenURI = async () => {
         if (!id || !readProvider) return;
@@ -94,12 +109,23 @@ export default function NFTCard({ id, type }) {
             const author = await contract.authorOf(id);
 
             setTokenAuthor(author);
+            // Only on a read that landed. A failed one leaves the decision
+            // open: an unknown creator is not a creator no entry names, and
+            // treating it as one lets a flaky RPC response fetch media that
+            // creator-scoped suppression exists to keep off this page.
+            setAuthorRead(true);
         } catch (e) {
+            // Cleared with the author it could not read, so the invariant
+            // holds here and not only in the effect that starts the read.
+            setAuthorRead(false);
             if (isTokenExistenceError(e)) {
                 setExists(false);
             } else {
                 console.log(e);
                 setStandardError(formatError(e));
+                // Not a skeleton forever: the card states its own failure,
+                // exactly as it does for unreachable media.
+                setMediaError("Creator unavailable, media not checked");
             }
         }
     };
@@ -108,27 +134,32 @@ export default function NFTCard({ id, type }) {
         if (!tokenURI) return;
 
         try {
-            const tokenDataResponse = await maybeFetchIpfs(tokenURI);
-            const newTokenData = await tokenDataResponse.json();
-            //console.log(newTokenData)
-            setTokenData(newTokenData);
+            const result = await fetchTokenMetadata(tokenURI);
+            setTokenData(result.metadata);
         } catch (e) {
             console.log(e);
-            setStandardError(formatError(e));
+            setMediaError("Metadata unavailable");
         }
     };
 
     const queryTokenContent = async () => {
         if (!type || !tokenData) return;
+        // Suppressed media is not fetched at all, not fetched and then hidden.
+        // `!== false` and not a falsy check: while the creator read is still in
+        // flight the policy has decided nothing, and undecided is not consent.
+        // The effect below re-runs this the moment it becomes a decision.
+        if (contentHidden !== false) return;
         try {
             const newTokenContent = await getTokenContent(type, tokenData);
             if (newTokenContent.exists) {
                 setTokenContent(newTokenContent.content);
                 setTokenType(newTokenContent.tokenType);
+            } else {
+                setMediaError("No media");
             }
         } catch (e) {
             console.log(e);
-            setStandardError(formatError(e));
+            setMediaError("Media unavailable");
         }
     };
 
@@ -139,11 +170,16 @@ export default function NFTCard({ id, type }) {
         queryTokenData();
     }, [tokenURI]);
     useEffect(() => {
+        // Cleared here, in the same effect that starts the read, so a card
+        // moved to another token cannot carry the previous token's decision.
+        setAuthorRead(false);
         queryTokenAuthor();
     }, [id, type, readProvider]);
+    // Keyed on the tri-state scalar, never on `policyStatus`: that is a fresh
+    // object every render and would loop.
     useEffect(() => {
         queryTokenContent();
-    }, [tokenData]);
+    }, [tokenData, contentHidden]);
     useEffect(() => {
         setExists(true);
     }, [id, type, readProvider]);
@@ -174,7 +210,13 @@ export default function NFTCard({ id, type }) {
             aria-label={`View ${tokenLabel}`}
         >
             <div style={styles.cardPreview}>
-                {type === "image" ? (
+                {policyStatus ? (
+                    <ContentNotice status={policyStatus} compact />
+                ) : mediaError ? (
+                    <p className="nft-media-unavailable nft-muted">
+                        {mediaError}
+                    </p>
+                ) : type === "image" ? (
                     <img
                         src={tokenContent}
                         alt={imageAltText}
@@ -202,7 +244,16 @@ export default function NFTCard({ id, type }) {
                 <div className="media">
                     <div className="media-content">
                         <p className="title is-4 mb-0">
-                            {tokenData?.name || <Skeleton />}
+                            {contentHidden
+                                ? `${type} NFT #${id}`
+                                : tokenData?.name ||
+                                  (tokenData ? (
+                                      "Untitled"
+                                  ) : mediaError ? (
+                                      mediaError
+                                  ) : (
+                                      <Skeleton />
+                                  ))}
                         </p>
                         <span className="subtitle is-6">
                             {effectiveTokenAuthor !== null ? (
@@ -223,9 +274,12 @@ export default function NFTCard({ id, type }) {
                 </div>
 
                 <div className="content is-italic" style={styles.description}>
-                    {tokenData?.description !== undefined &&
-                    tokenData?.description !== null ? (
-                        tokenData.description
+                    {contentHidden ? (
+                        ""
+                    ) : tokenData ? (
+                        tokenData.description ?? ""
+                    ) : mediaError ? (
+                        ""
                     ) : (
                         <Skeleton />
                     )}

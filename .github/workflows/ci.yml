@@ -19,4 +19,20 @@ jobs:
       - run: yarn lint
       - run: yarn test
       - run: yarn audit:triage
-      - run: yarn build
+      - name: Verify deployed contract truth (addresses, first blocks, ABI/deployment agreement)
+        run: yarn verify:deployed
+      # Timed, and capped well above the ~90s a clean build takes here: this
+      # catches a build that has structurally blown up, not a slow runner.
+      - name: Build (fails past a 10 minute ceiling)
+        run: time timeout 600 yarn build
+      # Must run after the build: the policy is injected into public/ by
+      # add_csp.js, so before it there is nothing to check and the CSP tests
+      # skip themselves.
+      - name: Verify the injected Content-Security-Policy
+        run: yarn verify:csp
+      # Rendered checks drive the real production build in Chromium, so they
+      # also need the build to exist and skip themselves without it.
+      - name: Install Chromium for rendered checks
+        run: npx playwright install --with-deps chromium
+      - name: Verify rendered pages, mobile layout and accessibility basics
+        run: yarn verify:rendered

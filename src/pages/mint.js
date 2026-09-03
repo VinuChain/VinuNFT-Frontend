@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import config from "../config";
 import { ensProvider, useWalletProvider } from "../common/provider";
 import "@uiw/react-md-editor/markdown-editor.css";
@@ -15,10 +15,10 @@ import "bulma-extensions/dist/css/bulma-extensions.min.css";
 import "../styles/globals.css";
 import { useTransactionHelper } from "../common/transaction_status";
 import { useRecoilState } from "recoil";
-import { standardErrorState } from "../common/error";
+import { formatError, standardErrorState } from "../common/error";
 import StandardErrorDisplay from "../components/StandardErrorDisplay";
 import ValidatedInput from "../components/ValidatedInput";
-import { mintNft } from "../common/minting";
+import { estimateTextMintFee, mintNft } from "../common/minting";
 import { navigate } from "gatsby";
 import { ethers } from "ethers";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -53,10 +53,89 @@ export default function Mint() {
         defaultValues.useCustomRecipient
     );
     const watchDataType = watch("dataType", defaultValues.dataType);
+    const watchTitle = watch("title");
+    const watchDescription = watch("description");
+    const watchEditionSize = watch("editionSize");
+    const watchRoyaltyPercentage = watch("royaltyPercentage");
     const handleTransaction = useTransactionHelper();
     const [, setStandardError] = useRecoilState(standardErrorState);
     const [file, setFile] = useState(null);
+    const [previewUrl, setPreviewUrl] = useState(null);
+    const [feeEstimate, setFeeEstimate] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
+
+    // Revoking on every change and on unmount stops a long session from
+    // holding on to every file the creator browsed through.
+    useEffect(() => {
+        if (!file) {
+            setPreviewUrl(null);
+            return;
+        }
+        const url = URL.createObjectURL(file);
+        setPreviewUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [file]);
+
+    const selectFile = (selected) => {
+        if (selected && selected.size > config.maxIpfsUploadBytes) {
+            // Refusing here spends nothing: the endpoint's own check only
+            // fires after the creator has signed an upload intent.
+            setStandardError(
+                `That image is larger than the ${Math.round(
+                    config.maxIpfsUploadBytes / (1024 * 1024)
+                )} MiB upload limit.`
+            );
+            setFile(null);
+            return;
+        }
+        setStandardError(null);
+        setFile(selected || null);
+    };
+
+    // Only the text path is quoted: it mints directly, so the estimate covers
+    // the whole cost. An image mint uploads first, and its calldata does not
+    // exist until that upload has happened.
+    useEffect(() => {
+        if (!walletProvider || watchDataType === "image" || !isValid) {
+            setFeeEstimate(null);
+            return;
+        }
+
+        let cancelled = false;
+        // Debounced because every keystroke changes the calldata, and an
+        // estimate costs two RPC round-trips through the user's wallet.
+        const timer = setTimeout(() => {
+            estimateTextMintFee(
+                {
+                    dataType: watchDataType,
+                    title: watchTitle,
+                    description: watchDescription,
+                    editionSize: watchEditionSize,
+                    text,
+                    royaltyPercentage: watchRoyaltyPercentage,
+                },
+                walletProvider
+            ).then((fee) => {
+                if (!cancelled) {
+                    setFeeEstimate(fee);
+                }
+            });
+        }, 400);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [
+        walletProvider,
+        watchDataType,
+        isValid,
+        watchTitle,
+        watchDescription,
+        watchEditionSize,
+        watchRoyaltyPercentage,
+        text,
+    ]);
 
     const executeTransaction = (mintConfirmed) => async (data) => {
         if (!walletProvider) {
@@ -89,12 +168,27 @@ export default function Mint() {
                 setStandardError
             );
 
+            if (!mintInfo.success) {
+                // The helper already reported why; repeating "No transaction
+                // receipt" here contradicted the toast beside it.
+                setStandardError(formatError(mintInfo.error));
+                setIsUploading(false);
+                return;
+            }
+
             if (mintInfo.receipt) {
-                const matchingEvents = mintInfo.receipt.events.filter(
+                const matchingEvents = (mintInfo.receipt.events || []).filter(
                     (event) =>
                         event.event === "TransferSingle" &&
                         event.args.from === ethers.constants.AddressZero
                 );
+
+                if (matchingEvents.length === 0) {
+                    throw new Error(
+                        "The mint was mined but the receipt carries no new token."
+                    );
+                }
+
                 const tokenId = matchingEvents[0].args[3].toString();
 
                 const macroType = data.dataType === "image" ? "image" : "text";
@@ -174,8 +268,13 @@ export default function Mint() {
                                         <input
                                             className="file-input"
                                             type="file"
+                                            // Mirrors the media types the
+                                            // upload endpoint accepts, so an
+                                            // unsupported file is caught before
+                                            // the wallet signature prompt.
+                                            accept="image/png,image/jpeg,image/gif,image/webp"
                                             onChange={(e) =>
-                                                setFile(e.target.files[0])
+                                                selectFile(e.target.files[0])
                                             }
                                         />
                                         <span className="file-cta">
@@ -191,6 +290,22 @@ export default function Mint() {
                                             </span>
                                         </span>
                                     </label>
+                                    {previewUrl ? (
+                                        <figure
+                                            className="image mt-3"
+                                            style={{ maxWidth: "16rem" }}
+                                        >
+                                            <img
+                                                src={previewUrl}
+                                                alt={
+                                                    file?.name ||
+                                                    "Selected image"
+                                                }
+                                            />
+                                        </figure>
+                                    ) : (
+                                        <></>
+                                    )}
                                 </div>
                             ) : (
                                 <MultiEditor
@@ -236,15 +351,25 @@ export default function Mint() {
                         {walletProvider ? (
                             transactionState.status === "noTransaction" ||
                             transactionState.status === "error" ? (
-                                <button
-                                    className="button is-primary"
-                                    disabled={!isValid || isUploading}
-                                    onClick={handleSubmit(
-                                        executeTransaction(false)
+                                <>
+                                    <button
+                                        className="button is-primary"
+                                        disabled={!isValid || isUploading}
+                                        onClick={handleSubmit(
+                                            executeTransaction(false)
+                                        )}
+                                    >
+                                        {isUploading ? "Uploading..." : "Mint"}
+                                    </button>
+                                    {feeEstimate ? (
+                                        <p className="help">
+                                            Estimated network fee: {feeEstimate}{" "}
+                                            {config.nativeCurrency.symbol}
+                                        </p>
+                                    ) : (
+                                        <></>
                                     )}
-                                >
-                                    {isUploading ? "Uploading..." : "Mint"}
-                                </button>
+                                </>
                             ) : (
                                 <></>
                             )

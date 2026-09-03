@@ -51,7 +51,21 @@ export default function TransferButton({
         setStandardError(null);
 
         if (to.includes(".eth")) {
-            to = ensProvider.resolveName(to);
+            let resolved = null;
+            try {
+                resolved = await ensProvider.resolveName(to);
+            } catch {
+                // A lookup that fails on the network and a name that does not
+                // exist mean the same thing here: the gift has nowhere to go.
+                resolved = null;
+            }
+
+            if (!resolved) {
+                setStandardError("Could not resolve ENS name.");
+                return;
+            }
+
+            to = resolved;
         }
 
         const nftContract = new ethers.Contract(

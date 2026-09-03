@@ -3,6 +3,11 @@ import { Helmet } from "react-helmet";
 import { useTransactionStatus } from "./common/transaction_status";
 import { ToastContainer, toast } from "react-toastify";
 import TransactionNotifications from "./components/TransactionNotifications";
+// Imported here so every page gets it: 404 and activity did not import it
+// individually, so global rules silently did not apply there.
+import "./styles/globals.css";
+import config from "./config";
+import { CONTENT_POLICY_URL, REPORT_URL } from "./common/contentPolicy";
 
 const VINUCHAIN_SOCIAL_LINKS = [
     {
@@ -39,8 +44,25 @@ const FOOTER_LINKS = [
         external: false,
     },
     {
-        label: "VinuExplorer",
-        href: "https://mainnet.vinuexplorer.org",
+        // The public issue tracker is the intake queue AND the audit trail: a
+        // report, the evidence, the decision and the blocklist pull request all
+        // sit on one thread that neither side can quietly edit away. The mailto
+        // above stays as the private route for legal correspondence.
+        label: "Report content",
+        href: REPORT_URL,
+        external: true,
+    },
+    {
+        // docs/ is not copied into public/, so this must be the repository blob.
+        label: "Content policy",
+        href: CONTENT_POLICY_URL,
+        external: true,
+    },
+    {
+        // From the one registry, so the footer cannot drift from the explorer
+        // links the rest of the app builds.
+        label: config.blockExplorer.name,
+        href: config.blockExplorer.url,
         external: true,
     },
     {

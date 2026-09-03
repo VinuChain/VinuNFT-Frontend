@@ -8,20 +8,21 @@ import { useTransactionHelper } from "../common/transaction_status";
 import { useRecoilState } from "recoil";
 import { formatError, standardErrorState } from "../common/error";
 import config from "../config";
-import { useReadProvider, useWalletProvider } from "../common/provider";
+import { settlementBreakdown, bpsToPercent } from "../common/settlement";
+import {
+    exceedsTokenDecimals,
+    formatTokenAmount,
+    parseTokenAmount,
+} from "../common/utils";
+import {
+    defaultReadProvider,
+    useReadProvider,
+    useWalletProvider,
+} from "../common/provider";
 import { ethers } from "ethers";
 import { v1 } from "../common/abi";
 import BridgeShortcut from "./BridgeShortcut";
-
-const styles = {
-    modalCard: {
-        maxWidth: "80vw",
-    },
-    modalCardTitle: {
-        overflowWrap: "break-word",
-        maxWidth: "70vw",
-    },
-};
+import ModalCard from "./ModalCard";
 
 const defaultValues = {
     amount: 1,
@@ -65,6 +66,12 @@ export default function ListModal({
     walletAddress,
     onUpdate,
 }) {
+    // Settlement terms read from the contracts that will perform the split, so
+    // a seller sees what they will actually receive before they list.
+    const [platformFeeBps, setPlatformFeeBps] = useState(null);
+    const [royaltyBps, setRoyaltyBps] = useState(null);
+    const [royaltyReceiver, setRoyaltyReceiver] = useState(null);
+
     const nftAddress = config.contractAddresses.v1[nftType];
     const nftABI = v1[nftType];
     const marketplaceAddress = config.contractAddresses.v1.marketplace;
@@ -82,11 +89,81 @@ export default function ListModal({
     });
 
     const watchAmount = watch("amount");
+    const watchPrice = watch("price");
     const watchPaymentToken = watch("paymentToken");
     const selectedPaymentToken =
         watchPaymentToken || Object.keys(config.tokens)[0];
     const selectedPaymentTokenSymbol =
         config.tokens[selectedPaymentToken]?.symbol;
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            if (!nftType || id === undefined || id === null) return;
+            try {
+                const marketplace = new ethers.Contract(
+                    config.contractAddresses.v1.marketplace,
+                    ["function platformFeePercentage() view returns (uint16)"],
+                    defaultReadProvider
+                );
+                const nft = new ethers.Contract(
+                    nftAddress,
+                    [
+                        "function royaltyInfo(uint256,uint256) view returns (address,uint256)",
+                    ],
+                    defaultReadProvider
+                );
+                const fee = await marketplace.platformFeePercentage();
+                const [receiver, quoted] = await nft.royaltyInfo(id, 10000);
+                if (cancelled) return;
+                setPlatformFeeBps(Number(fee));
+                setRoyaltyBps(Number(quoted.toString()));
+                setRoyaltyReceiver(receiver);
+            } catch (e) {
+                if (!cancelled) {
+                    // Hide the preview rather than show a figure that may not
+                    // match settlement.
+                    setPlatformFeeBps(null);
+                    setRoyaltyBps(null);
+                }
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [nftType, id, nftAddress]);
+
+    // The price field's schema allows 18 decimal places for every token, but
+    // the selected token decides how many survive parseUnits. The schema
+    // cannot see the selection, so the check lives here, where it does.
+    const priceDecimals = config.tokens[selectedPaymentToken]?.decimals;
+    const priceTooPrecise =
+        watchPrice !== undefined &&
+        watchPrice !== null &&
+        watchPrice !== "" &&
+        exceedsTokenDecimals(watchPrice, selectedPaymentToken);
+
+    const proceeds = (() => {
+        if (platformFeeBps === null || royaltyBps === null) return null;
+        if (!watchPrice || !watchAmount || errors.price || errors.amount)
+            return null;
+        try {
+            const unit = parseTokenAmount(
+                String(watchPrice),
+                selectedPaymentToken
+            );
+            const total = unit.mul(ethers.BigNumber.from(String(watchAmount)));
+            const remainder = total.sub(total.mul(platformFeeBps).div(10000));
+            return settlementBreakdown({
+                total,
+                platformFeeBps,
+                royaltyAmount: remainder.mul(royaltyBps).div(10000),
+                royaltyReceiver,
+            });
+        } catch {
+            return null;
+        }
+    })();
 
     const closeModal = (data) => {
         setIsOpen(false);
@@ -186,106 +263,161 @@ export default function ListModal({
     if (!isOpen) return <></>;
 
     return (
-        <div className="modal is-active">
-            <div
-                className="modal-background"
-                onClick={() => closeModal(null, null, null)}
-            />
-            <div className="modal-card" style={styles.modalCard}>
-                <header className="modal-card-head">
-                    <p
-                        className="modal-card-title"
-                        style={styles.modalCardTitle}
+        <ModalCard
+            title="List NFT"
+            onDismiss={() => closeModal(null, null, null)}
+        >
+            <section className="modal-card-body">
+                <p>Balance: {balance}</p>
+                {balance != availableAmount ? (
+                    <p>Available (not listed) balance: {availableAmount}</p>
+                ) : (
+                    <></>
+                )}
+                <ValidatedInput
+                    label="Amount"
+                    name="amount"
+                    type="number"
+                    step="1"
+                    min="1"
+                    errors={errors}
+                    register={register}
+                />
+                {/* Wrapped rather than adjacent: a sibling label associates
+                    with nothing, so the currency a seller is pricing in was
+                    announced as an unnamed combo box. */}
+                <label style={{ display: "block" }} htmlFor="listPaymentToken">
+                    Payment Token:
+                </label>
+                <div className="select">
+                    <select id="listPaymentToken" {...register("paymentToken")}>
+                        {Object.entries(config.tokens).map(([key, value]) => (
+                            <option key={key} value={key}>
+                                {value.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                {selectedPaymentTokenSymbol ? (
+                    <BridgeShortcut
+                        token={selectedPaymentTokenSymbol}
+                        direction="into"
+                        variant="quiet"
                     >
-                        List NFT
-                    </p>
-                </header>
-                <section className="modal-card-body">
-                    <p>Balance: {balance}</p>
-                    {balance != availableAmount ? (
-                        <p>Available (not listed) balance: {availableAmount}</p>
-                    ) : (
-                        <></>
-                    )}
-                    <ValidatedInput
-                        label="Amount"
-                        name="amount"
-                        type="number"
-                        step="1"
-                        min="1"
-                        errors={errors}
-                        register={register}
-                    />
-                    <label style={{ display: "block" }}>Payment Token:</label>
-                    <div className="select">
-                        <select {...register("paymentToken")}>
-                            {Object.entries(config.tokens).map(
-                                ([key, value]) => (
-                                    <option key={key} value={key}>
-                                        {value.name}
-                                    </option>
-                                )
-                            )}
-                        </select>
-                    </div>
-                    {selectedPaymentTokenSymbol ? (
-                        <BridgeShortcut
-                            token={selectedPaymentTokenSymbol}
-                            direction="into"
-                            variant="quiet"
-                        >
-                            Buyers can bridge {selectedPaymentTokenSymbol} to
-                            VinuChain
-                        </BridgeShortcut>
-                    ) : (
-                        <></>
-                    )}
-                    <ValidatedInput
-                        label={`Price (${selectedPaymentTokenSymbol})`}
-                        name="price"
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        errors={errors}
-                        register={register}
-                    />
+                        Buyers can bridge {selectedPaymentTokenSymbol} to
+                        VinuChain
+                    </BridgeShortcut>
+                ) : (
+                    <></>
+                )}
+                <ValidatedInput
+                    label={`Price (${selectedPaymentTokenSymbol})`}
+                    name="price"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    errors={errors}
+                    register={register}
+                />
 
-                    {watchAmount > Math.min(balance, availableAmount) ? (
-                        watchAmount <= balance ? (
-                            <p className="notification is-warning">
-                                <b>Warning</b>: {warningMessage()}
-                            </p>
-                        ) : (
-                            <p className="notification is-danger">
-                                <b>Error</b>: Cannot list more tokens than you
-                                own ({balance}).
-                            </p>
-                        )
+                {proceeds ? (
+                    <div
+                        className="content is-small mt-2"
+                        data-testid="listing-proceeds"
+                    >
+                        <p className="mb-1">
+                            <strong>If it sells at this price</strong>
+                        </p>
+                        <ul className="mb-1">
+                            <li>
+                                Buyer pays:{" "}
+                                {formatTokenAmount(
+                                    proceeds.total.toString(),
+                                    selectedPaymentToken
+                                )}{" "}
+                                {selectedPaymentTokenSymbol}
+                            </li>
+                            <li>
+                                Platform fee ({bpsToPercent(platformFeeBps)}
+                                %):{" "}
+                                {formatTokenAmount(
+                                    proceeds.platformFee.toString(),
+                                    selectedPaymentToken
+                                )}{" "}
+                                {selectedPaymentTokenSymbol}
+                            </li>
+                            <li>
+                                Creator royalty ({bpsToPercent(royaltyBps)}
+                                %):{" "}
+                                {formatTokenAmount(
+                                    proceeds.creatorFee.toString(),
+                                    selectedPaymentToken
+                                )}{" "}
+                                {selectedPaymentTokenSymbol}
+                            </li>
+                            <li>
+                                <strong>
+                                    You receive:{" "}
+                                    {formatTokenAmount(
+                                        proceeds.sellerProceeds.toString(),
+                                        selectedPaymentToken
+                                    )}{" "}
+                                    {selectedPaymentTokenSymbol}
+                                </strong>
+                            </li>
+                        </ul>
+                    </div>
+                ) : (
+                    <></>
+                )}
+
+                {priceTooPrecise ? (
+                    <p className="notification is-danger">
+                        <b>Error</b>: {selectedPaymentTokenSymbol} prices must
+                        have at most {priceDecimals} decimal places after the
+                        decimal point.
+                    </p>
+                ) : (
+                    <></>
+                )}
+
+                {watchAmount > Math.min(balance, availableAmount) ? (
+                    watchAmount <= balance ? (
+                        <p className="notification is-warning">
+                            <b>Warning</b>: {warningMessage()}
+                        </p>
                     ) : (
-                        <></>
-                    )}
-                </section>
-                <footer className="modal-card-foot">
-                    {!isApproved ? (
-                        <button
-                            className="button is-black"
-                            onClick={approveMarketplace}
-                        >
-                            Approve Marketplace
-                        </button>
-                    ) : (
-                        <button
-                            className="button is-black"
-                            disabled={
-                                (!isValid && isDirty) || watchAmount > balance
-                            }
-                            onClick={handleSubmit(closeModal)}
-                        >
-                            List
-                        </button>
-                    )}
-                </footer>
-            </div>
-        </div>
+                        <p className="notification is-danger">
+                            <b>Error</b>: Cannot list more tokens than you own (
+                            {balance}).
+                        </p>
+                    )
+                ) : (
+                    <></>
+                )}
+            </section>
+            <footer className="modal-card-foot">
+                {!isApproved ? (
+                    <button
+                        className="button is-black"
+                        onClick={approveMarketplace}
+                    >
+                        Approve Marketplace
+                    </button>
+                ) : (
+                    <button
+                        className="button is-black"
+                        disabled={
+                            (!isValid && isDirty) ||
+                            watchAmount > balance ||
+                            priceTooPrecise
+                        }
+                        onClick={handleSubmit(closeModal)}
+                    >
+                        List
+                    </button>
+                )}
+            </footer>
+        </ModalCard>
     );
 }

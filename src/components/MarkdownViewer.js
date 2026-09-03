@@ -1,11 +1,6 @@
 import React from "react";
 import { useState, useRef } from "react";
-import { unified } from "unified";
-import remarkParse from "remark-parse";
-import remarkRehype from "remark-rehype";
-import rehypeSanitize from "rehype-sanitize";
-import rehypeStringify from "rehype-stringify/lib";
-import { schemas } from "../common";
+import { sanitizeMarkdown } from "../common/sanitize";
 
 export default function MarkdownViewer({ source }) {
     const [height, setHeight] = useState("0px");
@@ -32,24 +27,22 @@ export default function MarkdownViewer({ source }) {
         }
     };
 
-    const sanitize = (markdown) => {
-        const sanitized = unified()
-            .use(remarkParse)
-            .use(remarkRehype)
-            .use(rehypeSanitize, schemas.validMarkdown)
-            .use(rehypeStringify)
-            .processSync(markdown);
-        return sanitized.value;
-    };
-
     return (
         <iframe
             ref={ref}
             onLoad={onLoad}
             height={height}
             style={{ width: "100%", overflow: "auto" }}
-            srcDoc={sanitize(source)}
-            sandbox
+            srcDoc={sanitizeMarkdown(source)}
+            // WHY a value and not a bare `sandbox`: React drops `sandbox={true}`
+            // for a string attribute, so the built page shipped an iframe with no
+            // sandbox at all — the second layer this repo documents did not exist.
+            // `allow-same-origin` and nothing else: scripts, forms, popups,
+            // downloads and top-level navigation stay off, while the frame keeps
+            // the parent origin so onLoad can measure its height. Adding
+            // allow-scripts would hand attacker-authored markup a same-origin
+            // script context; it must never be added.
+            sandbox="allow-same-origin"
         />
     );
 }

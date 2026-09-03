@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { RoutingLink, WalletButton } from ".";
 import { useWalletProvider } from "../common/provider";
 import config from "../config";
+import { switchToVinuChain } from "../common/network";
 
 const NAV_LINKS = [
     {
@@ -150,6 +151,19 @@ export default function Header() {
                         Error: please switch to{" "}
                         <strong>{config.networks.main.name}</strong>.
                     </p>
+                    <button
+                        type="button"
+                        className="button is-small mt-2"
+                        // The connected wallet, not whatever the page has
+                        // injected: Web3Modal also serves Frame and other
+                        // non-injected wallets, where the injected object is
+                        // absent or is a different wallet entirely.
+                        onClick={() =>
+                            switchToVinuChain(walletProvider?.provider)
+                        }
+                    >
+                        Switch to {config.networks.main.name}
+                    </button>
                 </div>
             ) : null}
         </header>

@@ -1,4 +1,16 @@
 import { ethers } from "ethers";
+import {
+    createUploadMessage,
+    uploadPayloadDigest,
+} from "../common/uploadIntent";
+import { sniffImage } from "../common/imageSniff";
+// One parseBody, not a private copy: the copy here was unguarded and safe only
+// because its call site happens to sit inside the handler's try.
+import { clientKey, parseBody } from "../common/apiRateLimit";
+import {
+    consumeRateLimit,
+    RateLimitStoreError,
+} from "../common/uploadRateLimit";
 
 const PINATA_PIN_FILE_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";
 const PINATA_PIN_JSON_URL = "https://api.pinata.cloud/pinning/pinJSONToIPFS";
@@ -28,7 +40,24 @@ const MAX_UPLOADS_PER_WINDOW = Number(
 const MAX_GLOBAL_UPLOADS_PER_WINDOW = Number(
     envValue("PINATA_MAX_GLOBAL_UPLOADS_PER_WINDOW") || 200
 );
-const uploadRateLimit = new Map();
+const UPLOAD_CHAIN_ID = Number(envValue("UPLOAD_CHAIN_ID") || 207);
+
+// Raster formats only. SVG is deliberately excluded: it is script bearing, and
+// a gateway serving it as image/svg+xml executes that script on the gateway
+// origin. The declared content type must also match the bytes, which is what
+// stops a polyglot or a renamed script being pinned as an image.
+const ALLOWED_MEDIA_TYPES = (
+    envValue("PINATA_ALLOWED_MEDIA_TYPES") ||
+    "image/png,image/jpeg,image/gif,image/webp"
+)
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+// Guards a decompression bomb on its declared geometry, without decoding it.
+const MAX_IMAGE_PIXELS = Number(
+    envValue("PINATA_MAX_IMAGE_PIXELS") || 40000000
+);
 
 export const config = {
     bodyParser: {
@@ -37,14 +66,6 @@ export const config = {
         },
     },
 };
-
-function parseBody(req) {
-    if (typeof req.body === "string") {
-        return JSON.parse(req.body);
-    }
-
-    return req.body || {};
-}
 
 function sendJson(res, statusCode, body) {
     res.status(statusCode);
@@ -141,53 +162,45 @@ function assertPinataJwt() {
     }
 }
 
-function createUploadMessage(address, issuedAt) {
-    return [
-        "VinuNFT IPFS upload",
-        `Address: ${address}`,
-        `Issued At: ${issuedAt}`,
-        "Purpose: mint-image",
-    ].join("\n");
-}
+// Bucket keys are hashed: the same identifiers the audit log refuses to record
+// in the clear should not sit in a third-party store either, and a hash bounds
+// the key length against a long trusted-header value.
+async function assertRateLimit(req, address) {
+    let exceeded;
 
-function clientIp(req) {
-    const trustedHeader = envValue("TRUSTED_CLIENT_IP_HEADER");
-    if (
-        trustedHeader &&
-        typeof req.headers[trustedHeader.toLowerCase()] === "string"
-    ) {
-        return req.headers[trustedHeader.toLowerCase()].trim();
+    try {
+        exceeded = await consumeRateLimit(
+            [
+                {
+                    key: `address:${hashAuditValue(address.toLowerCase())}`,
+                    limit: MAX_UPLOADS_PER_WINDOW,
+                },
+                {
+                    key: `ip:${hashAuditValue(clientKey(req))}`,
+                    limit: MAX_UPLOADS_PER_WINDOW,
+                },
+                { key: "global", limit: MAX_GLOBAL_UPLOADS_PER_WINDOW },
+            ],
+            RATE_LIMIT_WINDOW_MS
+        );
+    } catch (error) {
+        if (error instanceof RateLimitStoreError) {
+            // Fail closed. An upload that cannot be counted is an upload with
+            // no limit at all, which is worse than a refused one.
+            throw new UploadRejection(
+                "rate_limit_store_unavailable",
+                "Upload rate limiting is unavailable; try again shortly."
+            );
+        }
+        throw error;
     }
 
-    return req.socket?.remoteAddress || "unknown";
-}
-
-function checkRateLimitBucket(key, maxUploads) {
-    const now = Date.now();
-    const existing = uploadRateLimit.get(key) || [];
-    const recent = existing.filter(
-        (timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS
-    );
-
-    if (recent.length >= maxUploads) {
+    if (exceeded) {
         throw new UploadRejection(
             "rate_limited",
             "Upload rate limit exceeded."
         );
     }
-
-    recent.push(now);
-    uploadRateLimit.set(key, recent);
-}
-
-function assertRateLimit(req, address) {
-    const ipAddress = clientIp(req);
-    checkRateLimitBucket(
-        `address:${address.toLowerCase()}`,
-        MAX_UPLOADS_PER_WINDOW
-    );
-    checkRateLimitBucket(`ip:${ipAddress}`, MAX_UPLOADS_PER_WINDOW);
-    checkRateLimitBucket("global", MAX_GLOBAL_UPLOADS_PER_WINDOW);
 }
 
 function assertAllowedUploader(address) {
@@ -212,7 +225,17 @@ function assertAllowedUploader(address) {
     }
 }
 
-function assertUploadAuth(req, auth) {
+const UPLOAD_ACTION = { file: "mint-image", json: "mint-metadata" };
+
+/** The signed digest must cover the payload the server is about to pin, so
+ *  `auth` itself is excluded from the digested object. */
+function digestedPayload(payload) {
+    const { auth, ...rest } = payload ?? {};
+    return rest;
+}
+
+async function assertUploadAuth(req, payload) {
+    const auth = payload?.auth;
     if (!auth?.address || !auth?.issuedAt || !auth?.signature) {
         throw new UploadRejection(
             "missing_signature",
@@ -234,20 +257,37 @@ function assertUploadAuth(req, auth) {
         );
     }
 
+    const action = UPLOAD_ACTION[payload?.type];
+    if (!action) {
+        throw new UploadRejection(
+            "unsupported_type",
+            "Unsupported upload type."
+        );
+    }
+
+    // Rebuild the message from the payload actually received. A signature
+    // captured for one upload cannot authorise different content, a different
+    // action, or a different chain.
     const recoveredAddress = ethers.utils.verifyMessage(
-        createUploadMessage(address, auth.issuedAt),
+        createUploadMessage({
+            address,
+            issuedAt: auth.issuedAt,
+            chainId: UPLOAD_CHAIN_ID,
+            action,
+            digest: uploadPayloadDigest(digestedPayload(payload)),
+        }),
         auth.signature
     );
 
     if (ethers.utils.getAddress(recoveredAddress) !== address) {
         throw new UploadRejection(
             "invalid_signature",
-            "Upload signature does not match the supplied address."
+            "Upload signature does not authorise this payload."
         );
     }
 
     assertAllowedUploader(address);
-    assertRateLimit(req, address);
+    await assertRateLimit(req, address);
 }
 
 async function pinJson(metadata) {
@@ -279,6 +319,14 @@ async function pinFile(payload) {
         );
     }
 
+    const declaredType = String(payload.contentType).trim().toLowerCase();
+    if (!ALLOWED_MEDIA_TYPES.includes(declaredType)) {
+        throw new UploadRejection(
+            "media_type_not_allowed",
+            "File type is not an accepted image format."
+        );
+    }
+
     const fileBytes = Buffer.from(payload.data, "base64");
     if (
         fileBytes.length > MAX_UPLOAD_BYTES ||
@@ -290,10 +338,32 @@ async function pinFile(payload) {
         );
     }
 
+    // The bytes decide the type, not the client. A mismatch means the payload
+    // was mislabelled — a polyglot, a renamed script, or an SVG.
+    const sniffed = sniffImage(fileBytes);
+    if (!sniffed) {
+        throw new UploadRejection(
+            "unrecognised_image",
+            "File is not a recognised image."
+        );
+    }
+    if (sniffed.mediaType !== declaredType) {
+        throw new UploadRejection(
+            "media_type_mismatch",
+            "File contents do not match the declared file type."
+        );
+    }
+    if (sniffed.width * sniffed.height > MAX_IMAGE_PIXELS) {
+        throw new UploadRejection(
+            "image_too_large",
+            "Image dimensions exceed the upload limit."
+        );
+    }
+
     const formData = new FormData();
     formData.append(
         "file",
-        new Blob([fileBytes], { type: payload.contentType }),
+        new Blob([fileBytes], { type: declaredType }),
         payload.name
     );
 
@@ -316,7 +386,13 @@ export default async function handler(req, res) {
     try {
         assertPinataJwt();
         payload = parseBody(req);
-        assertUploadAuth(req, payload.auth);
+        if (!payload) {
+            throw new UploadRejection(
+                "malformed_body",
+                "Malformed request body."
+            );
+        }
+        await assertUploadAuth(req, payload);
         const response =
             payload.type === "json"
                 ? await pinJson(payload.metadata)

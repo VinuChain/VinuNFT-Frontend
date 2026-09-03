@@ -1,0 +1,17 @@
+{
+    "$schema": "https://openapi.vercel.sh/vercel.json",
+    "framework": "gatsby",
+    "installCommand": "yarn install --frozen-lockfile",
+    "buildCommand": "yarn build",
+    "headers": [
+        {
+            "source": "/(.*)",
+            "headers": [
+                {
+                    "key": "Content-Security-Policy",
+                    "value": "frame-ancestors 'self'"
+                }
+            ]
+        }
+    ]
+}

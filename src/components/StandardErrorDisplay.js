@@ -17,7 +17,9 @@ export default function StandardErrorDisplay() {
                     onClick={() => setStandardError(null)}
                 ></div>
             </div>
-            <div className="message-body">{standardError}</div>
+            <div className="message-body standard-error-body">
+                {standardError}
+            </div>
         </article>
     ) : (
         <></>

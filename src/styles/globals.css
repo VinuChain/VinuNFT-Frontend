@@ -447,8 +447,62 @@ button {
     min-height: 2.5rem;
 }
 
-.marketplace-filters__seller {
+.marketplace-filters__search {
     grid-column: 1 / -1;
+}
+
+/* Seven fields per card now: format, price and lot total, amount, supply,
+   seller, creator, availability. */
+.marketplace-metrics {
+    border: 1px solid #dce5df;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+}
+
+.marketplace-metrics__grid {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    margin-bottom: 0.75rem;
+}
+
+.marketplace-metric__label {
+    color: #5a6d64;
+    font-size: 0.72rem;
+    font-weight: 900;
+    margin: 0;
+    text-transform: uppercase;
+}
+
+.marketplace-metric__amount,
+.marketplace-metric__count {
+    font-size: 1.1rem;
+    font-weight: 800;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.marketplace-metric__note,
+.marketplace-metrics__note,
+.marketplace-metrics__definitions {
+    color: #5a6d64;
+    font-size: 0.78rem;
+    margin: 0.15rem 0 0;
+}
+
+.marketplace-listings__count {
+    color: #5a6d64;
+    font-size: 0.85rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+}
+
+.marketplace-listing__format,
+.marketplace-listing__total {
+    color: #5a6d64;
+    font-size: 0.78rem;
+    margin: 0.2rem 0 0;
 }
 
 .marketplace-listings {
@@ -462,7 +516,7 @@ button {
     border-radius: 8px;
     display: grid;
     gap: 1rem;
-    grid-template-columns: minmax(8rem, 1.3fr) repeat(4, minmax(6.5rem, 1fr));
+    grid-template-columns: minmax(8rem, 1.3fr) repeat(6, minmax(6rem, 1fr));
     padding: 1rem;
 }
 
@@ -1029,4 +1083,80 @@ button {
         display: block;
         margin: auto;
     }
+}
+
+/*
+ * Long unbroken strings must not widen the page.
+ *
+ * Wallet and RPC errors embed JSON with no spaces — an ethers "bad result from
+ * backend" message carries the full call parameters — and contract addresses,
+ * token ids and transaction hashes are similarly unbreakable. On a 375px phone
+ * one such message forced the document to 868px and made every page scroll
+ * sideways. Breaking anywhere is the right trade for these: they are reference
+ * strings, not prose.
+ */
+/* `body` prefix only to outrank Bulma's own .notification/.message-body rules,
+ * which land after this file in the bundled CSS. */
+body .message-body,
+body .standard-error-body,
+body .notification,
+body .help {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+/*
+ * Accessibility corrections found by the rendered checks.
+ */
+
+/* Bulma styles <strong> as #363636, which overrode the light colour on this
+ * dark panel and rendered the status word at 1.60:1 — effectively invisible. */
+.bridge-hero__status strong {
+    color: inherit;
+}
+
+/* Bulma's danger red gives white text 3.61:1, under the 4.5:1 AA floor. Error
+ * text is the text a user most needs to be able to read. This shade keeps the
+ * same signal while clearing AA. */
+.notification.is-danger,
+.message.is-danger .message-body {
+    background-color: #c8203f;
+}
+
+/* WCAG 2.5.8: pointer targets need 24x24 CSS px. Native checkboxes render at
+ * 13x13, which is a difficult tap on a phone. */
+input[type="checkbox"],
+input[type="radio"] {
+    min-width: 24px;
+    min-height: 24px;
+}
+
+/* An inline download link measured 73x23, one pixel under the target size. */
+.media-kit-card__download {
+    align-items: center;
+    display: inline-flex;
+    min-height: 24px;
+}
+
+/* Bulma's .message-header carries the same danger red as the body did, so the
+   word "Error" itself sat at 3.61:1 while the message under it was readable. */
+.message.is-danger .message-header {
+    background-color: #c8203f;
+}
+
+/* Replaces Bulma's .has-text-grey (#7a7a7a), which measured 4.29:1 against the
+   off-white panels this app uses — under the 4.5:1 AA floor, on the provenance
+   and content-disclosure copy a buyer most needs to read. Its own class rather
+   than an !important fight with a Bulma helper that already uses !important. */
+.nft-muted {
+    color: #6b6b6b;
+}
+
+/* Address links are inline text, so their line box measured 14-22px tall,
+   under the 24x24 pointer floor. They are the primary way into the explorer
+   and a profile, so they have to be tappable. */
+.vinunft-address a {
+    align-items: center;
+    display: inline-flex;
+    min-height: 24px;
 }

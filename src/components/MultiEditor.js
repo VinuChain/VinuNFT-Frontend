@@ -1,11 +1,7 @@
 import React from "react";
-import rehypeSanitize from "rehype-sanitize";
-
 import MDEditor from "@uiw/react-md-editor";
 import { defaultCommands } from "../common/commands";
-import schemas from "../common/schemas";
-
-import HTMLEditor from "./HTMLEditor";
+import { markdownRehypePlugins } from "../common/sanitize";
 
 const styles = {
     link: {
@@ -25,10 +21,11 @@ export default function MultiEditor({ dataType, value, setValue }) {
                         value={value}
                         onChange={setValue}
                         highlightEnable={false}
+                        // Same plugin list the published render uses, so
+                        // the preview cannot become more permissive than what
+                        // buyers eventually see.
                         previewOptions={{
-                            rehypePlugins: [
-                                () => rehypeSanitize(schemas.validMarkdown),
-                            ],
+                            rehypePlugins: markdownRehypePlugins(),
                         }}
                         commands={defaultCommands}
                     />
@@ -69,8 +66,6 @@ export default function MultiEditor({ dataType, value, setValue }) {
                     placeholder="Content of your artwork"
                 ></textarea>
             );
-        case "text/html":
-            return <HTMLEditor value={value} setValue={setValue} />;
         default:
             return <p>Unsupported editor</p>;
     }

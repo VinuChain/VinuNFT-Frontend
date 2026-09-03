@@ -1,27 +1,34 @@
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 
-// Ratchet, re-set 2026-08-20 (previous set 2026-06-12: low 105, moderate 162,
-// high 235, critical 65). No dependency changed between those dates — the counts
-// moved because advisories were re-scored and new ones published against the
-// same packages. The overall surface got SMALLER, not larger:
+// Ratchet, re-set 2026-09-01 after the dependency remediation described in
+// docs/dependency-audit-triage.md. Previous ceiling (2026-08-20) was
+// low 109, moderate 153, high 252, critical 39 — 553 advisories carried as one
+// undifferentiated number.
 //
-//   critical  65 -> 39   (-26)
-//   moderate 162 -> 153  (-9)
-//   high     235 -> 252  (+17)
-//   low      105 -> 109  (+4)
-//   total    567 -> 553  (-14)
+//   critical  39 -> 2    (-37)
+//   high     252 -> 28   (-224)
+//   moderate 153 -> 28   (-125)
+//   low      109 -> 13   (-96)
+//   total    553 -> 71   (-482)   packages 2365 -> 1652
 //
-// The ratchet was firing on a critical->high reclassification while blocking
-// unrelated PRs. It is re-set to the current, strictly-better-overall position
-// so it keeps catching genuine regressions. This is still not an acceptance of
-// the dependency risk — see docs/dependency-audit-triage.md.
+// Almost all of that is packages that are no longer installed, not packages
+// reclassified out of the audited set: of the roots that disappeared, only
+// lint-staged (2 advisories) is still on disk as a devDependency. The rest —
+// the browser-polyfill roots, sanitize-html, file-loader, gatsby-source-filesystem
+// and ws — were uninstalled outright, and the remaining framework roots moved
+// forward within their declared ranges.
+//
+// These are the exact observed counts, so a newly published advisory against a
+// package that is still here will fail this gate. That is intended: the answer
+// is to re-read docs/dependency-audit-triage.md and decide whether the new
+// advisory is reachable, not to raise the number.
 const baseline = {
     info: 0,
-    low: 109,
-    moderate: 153,
-    high: 252,
-    critical: 39,
+    low: 13,
+    moderate: 32,
+    high: 28,
+    critical: 2,
 };
 
 const yarnCli = process.env.npm_execpath;

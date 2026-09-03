@@ -2,11 +2,57 @@ import { ethers } from "ethers";
 import { atom } from "recoil";
 import { formatTokenAmount } from "./utils";
 import { tokenAddressToId } from "./user";
+import { queryFilterChunked } from "./eventScan";
 
 const blockToDateState = atom({
     key: "blockToDateState",
     default: {},
 });
+
+/**
+ * One normalised record per (id, value) an ERC-1155 transfer log carries.
+ *
+ * The standard emits two transfer shapes and this app only ever understood
+ * TransferSingle, so a `safeBatchTransferFrom` — on both deployed NFT ABIs, so
+ * reachable by any holder today — was invisible to history and balances.
+ * Expanding here keeps one parser for both shapes rather than teaching every
+ * consumer the batch layout.
+ *
+ * `subIndex` separates the entries of one batch log, which otherwise share a
+ * (transactionHash, logIndex) identity and would collapse under any dedup.
+ */
+const expandTransfers = (event) => {
+    const args = event?.args;
+    if (!args) {
+        return [];
+    }
+
+    const base = {
+        operator: args.operator,
+        from: args.from,
+        to: args.to,
+        blockNumber: event.blockNumber,
+        transactionIndex: event.transactionIndex,
+        logIndex: event.logIndex,
+        transactionHash: event.transactionHash,
+        nftType: event.nftType,
+    };
+
+    if (event.event === "TransferSingle") {
+        return [{ ...base, id: args.id, value: args.value, subIndex: 0 }];
+    }
+
+    if (event.event === "TransferBatch") {
+        return args.ids.map((id, subIndex) => ({
+            ...base,
+            id,
+            value: args.values[subIndex],
+            subIndex,
+        }));
+    }
+
+    return [];
+};
 
 const getTransferEvents = async (
     id,
@@ -57,10 +103,16 @@ const getTransferEvents = async (
             queriedAddresses.push(address);
 
             if (address === null) {
-                const allTransfersFilter = nftContract.filters.TransferSingle();
                 eventPromises.push(
-                    nftContract.queryFilter(
-                        allTransfersFilter,
+                    queryFilterChunked(
+                        nftContract,
+                        nftContract.filters.TransferSingle(),
+                        firstNftBlock,
+                        "latest"
+                    ),
+                    queryFilterChunked(
+                        nftContract,
+                        nftContract.filters.TransferBatch(),
                         firstNftBlock,
                         "latest"
                     )
@@ -79,23 +131,29 @@ const getTransferEvents = async (
                     address
                 );
 
-                eventPromises.push(
-                    nftContract.queryFilter(
-                        transferOperatorFilter,
-                        firstNftBlock,
-                        "latest"
-                    ),
-                    nftContract.queryFilter(
-                        transferFromFilter,
-                        firstNftBlock,
-                        "latest"
-                    ),
-                    nftContract.queryFilter(
-                        transferToFilter,
-                        firstNftBlock,
-                        "latest"
-                    )
-                );
+                // TransferBatch shares TransferSingle's indexed topics
+                // (operator, from, to), so the same three positions apply.
+                const batchFilters = [
+                    nftContract.filters.TransferBatch(address, null, null),
+                    nftContract.filters.TransferBatch(null, address, null),
+                    nftContract.filters.TransferBatch(null, null, address),
+                ];
+
+                for (const filter of [
+                    transferOperatorFilter,
+                    transferFromFilter,
+                    transferToFilter,
+                    ...batchFilters,
+                ]) {
+                    eventPromises.push(
+                        queryFilterChunked(
+                            nftContract,
+                            filter,
+                            firstNftBlock,
+                            "latest"
+                        )
+                    );
+                }
             }
         }
 
@@ -103,13 +161,23 @@ const getTransferEvents = async (
 
         for (const eventGroup of events) {
             for (const event of eventGroup) {
-                const { from, to, operator, id: nftId } = event.args;
+                // A batch log carries many ids; `args.id` is undefined on it,
+                // so the relevance test has to run over the expansion.
+                const relevant = expandTransfers(event).filter(
+                    (record) => id === null || record.id == id
+                );
 
-                if (nftId == id || id === null) {
-                    addAddress(from);
-                    addAddress(to);
-                    addAddress(operator);
+                for (const record of relevant) {
+                    addAddress(record.from);
+                    addAddress(record.to);
+                    addAddress(record.operator);
+                }
 
+                if (relevant.length > 0) {
+                    // The raw log is stored, not the expansion: addEvent dedups
+                    // on (transactionHash, logIndex), which every entry of one
+                    // batch shares, so storing the expansion would drop all but
+                    // the first entry.
                     addEvent(event);
                 }
             }
@@ -149,17 +217,20 @@ const getEvents = async (
 
     const [tokenListedEvents, tokenDelistedEvents, tokenPurchasedEvents] =
         await Promise.all([
-            marketplaceContract.queryFilter(
+            queryFilterChunked(
+                marketplaceContract,
                 tokenListedFilter,
                 firstMarketplaceBlock,
                 "latest"
             ),
-            marketplaceContract.queryFilter(
+            queryFilterChunked(
+                marketplaceContract,
                 tokenDelistedFilter,
                 firstMarketplaceBlock,
                 "latest"
             ),
-            marketplaceContract.queryFilter(
+            queryFilterChunked(
+                marketplaceContract,
                 tokenPurchasedFilter,
                 firstMarketplaceBlock,
                 "latest"
@@ -253,8 +324,7 @@ const computeBalances = (events) => {
     };
 
     for (const event of events) {
-        if (event.event == "TransferSingle") {
-            const { from, to, value } = event.args;
+        for (const { from, to, value } of expandTransfers(event)) {
             updateBalance(from, -value.toNumber());
             updateBalance(to, value.toNumber());
         }
@@ -284,15 +354,24 @@ const parseHistory = (events) => {
                     "Parsing TokenListed event with payment token:",
                     event.args._paymentToken
                 );*/
+                const listPaymentToken =
+                    tokenAddressToId[event.args._paymentToken] ?? null;
                 parsedEvents.push({
                     id: parseInt(event.args._tokenId),
                     type: "list",
                     seller: event.args._seller,
-                    paymentToken: tokenAddressToId[event.args._paymentToken],
-                    price: formatTokenAmount(
-                        event.args._price.toString(),
-                        tokenAddressToId[event.args._paymentToken]
-                    ),
+                    paymentToken: listPaymentToken,
+                    // listToken accepts any ERC-20, so a listing may be
+                    // denominated in a token this app does not know. Its
+                    // decimals are unknown, so no price can be shown honestly —
+                    // but one such listing must not take down history for
+                    // every other token, which is what throwing here did.
+                    price: listPaymentToken
+                        ? formatTokenAmount(
+                              event.args._price.toString(),
+                              listPaymentToken
+                          )
+                        : null,
                     amount: event.args.amount.toNumber(), // Note the lack of _
                     transactionHash: event.transactionHash,
                     blockNumber: event.blockNumber,
@@ -310,28 +389,31 @@ const parseHistory = (events) => {
                 });
                 break;
             case "TransferSingle":
-                let transferType = "transfer";
-                if (event.args.from == ethers.constants.AddressZero) {
-                    transferType = "mint";
-                } else if (event.args.to == ethers.constants.AddressZero) {
-                    transferType = "burn";
+            case "TransferBatch":
+                for (const record of expandTransfers(event)) {
+                    let transferType = "transfer";
+                    if (record.from == ethers.constants.AddressZero) {
+                        transferType = "mint";
+                    } else if (record.to == ethers.constants.AddressZero) {
+                        transferType = "burn";
+                    }
+                    parsedEvents.push({
+                        id: parseInt(record.id),
+                        type: transferType,
+                        from: record.from,
+                        to: record.to,
+                        amount: record.value.toNumber(),
+                        operator: record.operator,
+                        transactionHash: record.transactionHash,
+                        blockNumber: record.blockNumber,
+                        nftType: record.nftType,
+                    });
                 }
-                parsedEvents.push({
-                    id: parseInt(event.args.id),
-                    type: transferType,
-                    from: event.args.from,
-                    to: event.args.to,
-                    amount: event.args.value.toNumber(),
-                    operator: event.args.operator,
-                    transactionHash: event.transactionHash,
-                    blockNumber: event.blockNumber,
-                    nftType: event.nftType,
-                });
 
                 break;
             case "TokenPurchased":
                 const purchasePaymentToken =
-                    tokenAddressToId[event.args._paymentToken];
+                    tokenAddressToId[event.args._paymentToken] ?? null;
                 parsedEvents.push({
                     id: parseInt(event.args._tokenId),
                     type: "purchase",
@@ -339,10 +421,12 @@ const parseHistory = (events) => {
                     seller: event.args._seller,
                     amount: event.args._amount.toNumber(),
                     paymentToken: purchasePaymentToken,
-                    price: formatTokenAmount(
-                        event.args._price.toString(),
-                        purchasePaymentToken
-                    ).toString(),
+                    price: purchasePaymentToken
+                        ? formatTokenAmount(
+                              event.args._price.toString(),
+                              purchasePaymentToken
+                          ).toString()
+                        : null,
                     transactionHash: event.transactionHash,
                     blockNumber: event.blockNumber,
                     nftType: event.nftType,
@@ -390,4 +474,5 @@ export {
     getAllEvents,
     computeBalances,
     parseHistory,
+    expandTransfers,
 };

@@ -1,33 +1,33 @@
 import Joi from "joi";
+import config from "../config";
 import { defaultSchema as rehypeDefaultSchema } from "rehype-sanitize";
 
 const ensDomain = Joi.string().domain({ tlds: { allow: ["eth"] } });
 const ethAddress = Joi.string().pattern(/^0x[a-fA-F0-9]{40}$/);
 
-const validateCustomRecipient = (value, helpers) => {
+const ADDRESS_MESSAGE = '"Address" must be a valid Ethereum name or address';
+
+const validateRecipient = (value, helpers) => {
     if (!value) {
         return helpers.error("any.required");
     }
-    if (value.includes(".eth")) {
-        const ensValidation = ensDomain.validate(value);
-        if (ensValidation.error) {
-            return helpers.error("custom.address");
-        }
-    } else {
-        const ethValidation = ethAddress.validate(value);
-        if (ethValidation.error) {
-            return helpers.error("custom.address");
-        }
+    const wellFormed = value.includes(".eth") ? ensDomain : ethAddress;
+    if (wellFormed.validate(value).error) {
+        return helpers.error("custom.address");
     }
     return value;
 };
 
+const recipient = Joi.string()
+    .custom(validateRecipient)
+    .messages({ "custom.address": ADDRESS_MESSAGE });
+
+// Only the mint form has a useCustomRecipient toggle; every other form must
+// apply `recipient` directly, or the "otherwise" branch accepts any string.
 const _customRecipient = Joi.when("useCustomRecipient", {
     is: true,
-    then: Joi.string().custom(validateCustomRecipient),
+    then: recipient,
     otherwise: Joi.string().empty(""),
-}).messages({
-    "custom.address": '"Address" must be a valid Ethereum name or address',
 });
 
 const maxDigits = (max) => (value, helpers) => {
@@ -86,16 +86,22 @@ const mint = Joi.object().keys({
         .label("Royalty percentage"),
     useCustomRecipient: Joi.boolean().required(),
     customRecipient: _customRecipient.label("Address"),
-    dataType: Joi.valid(
-        "text/plain",
-        "text/markdown",
-        "text/html",
-        "image"
-    ).required(),
+    // Kept in step with the Create form's own <select>. It listed text/html
+    // too, and that value was the only route to an Ace editor no user could
+    // select — a whole keyboard-hostile editor kept alive by schema drift.
+    dataType: Joi.valid("text/plain", "text/markdown", "image").required(),
 });
 
 const transfer = Joi.object().keys({
-    to: _customRecipient.label("Address"),
+    to: recipient
+        .required()
+        // A blank recipient is the same user mistake as a malformed one, so it
+        // gets the same actionable sentence rather than joi's default.
+        .messages({
+            "string.empty": ADDRESS_MESSAGE,
+            "any.required": ADDRESS_MESSAGE,
+        })
+        .label("Address"),
     amount: Joi.number().integer().min(1).empty("").required().label("Amount"),
 });
 
@@ -135,6 +141,32 @@ const editRoyalty = Joi.object().keys({
         .label("Royalty percentage"),
 });
 
+/**
+ * A token's metadata document, as validated before anything renders it.
+ *
+ * `mint` stores whatever string it is handed, so every field here is written by
+ * a stranger and read in a viewer's browser. A nested object or an array where
+ * a string belongs throws inside React's render, and this app has no error
+ * boundary — one hostile token would blank whichever page is showing it.
+ *
+ * Unknown keys are stripped rather than rejected: `external_link`,
+ * `animation_url` and friends are not rendered by this app, and a field that
+ * never enters state cannot later be picked up by a component that has
+ * forgotten where it came from. `null` is accepted because real metadata writes
+ * an absent field that way; that is a token saying it has no description, not a
+ * malformed token, and the page reports the two differently.
+ */
+const tokenMetadata = Joi.object()
+    .keys({
+        name: Joi.string().max(512).allow(null, ""),
+        description: Joi.string().max(8192).allow(null, ""),
+        image: Joi.string().max(2048).allow(null, ""),
+        // A text NFT carries its whole body inline as a data: URI, so this is
+        // bounded by the media cap rather than by a plausible URL length.
+        text_uri: Joi.string().max(config.maxMediaFetchBytes).allow(null, ""),
+    })
+    .options({ stripUnknown: true });
+
 const validMarkdown = { ...rehypeDefaultSchema };
 
 const validHTML = {
@@ -151,6 +183,7 @@ export default {
     edit,
     editRoyalty,
     list,
+    tokenMetadata,
     validHTML,
     validMarkdown,
     mint,

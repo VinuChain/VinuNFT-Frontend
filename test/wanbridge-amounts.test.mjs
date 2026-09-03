@@ -10,6 +10,9 @@ const {
     priorityRank,
     toHexChainId,
     isKnownBridgeTarget,
+    feeLabel,
+    validateBridgeTx,
+    buildVinuChainRoutes,
     WANBRIDGE_CONTRACTS,
 } = _mod.default || _mod;
 
@@ -143,4 +146,146 @@ test("isKnownBridgeTarget: empty list for chain returns null", () => {
         null
     );
     delete WANBRIDGE_CONTRACTS["EMPTY"];
+});
+
+// feeLabel
+//
+// The live VC->BNB USDT quota (pair 536), verbatim. minFeeLimit/maxFeeLimit are
+// in the from-token's raw units — cross-checked against the reverse leg, where
+// the same 0.2/100 USDT appear as 2e17/1e20 at 18 decimals.
+const LIVE_USDT_OPERATION_FEE = {
+    value: "0.004",
+    isPercent: true,
+    minFeeLimit: "200000",
+    maxFeeLimit: "100000000",
+};
+
+test("feeLabel: the fee floor is what a minimum-size transfer actually pays", () => {
+    // 0.4 USDT is the route's own minQuota. 0.4% of it is 0.0016; the floor is
+    // 0.2, which is 125x more, and the percentage alone never said so.
+    assert.equal(
+        feeLabel(LIVE_USDT_OPERATION_FEE, 6, "USDT", decimalAmountToRaw("0.4", 6)),
+        "0.2 USDT"
+    );
+});
+
+test("feeLabel: the fee ceiling caps a large transfer", () => {
+    assert.equal(
+        feeLabel(
+            LIVE_USDT_OPERATION_FEE,
+            6,
+            "USDT",
+            decimalAmountToRaw("100000", 6)
+        ),
+        "100 USDT"
+    );
+});
+
+test("feeLabel: between floor and ceiling the percentage is charged", () => {
+    assert.equal(
+        feeLabel(LIVE_USDT_OPERATION_FEE, 6, "USDT", decimalAmountToRaw("100", 6)),
+        "0.4 USDT"
+    );
+});
+
+test("feeLabel: with no amount entered the band is shown, not a bare percentage", () => {
+    const label = feeLabel(LIVE_USDT_OPERATION_FEE, 6, "USDT", null);
+    assert.ok(label.includes("0.2"), label);
+    assert.ok(label.includes("100"), label);
+    // "0.4% USDT" is what the page used to render: a percentage with a token
+    // symbol glued on, which is not a quantity of anything.
+    assert.equal(/%\s*USDT/.test(label), false, label);
+});
+
+test("feeLabel: a flat fee still carries its symbol", () => {
+    assert.equal(
+        feeLabel({ value: "9700000000000000000", isPercent: false }, 18, "VC"),
+        "9.7 VC"
+    );
+});
+
+// validateBridgeTx
+const ROUTE = {
+    fromChain: { chainType: "VC", chainName: "VinuChain" },
+    fromToken: {
+        address: "0xC0264277fcCa5FCfabd41a8bC01c1FcAF8383E41",
+        symbol: "USDT",
+    },
+};
+const TARGET = "0x00000000000000000000000000000000000000bb";
+
+test("validateBridgeTx: an approval for a token that is not the route's is rejected", () => {
+    const rejection = validateBridgeTx(ROUTE, {
+        tx: { to: TARGET },
+        approveCheck: {
+            token: "0x00000000000000000000000000000000000000aa",
+            to: TARGET,
+            amount: "1",
+        },
+    });
+    assert.notEqual(rejection, null);
+    assert.ok(/0x00000000000000000000000000000000000000aa/i.test(rejection), rejection);
+});
+
+test("validateBridgeTx: the route's own token, checksummed differently, is accepted", () => {
+    assert.equal(
+        validateBridgeTx(ROUTE, {
+            tx: { to: TARGET },
+            approveCheck: {
+                token: ROUTE.fromToken.address.toLowerCase(),
+                to: TARGET,
+                amount: "1",
+            },
+        }),
+        null
+    );
+});
+
+test("validateBridgeTx: a spender off a populated allowlist is rejected", () => {
+    WANBRIDGE_CONTRACTS.VC = [TARGET];
+    try {
+        const rejection = validateBridgeTx(ROUTE, {
+            tx: { to: TARGET },
+            approveCheck: {
+                token: ROUTE.fromToken.address,
+                to: "0x00000000000000000000000000000000deadbeef",
+                amount: "1",
+            },
+        });
+        assert.notEqual(rejection, null);
+    } finally {
+        delete WANBRIDGE_CONTRACTS.VC;
+    }
+});
+
+// buildVinuChainRoutes: the catalog's decimals scale what the wallet signs
+const USDT_ON_VC = "0xC0264277fcCa5FCfabd41a8bC01c1FcAF8383E41";
+
+function usdtPair(decimals) {
+    return {
+        tokenPairID: "536",
+        symbol: "USDT",
+        fromChain: { chainType: "VC", chainName: "VinuChain" },
+        fromToken: { symbol: "USDT", decimals, address: USDT_ON_VC },
+        toChain: { chainType: "BNB", chainName: "BNB Chain" },
+        toToken: {
+            symbol: "USDT",
+            decimals: 18,
+            address: "0x0000000000000000000000000000000000000055",
+        },
+    };
+}
+
+test("buildVinuChainRoutes: a configured VinuChain token keeps its own decimals", () => {
+    assert.equal(buildVinuChainRoutes([usdtPair(6)]).length, 2);
+});
+
+test("buildVinuChainRoutes: a pair contradicting config.js decimals is dropped", () => {
+    // USDT on VinuChain is 6 decimals. An upstream saying 18 would scale every
+    // amount by 1e12 before the wallet ever sees it.
+    assert.deepEqual(buildVinuChainRoutes([usdtPair(18)]), []);
+});
+
+test("buildVinuChainRoutes: a pair with nonsensical decimals is dropped", () => {
+    assert.deepEqual(buildVinuChainRoutes([usdtPair("not-a-number")]), []);
 });

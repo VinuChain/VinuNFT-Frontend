@@ -44,6 +44,13 @@ export default function NFTHistory({ history, hideId }) {
 
     // console.log(history);
 
+    // parseHistory returns undefined for "not scanned yet" and [] for
+    // "scanned, nothing there". Rendering both as a skeleton told a reader
+    // with no activity that the page was still loading, forever.
+    if (Array.isArray(history) && history.length === 0) {
+        return <p className="nft-history-empty">No activity yet.</p>;
+    }
+
     return history ? (
         <div>
             {[...history].reverse().map((event, index) => {
@@ -151,6 +158,19 @@ export default function NFTHistory({ history, hideId }) {
                                     PRICE: &nbsp;{event.price}{" "}
                                     {config.tokens[event.paymentToken]
                                         ?.symbol || "N/A"}
+                                </tt>
+                            ) : event.type === "list" ||
+                              event.type === "purchase" ? (
+                                // A priced event whose ERC-20 this app does not
+                                // recognise. Its decimals are unknown, so any
+                                // figure shown would be a guess; say so rather
+                                // than omit the row and imply there was no price.
+                                <tt
+                                    className="is-size-7"
+                                    title="This listing uses a token VinuNFT does not recognise, so its amount cannot be displayed accurately."
+                                >
+                                    PRICE: &nbsp;unavailable (unrecognised
+                                    token)
                                 </tt>
                             ) : (
                                 <></>

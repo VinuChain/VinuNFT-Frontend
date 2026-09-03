@@ -77,7 +77,16 @@ test("event scans and author lookups are bounded/direct", () => {
     );
     assert.equal(history.includes("return await contract.authorOf(id);"), true);
     assert.equal(nftPage.includes('["totalSupply(uint256)"]'), false);
-    assert.equal(nftPage.includes('"latest"'), true);
+
+    // Every historical scan must go through queryFilterChunked. A raw
+    // queryFilter spans millions of blocks and the node rejects it outright
+    // ("too wide blocks range"), which silently emptied all history.
+    assert.equal(/\.queryFilter\(/.test(history), false);
+    assert.equal(history.includes("queryFilterChunked("), true);
+
+    // Total supply is a direct contract read, not a chain-wide mint scan.
+    assert.equal(/\.queryFilter\(/.test(nftPage), false);
+    assert.equal(nftPage.includes("nftContract.totalSupply(id)"), true);
 });
 
 test("buy modal handles loading balances and insufficient funds", () => {
@@ -101,8 +110,36 @@ test("VinuChain config is normalized", () => {
     const nativeCurrencyCount = config.match(/nativeCurrency:/g)?.length || 0;
 
     assert.equal(config.includes("iamge"), false);
-    assert.equal(config.includes("image: 467700"), true);
     assert.equal(nativeCurrencyCount, 1);
+
+    // Contract creation blocks, each verified on VinuChain by locating the
+    // creation transaction. They were previously all pinned to 467700, which
+    // predates every deployment by ~1.76M blocks. scripts/verify-deployed-truth.mjs
+    // re-checks these against the chain.
+    assert.equal(config.includes("text: 2234593"), true);
+    assert.equal(config.includes("marketplace: 2232125"), true);
+    assert.equal(config.includes("image: 2232056"), true);
+    assert.equal(config.includes("467700"), false);
+});
+
+test("NFT ABIs describe the deployed contracts, not newer source", () => {
+    // ethers resolves `.totalSupply(id)` by name; a zero-arg overload in the
+    // ABI would make that call ambiguous and throw. The deployed contracts do
+    // not implement one, so it must not appear in the ABI either.
+    for (const name of ["TextNFT", "ImageNFT"]) {
+        const abiFile = JSON.parse(read(`src/abis/${name}.json`));
+        const abi = abiFile.abi ?? abiFile;
+        const supplyFns = abi.filter(
+            (x) => x.type === "function" && x.name === "totalSupply"
+        );
+        assert.equal(
+            supplyFns.length,
+            1,
+            `${name} must declare one totalSupply`
+        );
+        assert.equal(supplyFns[0].inputs.length, 1);
+        assert.equal(supplyFns[0].inputs[0].type, "uint256");
+    }
 });
 
 test("footer links to the VinuChain ecosystem socials", () => {
@@ -119,10 +156,16 @@ test("footer links to the VinuChain ecosystem socials", () => {
         "https://discord.gg/vinu",
         "https://t.me/vitainu",
         "https://medium.com/vinuchain",
-        "https://mainnet.vinuexplorer.org",
     ].forEach((url) => {
         assert.equal(wrapper.includes(url), true);
     });
+
+    // The explorer link comes from the registry rather than a literal: the
+    // footer previously pointed at a different host from every other explorer
+    // link in the app. test/ecosystem.test.mjs asserts no source file outside
+    // src/config.js hard-codes an ecosystem identifier.
+    assert.equal(wrapper.includes("config.blockExplorer.url"), true);
+    assert.equal(wrapper.includes("vinuexplorer.org"), false);
 });
 
 test("header exposes branded navigation and accessible mobile menu state", () => {
@@ -149,22 +192,73 @@ test("HTML sanitization does not allow style or data URL expansion", () => {
     assert.equal(mint.includes('value="text/markdown"'), true);
     assert.equal(mint.includes('value="text/html"'), false);
     assert.equal(mint.includes("Markdown is sanitized"), true);
-    assert.equal(
-        multiEditor.includes("rehypeSanitize(schemas.validMarkdown)"),
-        true
-    );
+    // The editor preview and the published render now share one plugin list
+    // (src/common/sanitize.js) rather than each naming the schema separately.
+    // test/sanitize.test.mjs proves they produce byte-identical output and that
+    // both neutralise every adversarial fixture.
+    assert.equal(multiEditor.includes("markdownRehypePlugins()"), true);
+    assert.equal(multiEditor.includes("rehypeSanitize"), false);
+
+    const sanitize = read("src/common/sanitize.js");
+    assert.equal(sanitize.includes("schemas.validMarkdown"), true);
+    assert.equal(sanitize.includes("schemas.validHTML"), true);
+
+    // Both viewers must go through that module, not build their own pipeline.
+    for (const viewer of ["MarkdownViewer", "HTMLViewer"]) {
+        const source = read(`src/components/${viewer}.js`);
+        assert.equal(
+            source.includes("unified()"),
+            false,
+            `${viewer} must not build its own pipeline`
+        );
+        assert.equal(source.includes("common/sanitize"), true);
+        // Sanitised output is still rendered into a sandboxed iframe. The
+        // value matters: a bare `sandbox` is `sandbox={true}` in JSX, which
+        // React drops for a non-boolean attribute, so the frame shipped with
+        // no sandbox at all. test/nftDetail.test.mjs asserts the attribute
+        // that actually reaches the DOM; this only stops the source from
+        // regressing to a form that silently emits nothing.
+        assert.equal(source.includes('sandbox="allow-same-origin"'), true);
+    }
 });
 
-test("marketplace discovery stays bounded and linked", () => {
+test("no unread third-party account id ships in the client config", () => {
+    // `infura.project_id` was a hardcoded account identifier with no reader
+    // anywhere in the repo, inlined verbatim into the browser bundle.
+    // tsx transpiles src/config.js to CommonJS, so the default export is
+    // where the object lands (same idiom as the .mjs suites).
+    const configModule = require("../src/config");
+    const { api_keys: apiKeys } = configModule.default || configModule;
+    assert.equal(
+        "infura" in apiKeys,
+        false,
+        "no unread third-party account id may ship in the client config"
+    );
+    for (const [name, value] of Object.entries(apiKeys)) {
+        assert.equal(
+            typeof value === "string" && value.length > 0,
+            false,
+            `${name} must come from the environment, not a literal in config.js`
+        );
+    }
+
+    // GATSBY_ values are compiled into the bundle. Only PINATA_API_JWT carried
+    // a warning, so the Alchemy keys read like secrets an operator must guard.
+    assert.match(read(".env.example"), /GATSBY_.*public browser bundle/is);
+});
+
+test("marketplace discovery reads the index and stays linked", () => {
     const design = read("docs/marketplace-discovery.md");
     const helper = read("src/common/marketplaceDiscovery.js");
     const page = read("src/pages/marketplace.js");
     const header = read("src/components/Header.js");
 
-    assert.equal(design.includes("client-only MVP"), true);
-    assert.equal(design.includes("Maximum RPC call count"), true);
-    assert.equal(helper.includes("MARKETPLACE_DISCOVERY_WINDOW"), true);
-    assert.equal(helper.includes("MARKETPLACE_LISTINGS_PER_TOKEN_LIMIT"), true);
+    // The window was replaced, not merely widened: the route reads the index,
+    // and the doc has to describe that rather than the bounded MVP it dropped.
+    assert.equal(design.includes("reads the **index**"), true);
+    assert.equal(design.includes("## RPC Cost"), true);
+    assert.equal(page.includes("indexLoader"), true);
+    assert.equal(page.includes("MARKETPLACE_DISCOVERY_WINDOW"), false);
     assert.equal(helper.includes("queryFilter"), false);
     assert.equal(page.includes("Marketplace - VinuNFT"), true);
     assert.equal(
@@ -174,6 +268,24 @@ test("marketplace discovery stays bounded and linked", () => {
     assert.equal(page.includes("Fulfillable"), true);
     assert.equal(page.includes("No listings"), true);
     assert.equal(header.includes("/marketplace"), true);
+
+    // One filter implementation. The page reached the module's predicates
+    // rather than keeping a second copy that disagreed on an unknown balance.
+    assert.equal(page.includes("rowMatchesFilters"), true);
+    assert.equal(page.includes("pageListings"), true);
+
+    // Analytics live outside the discovery helper, which this file also pins
+    // free of queryFilter, and every definition is written down beside them.
+    const analytics = read("src/common/marketplaceAnalytics.js");
+    assert.equal(helper.includes("marketplaceMetrics"), false);
+    assert.equal(design.includes("## Metric Definitions"), true);
+    assert.equal(design.includes("### What is deliberately NOT shown"), true);
+
+    // No cross-currency aggregate anywhere: every money figure is keyed by
+    // payment token, and a total across tokens has no definition without a
+    // price oracle this product does not have.
+    assert.equal(analytics.includes("byPaymentToken"), true);
+    assert.equal(analytics.includes("totalVolume"), false);
 });
 
 test("address profiles validate addresses and preserve explorer access", () => {
@@ -183,8 +295,8 @@ test("address profiles validate addresses and preserve explorer access", () => {
     const address = read("src/components/Address.js");
 
     assert.equal(design.includes("/address?address=0x"), true);
-    assert.equal(design.includes("Maximum RPC call count"), true);
-    assert.equal(helper.includes("ADDRESS_PROFILE_WINDOW"), true);
+    assert.equal(design.includes("## Index Strategy"), true);
+    assert.equal(helper.includes("loadIndex"), true);
     assert.equal(helper.includes("queryFilter"), false);
     assert.equal(page.includes("Address - VinuNFT"), true);
     assert.equal(page.includes("Invalid address"), true);
@@ -210,9 +322,13 @@ test("WanBridge port uses VinuNFT proxies and validated transaction creation", (
     assert.equal(model.includes('WANBRIDGE_PARTNER = "VinuNFT"'), true);
     assert.equal(model.includes('VINUCHAIN_CHAIN_TYPE = "VC"'), true);
     assert.equal(model.includes("buildVinuChainRoutes"), true);
-    assert.equal(bridge.includes("/api/wanbridge-token-pairs"), true);
-    assert.equal(bridge.includes("/api/wanbridge-quota-and-fee"), true);
-    assert.equal(bridge.includes("/api/wanbridge-create-tx"), true);
+    // Each bridge call must go through this site's own proxy, never straight to
+    // WanChain. The paths are built by apiRoute so they carry the canonical
+    // trailing slash and skip the deployment's 308.
+    assert.equal(bridge.includes('apiRoute("wanbridge-token-pairs")'), true);
+    assert.equal(bridge.includes('apiRoute("wanbridge-quota-and-fee"'), true);
+    assert.equal(bridge.includes('apiRoute("wanbridge-create-tx")'), true);
+    assert.equal(/fetch\(\s*["'`]https?:\/\//.test(bridge), false);
     assert.equal(bridge.includes("wallet_switchEthereumChain"), true);
     assert.equal(bridge.includes("wallet_addEthereumChain"), true);
     assert.equal(bridge.includes("approveCheck"), true);
@@ -244,10 +360,27 @@ test("CSP policy in add_csp.js includes required restrictive directives", () => 
     assert.equal(cspScript.includes("object-src 'none'"), true);
     assert.equal(cspScript.includes("base-uri 'self'"), true);
     assert.equal(cspScript.includes("default-src 'self'"), true);
-    assert.equal(cspScript.includes("frame-ancestors 'self'"), true);
-    // connect-src must cover the VinuChain RPC and IPFS gateway at minimum
+    // frame-ancestors moved to the vercel.json response header: browsers
+    // IGNORE it in a <meta> element, so the copy this script writes protected
+    // nothing. It is now DERIVED from that header, and add_csp.js refuses to
+    // build without one — test/csp.test.mjs pins the header itself and that the
+    // built page's directive matches it byte for byte.
+    assert.equal(cspScript.includes("frameAncestorsDirective()"), true);
+    assert.match(read("vercel.json"), /"frame-ancestors 'self'"/);
+    // img-src must permit blob:, which is how token images reach <img> after
+    // being fetched with a byte cap via URL.createObjectURL.
+    assert.equal(cspScript.includes("blob:"), true);
+
+    // connect-src must cover the VinuChain RPC, which is still listed here.
     assert.equal(cspScript.includes("https://rpc.vinuchain.org"), true);
-    assert.equal(cspScript.includes("https://gateway.pinata.cloud"), true);
+
+    // IPFS gateway origins are no longer duplicated here: they are read from
+    // src/config.js, because a hard-coded copy silently blocked whichever
+    // gateways config added later. test/csp.test.mjs asserts the *built*
+    // policy actually allows every configured gateway, which is stronger than
+    // matching a literal in this file.
+    assert.equal(cspScript.includes("ipfsGatewayOrigins()"), true);
+    assert.equal(cspScript.includes('"https://gateway.pinata.cloud"'), false);
 });
 
 test("markdown NFT rendering is sandboxed via MarkdownViewer, not bare MDEditor", () => {

@@ -1,5 +1,16 @@
-import { WANBRIDGE_API_BASE } from "../common/wanbridge";
+import { fetchWanBridgeJson } from "../common/wanbridge";
 import { applyApiRateLimit, sendJson } from "../common/apiRateLimit";
+import { isChainType } from "../common/wanbridgeValidation";
+
+// Every value below is interpolated into an upstream query string. Bounded
+// shapes, not just non-empty strings: an unvalidated 5000-character symbol is
+// an unbounded upstream call made on an anonymous request's say-so.
+const TOKEN_PAIR_ID_RE = /^\d{1,10}$/;
+const SYMBOL_RE = /^[A-Za-z0-9._-]{1,32}$/;
+
+// Upstream `error` text is third-party copy that the page renders; keep the
+// reason, drop the room to paste anything substantial into the UI.
+const UPSTREAM_ERROR_MAX = 200;
 
 function requiredQuery(value) {
     return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -28,9 +39,14 @@ export default async function handler(req, res) {
     const tokenPairID = requiredQuery(req.query.tokenPairID);
     const symbol = requiredQuery(req.query.symbol);
 
-    if (!fromChainType || !toChainType || !tokenPairID || !symbol) {
+    if (
+        !isChainType(fromChainType) ||
+        !isChainType(toChainType) ||
+        !TOKEN_PAIR_ID_RE.test(tokenPairID || "") ||
+        !SYMBOL_RE.test(symbol || "")
+    ) {
         return sendJson(res, 400, {
-            message: "Missing WanBridge quota parameters",
+            message: "Invalid WanBridge quota parameters",
         });
     }
 
@@ -42,22 +58,46 @@ export default async function handler(req, res) {
     });
 
     try {
-        const upstream = await fetch(
-            `${WANBRIDGE_API_BASE}/quotaAndFee?${params.toString()}`
+        const { ok, payload } = await fetchWanBridgeJson(
+            `quotaAndFee?${params.toString()}`
         );
-        const payload = await upstream.json();
 
-        if (upstream.ok && payload.success) {
-            res.setHeader(
-                "Cache-Control",
-                "public, s-maxage=30, stale-while-revalidate=120"
-            );
+        if (!ok) {
+            // Never forward an upstream error body: it is attacker-influencable
+            // text reflected straight back at the browser.
+            return sendJson(res, 502, {
+                message: "WanBridge quota upstream error",
+            });
         }
 
-        return sendJson(res, upstream.ok ? 200 : upstream.status, payload);
+        if (!payload.success) {
+            return sendJson(res, 200, {
+                success: false,
+                error: String(
+                    payload.error || "WanBridge quota unavailable"
+                ).slice(0, UPSTREAM_ERROR_MAX),
+            });
+        }
+
+        res.setHeader(
+            "Cache-Control",
+            "public, s-maxage=30, stale-while-revalidate=120"
+        );
+        return sendJson(res, 200, payload);
     } catch (error) {
+        // Fixed text to the browser: the caught error can carry the upstream
+        // body, a DNS name or an AbortError, none of which it needs. The cause
+        // goes to the server log instead - swallowing it entirely is what made
+        // the production outage on this proxy impossible to diagnose remotely.
+        console.warn(
+            JSON.stringify({
+                event: "vinunft.wanbridge_proxy_failed",
+                route: "quota-and-fee",
+                cause: error?.message ?? String(error),
+            })
+        );
         return sendJson(res, 502, {
-            message: error.message || "Could not load WanBridge quota",
+            message: "Could not load WanBridge quota",
         });
     }
 }
