@@ -42,32 +42,61 @@ const auditCommand =
               shell: process.platform === "win32",
           };
 
-const result = spawnSync(
-    auditCommand.command,
-    [...auditCommand.args, "--json", "--groups", "dependencies"],
-    {
+// The audit API times out often enough that a single attempt turns a security
+// gate into a coin flip. Retried with backoff; a persistent failure is reported
+// as a DIFFERENT condition from being over the baseline, because "we could not
+// check" and "we checked and it is worse" call for different responses - and it
+// still exits non-zero, because a gate that passes when it cannot run is worse
+// than no gate.
+const ATTEMPTS = 3;
+let result;
+let summary = null;
+for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
+    result = spawnSync(auditCommand.command, auditCommand.args, {
         encoding: "utf8",
         maxBuffer: 64 * 1024 * 1024,
         shell: auditCommand.shell,
+    });
+    summary = findAuditSummary(result);
+    if (summary) break;
+    if (attempt < ATTEMPTS) {
+        const waitMs = 3000 * attempt;
+        console.error(
+            `Audit attempt ${attempt}/${ATTEMPTS} produced no summary; retrying in ${waitMs}ms.`
+        );
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, waitMs);
     }
-);
+}
 
-const output = `${result.stdout || ""}\n${result.stderr || ""}`;
-const metadataLine = output
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => {
-        try {
-            return JSON.parse(line);
-        } catch (_) {
-            return null;
-        }
-    })
-    .find((entry) => entry && entry.type === "auditSummary");
+function findAuditSummary(run) {
+    const text = `${run.stdout || ""}\n${run.stderr || ""}`;
+    return text
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .map((line) => {
+            try {
+                return JSON.parse(line);
+            } catch (_) {
+                return null;
+            }
+        })
+        .find((entry) => entry && entry.type === "auditSummary");
+}
+
+const metadataLine = summary;
 
 if (!metadataLine) {
-    console.error("Could not parse yarn audit summary.");
-    if (result.error) {
+    const text = `${result?.stdout || ""}\n${result?.stderr || ""}`;
+    const unreachable =
+        /ESOCKETTIMEDOUT|ENOTFOUND|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up/i.test(
+            text
+        );
+    console.error(
+        unreachable
+            ? `Dependency audit UNAVAILABLE after ${ATTEMPTS} attempts: the registry audit API did not answer. This is not a finding about this repository's dependencies - it means the check did not run.`
+            : "Could not parse yarn audit summary."
+    );
+    if (result?.error) {
         console.error(result.error.message);
     }
     process.exit(1);
