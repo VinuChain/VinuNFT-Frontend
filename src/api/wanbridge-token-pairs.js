@@ -148,6 +148,7 @@ export default async function handler(req, res) {
             reason: error?.reason ?? "unknown",
             upstreamStatus: error?.status ?? null,
             code: error?.code ?? null,
+            detail: error?.detail ?? null,
         });
     }
 }

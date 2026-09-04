@@ -56,12 +56,16 @@ export const WANBRIDGE_FAILURE = {
 };
 
 export class WanBridgeUpstreamError extends Error {
-    constructor(message, { reason, status = null, code = null } = {}) {
+    constructor(
+        message,
+        { reason, status = null, code = null, detail = null } = {}
+    ) {
         super(message);
         this.name = "WanBridgeUpstreamError";
         this.reason = reason;
         this.status = status;
         this.code = code;
+        this.detail = detail;
     }
 }
 
@@ -128,6 +132,15 @@ async function fetchOneWanBridgeUrl(url, init = {}) {
                     !globalThis.AbortSignal?.timeout
                         ? "NO_ABORTSIGNAL_TIMEOUT"
                         : error?.name ?? null),
+                // A ReferenceError or TypeError here is OUR bug, not the
+                // upstream's: something in this module is undefined in the
+                // deployed runtime. The identifier it names is the whole
+                // diagnosis and carries nothing of the upstream.
+                detail:
+                    error?.name === "ReferenceError" ||
+                    error?.name === "TypeError"
+                        ? String(error?.message ?? "").slice(0, 160)
+                        : null,
             }
         );
     }
