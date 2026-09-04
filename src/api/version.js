@@ -28,5 +28,13 @@ export default function handler(req, res) {
         commit,
         ref: process.env.VERCEL_GIT_COMMIT_REF || null,
         environment: process.env.VERCEL_ENV || null,
+        // The runtime this function actually got, which is not necessarily the
+        // one package.json asks for: a Node without global fetch is what broke
+        // every proxy here, and nothing in the deployment reported it.
+        node: process.version,
+        // Kept, unlike the raw runtime flags this briefly reported: `false`
+        // here is the whole signal an operator needs, and it does not disclose
+        // the project's configuration. See "Server-side fetch" in README.md.
+        hasFetch: typeof globalThis.fetch === "function",
     });
 }

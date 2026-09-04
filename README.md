@@ -63,6 +63,24 @@ Server-only variables:
 
 Do not expose a Pinata JWT with a `GATSBY_` prefix. Gatsby embeds `GATSBY_*` values into the browser bundle.
 
+## Server-side fetch
+
+This project's Vercel environment sets `NODE_OPTIONS=--no-experimental-fetch`,
+which removes global `fetch` even on Node 22, where it is stable. Every
+server-side request — the WanBridge proxies and the Pinata upload — therefore
+failed with `fetch is not defined` before a connection was attempted, which is
+indistinguishable from the upstream being unreachable unless something reports
+the cause.
+
+**Remove that variable from the Vercel project environment.** It is the real
+fix and nothing depends on it being there.
+
+Until then, and afterwards, server code calls `serverFetch` from
+`src/common/serverFetch.js`, which uses global `fetch` when it exists and falls
+back to `undici` — the same implementation Node's global fetch is built from —
+when it does not. `GET /api/version` reports `hasFetch`, so a runtime without it
+is visible in one request rather than five deploys.
+
 ## IPFS uploads
 
 Image minting asks the connected wallet to sign an upload intent bound to the

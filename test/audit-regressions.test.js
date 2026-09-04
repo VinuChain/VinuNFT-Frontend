@@ -431,3 +431,27 @@ test("NFT preview cards and image detail views stay keyboard and screen-reader a
     assert.equal(nftPage.includes("imageAltText"), true);
     assert.equal(nftPage.includes("alt={imageAltText}"), true);
 });
+
+test("engines.node names one Vercel-resolvable version, not a range", () => {
+    // A range here is what broke every serverless function that fetches.
+    // Vercel reads engines.node to pick the runtime and only understands an
+    // exact major like "22.x"; given ">=18 <23" it fell back to a default old
+    // enough to have no global fetch, so the WanBridge proxies failed with
+    // "fetch is not defined" before any connection was attempted — and the
+    // Pinata upload would have done the same as soon as it had a credential.
+    const pkg = JSON.parse(read("package.json"));
+    assert.match(
+        pkg.engines.node,
+        /^\d+\.x$/,
+        `engines.node must be like "22.x", got ${pkg.engines.node}`
+    );
+
+    // The runtime CI proves the build on must be the runtime Vercel ships.
+    const ci = read(".github/workflows/ci.yml");
+    const major = pkg.engines.node.split(".")[0];
+    assert.match(
+        ci,
+        new RegExp(`node-version:\\s*${major}\\b`),
+        `CI must use Node ${major} to match engines.node`
+    );
+});

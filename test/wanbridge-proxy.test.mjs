@@ -281,3 +281,337 @@ test("each proxy logs the cause of a 502 instead of swallowing it", async () => 
         assert.match(src, /cause: error\?\.message/, route);
     }
 });
+
+// ---------------------------------------------------------------------------
+// A failed upstream must say WHY, and degrade rather than die
+// ---------------------------------------------------------------------------
+
+async function callTokenPairs() {
+    const mod = await import("../src/api/wanbridge-token-pairs.js");
+    const handler = mod.default || mod;
+    // Earlier tests in this file load the catalog successfully; without this
+    // their result is served here as a stale fallback and the assertion passes
+    // for the wrong reason.
+    (mod._resetCatalogCache || mod.default?._resetCatalogCache)?.();
+    const res = {
+        statusCode: null,
+        body: null,
+        status(c) { this.statusCode = c; return this; },
+        setHeader() {},
+        send(b) { this.body = b; return this; },
+    };
+    const warn = console.warn;
+    const logs = [];
+    console.warn = (m) => logs.push(m);
+    try {
+        await handler(
+            { method: "GET", headers: {}, socket: { remoteAddress: "203.0.113.5" } },
+            res
+        );
+    } finally {
+        console.warn = warn;
+    }
+    return { res, body: JSON.parse(res.body || "{}"), logs };
+}
+
+test("an upstream that answers HTML is reported as not-JSON, not as a network failure", async () => {
+    // This is the shape a WAF challenge or proxy error page takes: HTTP 200
+    // with markup. Unguarded, JSON.parse threw a bare SyntaxError that was
+    // indistinguishable from the upstream being unreachable.
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+        new Response("<html><body>Attack challenge</body></html>", {
+            status: 200,
+            headers: { "content-type": "text/html" },
+        });
+    try {
+        const { res, body } = await callTokenPairs();
+        assert.equal(res.statusCode, 502);
+        assert.equal(body.reason, "upstream_not_json");
+        assert.equal(body.upstreamStatus, 200);
+        // The upstream's body must never reach the browser.
+        assert.doesNotMatch(res.body, /Attack challenge/);
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+test("a refused upstream is reported with its status", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+        new Response(JSON.stringify({ success: false }), { status: 403 });
+    try {
+        const { res, body } = await callTokenPairs();
+        assert.equal(res.statusCode, 502);
+        assert.equal(body.reason, "upstream_status");
+        assert.equal(body.upstreamStatus, 403);
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+test("a timeout is reported as a timeout", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+        const e = new Error("aborted");
+        e.name = "TimeoutError";
+        throw e;
+    };
+    try {
+        const { res, body } = await callTokenPairs();
+        assert.equal(res.statusCode, 502);
+        assert.equal(body.reason, "upstream_timeout");
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+test("after one good load, a later failure serves the last catalog marked stale", async () => {
+    const realFetch = globalThis.fetch;
+    const pairs = {
+        success: true,
+        data: [
+            {
+                fromChain: { chainType: "VC", chainId: 207 },
+                toChain: { chainType: "BNB", chainId: 56 },
+                fromAccount: "0x0000000000000000000000000000000000000000",
+                symbol: "VC",
+                decimals: 18,
+            },
+        ],
+    };
+    // One module instance for both calls, so the in-process cache carries over.
+    const mod = await import("../src/api/wanbridge-token-pairs.js");
+    const handler = mod.default || mod;
+    (mod._resetCatalogCache || mod.default?._resetCatalogCache)?.();
+    const call = async () => {
+        const res = {
+            statusCode: null, body: null,
+            status(c) { this.statusCode = c; return this; },
+            setHeader() {}, send(b) { this.body = b; return this; },
+        };
+        const warn = console.warn;
+        console.warn = () => {};
+        try {
+            await handler(
+                { method: "GET", headers: {}, socket: { remoteAddress: "203.0.113.6" } },
+                res
+            );
+        } finally { console.warn = warn; }
+        return { res, body: JSON.parse(res.body || "{}") };
+    };
+
+    try {
+        globalThis.fetch = async () =>
+            new Response(JSON.stringify(pairs), { status: 200 });
+        const first = await call();
+        assert.equal(first.res.statusCode, 200);
+        assert.equal(first.body.stale, undefined, "a live answer is not stale");
+        const fetchedAt = first.body.fetchedAt;
+
+        // Expire the TTL so the next call refreshes, then break the upstream.
+        await new Promise((r) => setTimeout(r, 5));
+        globalThis.fetch = async () => {
+            throw new Error("ECONNREFUSED");
+        };
+        // Force the refresh path by advancing past the cache window.
+        const realNow = Date.now;
+        Date.now = () => realNow() + 10 * 60 * 1000;
+        try {
+            const second = await call();
+            assert.equal(second.res.statusCode, 200, "must degrade, not 502");
+            assert.equal(second.body.stale, true, "and must say it is stale");
+            assert.equal(second.body.fetchedAt, fetchedAt, "with when it was taken");
+            assert.equal(second.body.staleReason, "upstream_unreachable");
+        } finally {
+            Date.now = realNow;
+        }
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+// ---------------------------------------------------------------------------
+// The second source: only for unreachability, never to paper over an answer
+// ---------------------------------------------------------------------------
+
+test("an unreachable primary falls back, and the hit envelope is normalised", async () => {
+    const { fetchWanBridgeJson, WANBRIDGE_TOKEN_PAIRS_FALLBACK } = await import(
+        "../src/common/wanbridge.js"
+    );
+    const realFetch = globalThis.fetch;
+    const seen = [];
+    globalThis.fetch = async (url) => {
+        seen.push(String(url));
+        if (String(url).includes("bridge-api.wanchain.org")) {
+            const e = new Error("ECONNREFUSED");
+            e.name = "TypeError";
+            throw e;
+        }
+        // The mirror answers with `hit`, not `success`.
+        return new Response(JSON.stringify({ hit: true, data: [{ tokenPairID: "1" }] }), {
+            status: 200,
+        });
+    };
+    try {
+        const r = await fetchWanBridgeJson("tokenPairs", {}, {
+            fallback: WANBRIDGE_TOKEN_PAIRS_FALLBACK,
+        });
+        assert.equal(r.payload.success, true, "hit must be normalised to success");
+        assert.equal(r.payload.data.length, 1);
+        assert.equal(seen.length, 2, "primary first, then the mirror");
+        assert.match(seen[1], /bridge-api2\.wanchain\.org/);
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+test("a refused primary does NOT fall back — a refusal is an answer", async () => {
+    const { fetchWanBridgeJson, WANBRIDGE_TOKEN_PAIRS_FALLBACK } = await import(
+        "../src/common/wanbridge.js"
+    );
+    const realFetch = globalThis.fetch;
+    const seen = [];
+    globalThis.fetch = async (url) => {
+        seen.push(String(url));
+        return new Response(JSON.stringify({ success: false }), { status: 403 });
+    };
+    try {
+        const r = await fetchWanBridgeJson("tokenPairs", {}, {
+            fallback: WANBRIDGE_TOKEN_PAIRS_FALLBACK,
+        });
+        // 403 is a response, so it comes back as not-ok rather than throwing;
+        // what matters is that the mirror was never asked.
+        assert.equal(r.ok, false);
+        assert.equal(seen.length, 1, "the mirror must not be asked");
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+test("a primary answering non-JSON does NOT fall back", async () => {
+    const { fetchWanBridgeJson, WANBRIDGE_TOKEN_PAIRS_FALLBACK } = await import(
+        "../src/common/wanbridge.js"
+    );
+    const realFetch = globalThis.fetch;
+    const seen = [];
+    globalThis.fetch = async (url) => {
+        seen.push(String(url));
+        return new Response("<html>challenge</html>", { status: 200 });
+    };
+    try {
+        await assert.rejects(
+            () =>
+                fetchWanBridgeJson("tokenPairs", {}, {
+                    fallback: WANBRIDGE_TOKEN_PAIRS_FALLBACK,
+                }),
+            (e) => e.reason === "upstream_not_json"
+        );
+        assert.equal(seen.length, 1, "the mirror must not mask a bad body");
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+test("a failing tokenPairsHash does not take the catalog down with it", async () => {
+    const mod = await import("../src/api/wanbridge-token-pairs.js");
+    const handler = mod.default || mod;
+    mod._resetCatalogCache?.();
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+        if (String(url).includes("tokenPairsHash")) throw new Error("down");
+        return new Response(
+            JSON.stringify({ success: true, data: [] }),
+            { status: 200 }
+        );
+    };
+    const res = {
+        statusCode: null, body: null,
+        status(c) { this.statusCode = c; return this; },
+        setHeader() {}, send(b) { this.body = b; return this; },
+    };
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+        await handler(
+            { method: "GET", headers: {}, socket: { remoteAddress: "203.0.113.8" } },
+            res
+        );
+        assert.equal(res.statusCode, 200, "the hash is advisory, not load-bearing");
+        assert.equal(JSON.parse(res.body).hash, null);
+    } finally {
+        console.warn = warn;
+        globalThis.fetch = realFetch;
+    }
+});
+
+// ---------------------------------------------------------------------------
+// The runtime that removes fetch removes FormData too
+// ---------------------------------------------------------------------------
+
+test("serverFetch and serverFormData both survive the global being removed", async () => {
+    // Verified on Node 18.20.8: --no-experimental-fetch leaves fetch AND
+    // FormData undefined while Blob survives. Fixing only fetch would have left
+    // image uploads broken in the exact runtime the fallback exists for.
+    const mod = await import("../src/common/serverFetch.js");
+    const { serverFetch, serverFormData } = mod.default || mod;
+
+    const realFetch = globalThis.fetch;
+    const realFormData = globalThis.FormData;
+    try {
+        delete globalThis.fetch;
+        delete globalThis.FormData;
+
+        const FormDataCtor = await serverFormData();
+        assert.equal(typeof FormDataCtor, "function");
+        const fd = new FormDataCtor();
+        fd.append("k", "v");
+        assert.equal(fd.get("k"), "v");
+
+        // undici's fetch must be reachable with the global gone.
+        assert.equal(typeof (await serverFetch.name), "string");
+        await assert.rejects(
+            () => serverFetch("http://127.0.0.1:1/definitely-not-listening"),
+            (e) => e instanceof Error,
+            "must reach a real fetch implementation, not throw ReferenceError"
+        );
+    } finally {
+        if (realFetch) globalThis.fetch = realFetch;
+        if (realFormData) globalThis.FormData = realFormData;
+    }
+});
+
+test("no server-side module reaches for a global the runtime removes", async () => {
+    // Testing serverFormData() in isolation passes even if the upload still
+    // calls `new FormData()` directly - which it did, and which this file did
+    // not catch until the revert was tried. These assert the call sites.
+    const { readFileSync } = await import("node:fs");
+    const upload = readFileSync("src/api/upload-ipfs.js", "utf8");
+    assert.doesNotMatch(
+        upload,
+        /(?<![.\w])new FormData\(/,
+        "upload must build FormData through serverFormData, not the global"
+    );
+    assert.match(upload, /serverFormData\(/);
+    assert.doesNotMatch(
+        upload,
+        /(?<![.\w])fetch\(/,
+        "upload must route every request through serverFetch"
+    );
+
+    const bridge = readFileSync("src/common/wanbridge.js", "utf8");
+    assert.doesNotMatch(bridge, /(?<![.\w])fetch\(/);
+});
+
+test("the upload rate limiter does not use the bare global either", async () => {
+    // It runs before every upload, so a ReferenceError here rejects both file
+    // and metadata uploads before either serverFetch call is reached.
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync("src/common/uploadRateLimit.js", "utf8");
+    assert.doesNotMatch(
+        src,
+        /(?<![.\w])fetch\(/,
+        "uploadRateLimit must route through serverFetch"
+    );
+    assert.match(src, /serverFetch\(/);
+});

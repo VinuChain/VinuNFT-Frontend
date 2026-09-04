@@ -4,6 +4,11 @@
 any severity exceeds the baseline in `scripts/audit-triage.js`. This document is
 what the number means.
 
+When the registry's audit API does not answer, the gate falls back to
+[api.osv.dev](https://api.osv.dev) against a second, separate baseline. That is a
+different measurement, not a substitute reading of the same one — see "Two
+sources, two units" below.
+
 ## Position
 
 | Severity | Baseline (2026-09-01) | Previous (2026-08-20) |
@@ -195,6 +200,65 @@ measures it.
   `style` attributes or `data:` URLs.
 - `img-src` names the configured IPFS gateway origins instead of every `https:`
   host, and `form-action 'none'` is set.
+
+## Two sources, two units
+
+The audit API is flaky: on 2026-09-04 roughly one attempt in three returned
+`ESOCKETTIMEDOUT` after 30s from this machine and from GitHub's runners, and the
+rest answered in 7-20s. Three retries make an all-three-fail run uncommon but not
+rare, and there is nothing this repository can do about the ones that fail. So
+the gate has a second source, used **only** when every attempt failed with a
+transport error. A yarn that cannot start, or output that will not parse, still
+fails as itself: those are problems with the checkout, and answering them from
+OSV would hide them.
+
+`api.osv.dev` was chosen over the GitHub advisory API for the severity lookup
+even though `gh api /advisories?ghsa_id=...` also works here. OSV needs no token,
+so CI needs no secret and no rate-limit budget; it is already the source of the
+advisory ids, so the fallback depends on one origin failing instead of two; and
+for a GHSA record OSV's `database_specific.severity` **is** GitHub's severity,
+mirrored. The extra hop buys nothing.
+
+The two sources do not count the same thing, and their baselines must never be
+compared or merged.
+
+| | Primary — `yarn audit` | Fallback — OSV.dev |
+|---|---|---|
+| Unit counted | one per advisory **path** | one per (installed **name@version**, advisory) |
+| Population | the resolved production graph (`--groups dependencies`) | every package directory on disk, dev tooling included |
+| Population size (2026-09-04) | 1653 | 1581 |
+| Distinct advisories | not reported | 38 |
+| Where the set comes from | `yarn.lock` resolution | walking `node_modules`, including `@scope/*` and nested copies |
+| Baseline (2026-09-04) | low 13, moderate 32, high 28, critical 2 (71) | low 5, moderate 22, high 18, critical 1 (46) |
+| Wall clock | 7-20s, or a 30s timeout | ~11s (4 batched queries + 38 cached advisory lookups) |
+
+`qs` is the worked example. Two GHSAs affect the installed `qs@6.15.3`, and it is
+reached by two paths (`gatsby>express>qs` and `gatsby>express>body-parser>qs`),
+so yarn reports **4 moderate**. `qs@6.16.0` is also installed and is clean, so
+OSV reports **2 moderate** for the same tree. Neither number is wrong; they
+answer different questions. This is why the fallback has its own ratchet instead
+of borrowing the one above.
+
+The fallback fails closed on everything: OSV unreachable after its own retries,
+a non-200, a body that is not JSON, one batch of several failing, a paged
+`querybatch` response (which would silently under-count), a `package.json` with
+no name or version, a withdrawn advisory, or a severity that is not one of
+`LOW`/`MODERATE`/`HIGH`/`CRITICAL` — matched as an own property, because
+`SEVERITIES["toString"]` inherits a truthy function and would drop the advisory
+into a junk bucket instead of raising. Each exits non-zero naming the package or
+advisory id. And because `undefined > 13` is false for every ceiling, **both**
+sources compare through a check that every count is a finite number: a summary
+whose counts went missing is degraded, not clean, and fails.
+
+One residual limit, inherent to a ratchet rather than to OSV: the degraded-answer
+guard only catches *total* degradation. If one `querybatch` of four answered 200
+with empty `vulns`, the counts would fall below the baseline and a one-sided `>`
+comparison reads that as a pass. The alternative — failing on a drop as well as a
+rise — would fire on every legitimate dependency fix, so it is not worth it; the
+counts, package total and distinct-advisory total are all printed on every run so
+a sudden drop is visible to whoever reads the log. Every fallback run prints a `SOURCE:` line first, so a
+fallback run can never be read as a primary one; the primary path's output is
+unchanged.
 
 ## Baseline moved 28 -> 32 moderate on 2026-09-03: `qs`
 
