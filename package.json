@@ -74,6 +74,7 @@
         "rehype-parse": "^8.0.4",
         "rehype-sanitize": "^5.0.0",
         "rehype-stringify": "^9.0.3",
+        "undici": "^6",
         "unified": "^10.1.2",
         "web3modal": "^1.9.4"
     },

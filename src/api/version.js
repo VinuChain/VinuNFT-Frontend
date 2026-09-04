@@ -32,11 +32,9 @@ export default function handler(req, res) {
         // one package.json asks for: a Node without global fetch is what broke
         // every proxy here, and nothing in the deployment reported it.
         node: process.version,
-        hasFetch: typeof fetch === "function",
-        hasGlobalThisFetch: typeof globalThis.fetch === "function",
-        // Narrowing why a Node 22 runtime has no fetch. Flags are the project's
-        // own configuration, not user data or a secret.
-        execArgv: process.execArgv,
-        nodeOptions: process.env.NODE_OPTIONS || null,
+        // Kept, unlike the raw runtime flags this briefly reported: `false`
+        // here is the whole signal an operator needs, and it does not disclose
+        // the project's configuration. See "Server-side fetch" in README.md.
+        hasFetch: typeof globalThis.fetch === "function",
     });
 }

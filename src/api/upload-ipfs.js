@@ -1,3 +1,4 @@
+import { serverFetch } from "../common/serverFetch";
 import { ethers } from "ethers";
 import {
     createUploadMessage,
@@ -299,7 +300,7 @@ async function pinJson(metadata) {
         );
     }
 
-    const response = await globalThis.fetch(PINATA_PIN_JSON_URL, {
+    const response = await serverFetch(PINATA_PIN_JSON_URL, {
         method: "POST",
         headers: {
             Authorization: `Bearer ${envValue("PINATA_API_JWT")}`,
@@ -367,7 +368,7 @@ async function pinFile(payload) {
         payload.name
     );
 
-    return globalThis.fetch(PINATA_PIN_FILE_URL, {
+    return serverFetch(PINATA_PIN_FILE_URL, {
         method: "POST",
         headers: {
             Authorization: `Bearer ${envValue("PINATA_API_JWT")}`,

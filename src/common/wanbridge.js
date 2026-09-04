@@ -1,3 +1,4 @@
+import { serverFetch } from "./serverFetch";
 import Decimal from "decimal.js";
 import config from "../config";
 
@@ -100,7 +101,7 @@ export async function fetchWanBridgeJson(path, init = {}, options = {}) {
 async function fetchOneWanBridgeUrl(url, init = {}) {
     let response;
     try {
-        response = await globalThis.fetch(url, {
+        response = await serverFetch(url, {
             ...init,
             signal: AbortSignal.timeout(WANBRIDGE_TIMEOUT_MS),
         });
