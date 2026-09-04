@@ -4,6 +4,7 @@ import {
     VINUCHAIN_CHAIN_TYPE,
     WanBridgeUpstreamError,
     WANBRIDGE_FAILURE,
+    WANBRIDGE_TOKEN_PAIRS_FALLBACK,
 } from "../common/wanbridge";
 import { applyApiRateLimit, sendJson } from "../common/apiRateLimit";
 
@@ -17,10 +18,20 @@ async function getVinuChainCatalog() {
         return cachedCatalog.value;
     }
 
-    const [hashResponse, pairsResponse] = await Promise.all([
-        fetchWanBridgeJson("tokenPairsHash"),
-        fetchWanBridgeJson("tokenPairs"),
+    // The hash is advisory - it is only reported - so its failure must not take
+    // the catalog down with it. The pairs are the page, and they alone get the
+    // second source.
+    const [hashResult, pairsResponse] = await Promise.all([
+        fetchWanBridgeJson("tokenPairsHash").catch(() => null),
+        fetchWanBridgeJson(
+            "tokenPairs",
+            {},
+            {
+                fallback: WANBRIDGE_TOKEN_PAIRS_FALLBACK,
+            }
+        ),
     ]);
+    const hashResponse = hashResult ?? { ok: false, payload: {} };
 
     if (!pairsResponse.ok || !pairsResponse.payload.success) {
         throw new WanBridgeUpstreamError(

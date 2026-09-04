@@ -430,3 +430,117 @@ test("after one good load, a later failure serves the last catalog marked stale"
         globalThis.fetch = realFetch;
     }
 });
+
+// ---------------------------------------------------------------------------
+// The second source: only for unreachability, never to paper over an answer
+// ---------------------------------------------------------------------------
+
+test("an unreachable primary falls back, and the hit envelope is normalised", async () => {
+    const { fetchWanBridgeJson, WANBRIDGE_TOKEN_PAIRS_FALLBACK } = await import(
+        "../src/common/wanbridge.js"
+    );
+    const realFetch = globalThis.fetch;
+    const seen = [];
+    globalThis.fetch = async (url) => {
+        seen.push(String(url));
+        if (String(url).includes("bridge-api.wanchain.org")) {
+            const e = new Error("ECONNREFUSED");
+            e.name = "TypeError";
+            throw e;
+        }
+        // The mirror answers with `hit`, not `success`.
+        return new Response(JSON.stringify({ hit: true, data: [{ tokenPairID: "1" }] }), {
+            status: 200,
+        });
+    };
+    try {
+        const r = await fetchWanBridgeJson("tokenPairs", {}, {
+            fallback: WANBRIDGE_TOKEN_PAIRS_FALLBACK,
+        });
+        assert.equal(r.payload.success, true, "hit must be normalised to success");
+        assert.equal(r.payload.data.length, 1);
+        assert.equal(seen.length, 2, "primary first, then the mirror");
+        assert.match(seen[1], /bridge-api2\.wanchain\.org/);
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+test("a refused primary does NOT fall back — a refusal is an answer", async () => {
+    const { fetchWanBridgeJson, WANBRIDGE_TOKEN_PAIRS_FALLBACK } = await import(
+        "../src/common/wanbridge.js"
+    );
+    const realFetch = globalThis.fetch;
+    const seen = [];
+    globalThis.fetch = async (url) => {
+        seen.push(String(url));
+        return new Response(JSON.stringify({ success: false }), { status: 403 });
+    };
+    try {
+        const r = await fetchWanBridgeJson("tokenPairs", {}, {
+            fallback: WANBRIDGE_TOKEN_PAIRS_FALLBACK,
+        });
+        // 403 is a response, so it comes back as not-ok rather than throwing;
+        // what matters is that the mirror was never asked.
+        assert.equal(r.ok, false);
+        assert.equal(seen.length, 1, "the mirror must not be asked");
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+test("a primary answering non-JSON does NOT fall back", async () => {
+    const { fetchWanBridgeJson, WANBRIDGE_TOKEN_PAIRS_FALLBACK } = await import(
+        "../src/common/wanbridge.js"
+    );
+    const realFetch = globalThis.fetch;
+    const seen = [];
+    globalThis.fetch = async (url) => {
+        seen.push(String(url));
+        return new Response("<html>challenge</html>", { status: 200 });
+    };
+    try {
+        await assert.rejects(
+            () =>
+                fetchWanBridgeJson("tokenPairs", {}, {
+                    fallback: WANBRIDGE_TOKEN_PAIRS_FALLBACK,
+                }),
+            (e) => e.reason === "upstream_not_json"
+        );
+        assert.equal(seen.length, 1, "the mirror must not mask a bad body");
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+test("a failing tokenPairsHash does not take the catalog down with it", async () => {
+    const mod = await import("../src/api/wanbridge-token-pairs.js");
+    const handler = mod.default || mod;
+    mod._resetCatalogCache?.();
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+        if (String(url).includes("tokenPairsHash")) throw new Error("down");
+        return new Response(
+            JSON.stringify({ success: true, data: [] }),
+            { status: 200 }
+        );
+    };
+    const res = {
+        statusCode: null, body: null,
+        status(c) { this.statusCode = c; return this; },
+        setHeader() {}, send(b) { this.body = b; return this; },
+    };
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+        await handler(
+            { method: "GET", headers: {}, socket: { remoteAddress: "203.0.113.8" } },
+            res
+        );
+        assert.equal(res.statusCode, 200, "the hash is advisory, not load-bearing");
+        assert.equal(JSON.parse(res.body).hash, null);
+    } finally {
+        console.warn = warn;
+        globalThis.fetch = realFetch;
+    }
+});
