@@ -1,4 +1,4 @@
-import { serverFetch } from "../common/serverFetch";
+import { serverFetch, serverFormData } from "../common/serverFetch";
 import { ethers } from "ethers";
 import {
     createUploadMessage,
@@ -361,7 +361,8 @@ async function pinFile(payload) {
         );
     }
 
-    const formData = new FormData();
+    const FormDataCtor = await serverFormData();
+    const formData = new FormDataCtor();
     formData.append(
         "file",
         new Blob([fileBytes], { type: declaredType }),

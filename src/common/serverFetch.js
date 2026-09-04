@@ -16,6 +16,32 @@
  * on the server and never pulled into the browser bundle.
  */
 let cached = null;
+let cachedFormData = null;
+
+/**
+ * `FormData` for code that runs on the server.
+ *
+ * `--no-experimental-fetch` removes FormData along with fetch — verified on
+ * Node 18.20.8, where both report `undefined` while `Blob` survives. Without
+ * this, a file upload throws at `new FormData()` before serverFetch is ever
+ * reached, so fixing only the fetch would have left image uploads broken in the
+ * one runtime the fallback exists for.
+ */
+export async function serverFormData() {
+    if (typeof globalThis.FormData === "function") {
+        return globalThis.FormData;
+    }
+    if (!cachedFormData) {
+        const undici = await import(/* webpackIgnore: true */ "undici");
+        cachedFormData = undici.FormData ?? undici.default?.FormData;
+        if (typeof cachedFormData !== "function") {
+            throw new Error(
+                "serverFormData: no FormData available — the global is disabled and undici did not provide one"
+            );
+        }
+    }
+    return cachedFormData;
+}
 
 export async function serverFetch(...args) {
     if (typeof globalThis.fetch === "function") {

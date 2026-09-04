@@ -544,3 +544,74 @@ test("a failing tokenPairsHash does not take the catalog down with it", async ()
         globalThis.fetch = realFetch;
     }
 });
+
+// ---------------------------------------------------------------------------
+// The runtime that removes fetch removes FormData too
+// ---------------------------------------------------------------------------
+
+test("serverFetch and serverFormData both survive the global being removed", async () => {
+    // Verified on Node 18.20.8: --no-experimental-fetch leaves fetch AND
+    // FormData undefined while Blob survives. Fixing only fetch would have left
+    // image uploads broken in the exact runtime the fallback exists for.
+    const mod = await import("../src/common/serverFetch.js");
+    const { serverFetch, serverFormData } = mod.default || mod;
+
+    const realFetch = globalThis.fetch;
+    const realFormData = globalThis.FormData;
+    try {
+        delete globalThis.fetch;
+        delete globalThis.FormData;
+
+        const FormDataCtor = await serverFormData();
+        assert.equal(typeof FormDataCtor, "function");
+        const fd = new FormDataCtor();
+        fd.append("k", "v");
+        assert.equal(fd.get("k"), "v");
+
+        // undici's fetch must be reachable with the global gone.
+        assert.equal(typeof (await serverFetch.name), "string");
+        await assert.rejects(
+            () => serverFetch("http://127.0.0.1:1/definitely-not-listening"),
+            (e) => e instanceof Error,
+            "must reach a real fetch implementation, not throw ReferenceError"
+        );
+    } finally {
+        if (realFetch) globalThis.fetch = realFetch;
+        if (realFormData) globalThis.FormData = realFormData;
+    }
+});
+
+test("no server-side module reaches for a global the runtime removes", async () => {
+    // Testing serverFormData() in isolation passes even if the upload still
+    // calls `new FormData()` directly - which it did, and which this file did
+    // not catch until the revert was tried. These assert the call sites.
+    const { readFileSync } = await import("node:fs");
+    const upload = readFileSync("src/api/upload-ipfs.js", "utf8");
+    assert.doesNotMatch(
+        upload,
+        /(?<![.\w])new FormData\(/,
+        "upload must build FormData through serverFormData, not the global"
+    );
+    assert.match(upload, /serverFormData\(/);
+    assert.doesNotMatch(
+        upload,
+        /(?<![.\w])fetch\(/,
+        "upload must route every request through serverFetch"
+    );
+
+    const bridge = readFileSync("src/common/wanbridge.js", "utf8");
+    assert.doesNotMatch(bridge, /(?<![.\w])fetch\(/);
+});
+
+test("the upload rate limiter does not use the bare global either", async () => {
+    // It runs before every upload, so a ReferenceError here rejects both file
+    // and metadata uploads before either serverFetch call is reached.
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync("src/common/uploadRateLimit.js", "utf8");
+    assert.doesNotMatch(
+        src,
+        /(?<![.\w])fetch\(/,
+        "uploadRateLimit must route through serverFetch"
+    );
+    assert.match(src, /serverFetch\(/);
+});
