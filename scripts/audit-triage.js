@@ -51,12 +51,18 @@ const auditCommand =
 const ATTEMPTS = 3;
 let result;
 let summary = null;
+// Every attempt's output, not just the last one's. A run can time out on the
+// first try and then fail differently on the third, and inspecting only the
+// final attempt threw away the evidence that named the cause - which made this
+// gate report "could not parse" for what was plainly a service outage.
+const transcript = [];
 for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
     result = spawnSync(auditCommand.command, auditCommand.args, {
         encoding: "utf8",
         maxBuffer: 64 * 1024 * 1024,
         shell: auditCommand.shell,
     });
+    transcript.push(`${result.stdout || ""}\n${result.stderr || ""}`);
     summary = findAuditSummary(result);
     if (summary) break;
     if (attempt < ATTEMPTS) {
@@ -86,7 +92,7 @@ function findAuditSummary(run) {
 const metadataLine = summary;
 
 if (!metadataLine) {
-    const text = `${result?.stdout || ""}\n${result?.stderr || ""}`;
+    const text = transcript.join("\n");
     const unreachable =
         /ESOCKETTIMEDOUT|ENOTFOUND|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up/i.test(
             text
