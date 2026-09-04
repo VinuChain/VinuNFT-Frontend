@@ -100,7 +100,7 @@ export async function fetchWanBridgeJson(path, init = {}, options = {}) {
 async function fetchOneWanBridgeUrl(url, init = {}) {
     let response;
     try {
-        response = await fetch(url, {
+        response = await globalThis.fetch(url, {
             ...init,
             signal: AbortSignal.timeout(WANBRIDGE_TIMEOUT_MS),
         });

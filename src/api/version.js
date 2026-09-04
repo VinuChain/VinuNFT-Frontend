@@ -33,5 +33,6 @@ export default function handler(req, res) {
         // every proxy here, and nothing in the deployment reported it.
         node: process.version,
         hasFetch: typeof fetch === "function",
+        hasGlobalThisFetch: typeof globalThis.fetch === "function",
     });
 }

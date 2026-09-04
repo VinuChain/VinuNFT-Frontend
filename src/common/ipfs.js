@@ -43,7 +43,7 @@ function arrayBufferToBase64(buffer) {
 }
 
 async function uploadToIpfs(payload, auth) {
-    const response = await fetch(config.ipfsUploadEndpoint, {
+    const response = await globalThis.fetch(config.ipfsUploadEndpoint, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -169,7 +169,9 @@ async function fetchWithLimits(url) {
     );
 
     try {
-        const response = await fetch(url, { signal: controller.signal });
+        const response = await globalThis.fetch(url, {
+            signal: controller.signal,
+        });
         if (!response.ok) {
             throw new Error(
                 `Media request failed with status ${response.status}`
@@ -234,7 +236,7 @@ async function readCapped(response, maxBytes) {
 /**
  * Decode a `data:` URI into a Response without touching the network.
  *
- * `fetch()` on a `data:` URL is still governed by CSP `connect-src`, which does
+ * `globalThis.fetch()` on a `data:` URL is still governed by CSP `connect-src`, which does
  * not list `data:` and must not: widening it to satisfy an inline decode would
  * buy nothing and weaken the policy. Every text NFT carries its body as a
  * `data:` URI, so fetching them meant the body silently never resolved in

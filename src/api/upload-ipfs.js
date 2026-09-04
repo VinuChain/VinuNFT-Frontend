@@ -299,7 +299,7 @@ async function pinJson(metadata) {
         );
     }
 
-    const response = await fetch(PINATA_PIN_JSON_URL, {
+    const response = await globalThis.fetch(PINATA_PIN_JSON_URL, {
         method: "POST",
         headers: {
             Authorization: `Bearer ${envValue("PINATA_API_JWT")}`,
@@ -367,7 +367,7 @@ async function pinFile(payload) {
         payload.name
     );
 
-    return fetch(PINATA_PIN_FILE_URL, {
+    return globalThis.fetch(PINATA_PIN_FILE_URL, {
         method: "POST",
         headers: {
             Authorization: `Bearer ${envValue("PINATA_API_JWT")}`,
