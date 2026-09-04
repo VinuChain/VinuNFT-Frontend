@@ -281,3 +281,152 @@ test("each proxy logs the cause of a 502 instead of swallowing it", async () => 
         assert.match(src, /cause: error\?\.message/, route);
     }
 });
+
+// ---------------------------------------------------------------------------
+// A failed upstream must say WHY, and degrade rather than die
+// ---------------------------------------------------------------------------
+
+async function callTokenPairs() {
+    const mod = await import("../src/api/wanbridge-token-pairs.js");
+    const handler = mod.default || mod;
+    // Earlier tests in this file load the catalog successfully; without this
+    // their result is served here as a stale fallback and the assertion passes
+    // for the wrong reason.
+    (mod._resetCatalogCache || mod.default?._resetCatalogCache)?.();
+    const res = {
+        statusCode: null,
+        body: null,
+        status(c) { this.statusCode = c; return this; },
+        setHeader() {},
+        send(b) { this.body = b; return this; },
+    };
+    const warn = console.warn;
+    const logs = [];
+    console.warn = (m) => logs.push(m);
+    try {
+        await handler(
+            { method: "GET", headers: {}, socket: { remoteAddress: "203.0.113.5" } },
+            res
+        );
+    } finally {
+        console.warn = warn;
+    }
+    return { res, body: JSON.parse(res.body || "{}"), logs };
+}
+
+test("an upstream that answers HTML is reported as not-JSON, not as a network failure", async () => {
+    // This is the shape a WAF challenge or proxy error page takes: HTTP 200
+    // with markup. Unguarded, JSON.parse threw a bare SyntaxError that was
+    // indistinguishable from the upstream being unreachable.
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+        new Response("<html><body>Attack challenge</body></html>", {
+            status: 200,
+            headers: { "content-type": "text/html" },
+        });
+    try {
+        const { res, body } = await callTokenPairs();
+        assert.equal(res.statusCode, 502);
+        assert.equal(body.reason, "upstream_not_json");
+        assert.equal(body.upstreamStatus, 200);
+        // The upstream's body must never reach the browser.
+        assert.doesNotMatch(res.body, /Attack challenge/);
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+test("a refused upstream is reported with its status", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+        new Response(JSON.stringify({ success: false }), { status: 403 });
+    try {
+        const { res, body } = await callTokenPairs();
+        assert.equal(res.statusCode, 502);
+        assert.equal(body.reason, "upstream_status");
+        assert.equal(body.upstreamStatus, 403);
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+test("a timeout is reported as a timeout", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+        const e = new Error("aborted");
+        e.name = "TimeoutError";
+        throw e;
+    };
+    try {
+        const { res, body } = await callTokenPairs();
+        assert.equal(res.statusCode, 502);
+        assert.equal(body.reason, "upstream_timeout");
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});
+
+test("after one good load, a later failure serves the last catalog marked stale", async () => {
+    const realFetch = globalThis.fetch;
+    const pairs = {
+        success: true,
+        data: [
+            {
+                fromChain: { chainType: "VC", chainId: 207 },
+                toChain: { chainType: "BNB", chainId: 56 },
+                fromAccount: "0x0000000000000000000000000000000000000000",
+                symbol: "VC",
+                decimals: 18,
+            },
+        ],
+    };
+    // One module instance for both calls, so the in-process cache carries over.
+    const mod = await import("../src/api/wanbridge-token-pairs.js");
+    const handler = mod.default || mod;
+    (mod._resetCatalogCache || mod.default?._resetCatalogCache)?.();
+    const call = async () => {
+        const res = {
+            statusCode: null, body: null,
+            status(c) { this.statusCode = c; return this; },
+            setHeader() {}, send(b) { this.body = b; return this; },
+        };
+        const warn = console.warn;
+        console.warn = () => {};
+        try {
+            await handler(
+                { method: "GET", headers: {}, socket: { remoteAddress: "203.0.113.6" } },
+                res
+            );
+        } finally { console.warn = warn; }
+        return { res, body: JSON.parse(res.body || "{}") };
+    };
+
+    try {
+        globalThis.fetch = async () =>
+            new Response(JSON.stringify(pairs), { status: 200 });
+        const first = await call();
+        assert.equal(first.res.statusCode, 200);
+        assert.equal(first.body.stale, undefined, "a live answer is not stale");
+        const fetchedAt = first.body.fetchedAt;
+
+        // Expire the TTL so the next call refreshes, then break the upstream.
+        await new Promise((r) => setTimeout(r, 5));
+        globalThis.fetch = async () => {
+            throw new Error("ECONNREFUSED");
+        };
+        // Force the refresh path by advancing past the cache window.
+        const realNow = Date.now;
+        Date.now = () => realNow() + 10 * 60 * 1000;
+        try {
+            const second = await call();
+            assert.equal(second.res.statusCode, 200, "must degrade, not 502");
+            assert.equal(second.body.stale, true, "and must say it is stale");
+            assert.equal(second.body.fetchedAt, fetchedAt, "with when it was taken");
+            assert.equal(second.body.staleReason, "upstream_unreachable");
+        } finally {
+            Date.now = realNow;
+        }
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+});

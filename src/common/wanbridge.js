@@ -15,11 +15,29 @@ export const VINUCHAIN_TOKEN_PRIORITY = ["USDT", "VINU", "VC"];
 const WANBRIDGE_TIMEOUT_MS = Number(process.env.WANBRIDGE_TIMEOUT_MS || 20000);
 const WANBRIDGE_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 
-/** Carries why the upstream call failed, so a proxy can log a cause. */
+/**
+ * Carries why the upstream call failed.
+ *
+ * `reason` is a fixed enum, safe to return to a browser: it describes OUR call,
+ * not the upstream's content. `status` is the upstream HTTP status when there
+ * was one. Together they separate "they timed out" from "they refused us" from
+ * "they answered with something that is not JSON", which is the distinction a
+ * 502 alone cannot make and which cost a production outage its diagnosis.
+ */
+export const WANBRIDGE_FAILURE = {
+    TIMEOUT: "upstream_timeout",
+    NETWORK: "upstream_unreachable",
+    STATUS: "upstream_status",
+    BODY: "upstream_not_json",
+    TOO_LARGE: "upstream_too_large",
+};
+
 export class WanBridgeUpstreamError extends Error {
-    constructor(message) {
+    constructor(message, { reason, status = null } = {}) {
         super(message);
         this.name = "WanBridgeUpstreamError";
+        this.reason = reason;
+        this.status = status;
     }
 }
 
@@ -45,7 +63,14 @@ export async function fetchWanBridgeJson(path, init = {}) {
                 ? `timed out after ${WANBRIDGE_TIMEOUT_MS}ms`
                 : `${error?.name ?? "Error"}: ${error?.message ?? "unknown"}`;
         throw new WanBridgeUpstreamError(
-            `WanBridge ${path} unreachable (${cause})`
+            `WanBridge ${path} unreachable (${cause})`,
+            {
+                reason:
+                    error?.name === "TimeoutError" ||
+                    error?.name === "AbortError"
+                        ? WANBRIDGE_FAILURE.TIMEOUT
+                        : WANBRIDGE_FAILURE.NETWORK,
+            }
         );
     }
 
@@ -53,19 +78,38 @@ export async function fetchWanBridgeJson(path, init = {}) {
         Number(response.headers.get("content-length")) >
         WANBRIDGE_MAX_RESPONSE_BYTES
     ) {
-        throw new Error("WanBridge response too large");
+        throw new WanBridgeUpstreamError("WanBridge response too large", {
+            reason: WANBRIDGE_FAILURE.TOO_LARGE,
+            status: response.status,
+        });
     }
 
     const body = await response.text();
     if (body.length > WANBRIDGE_MAX_RESPONSE_BYTES) {
-        throw new Error("WanBridge response too large");
+        throw new WanBridgeUpstreamError("WanBridge response too large", {
+            reason: WANBRIDGE_FAILURE.TOO_LARGE,
+            status: response.status,
+        });
     }
 
-    return {
-        ok: response.ok,
-        status: response.status,
-        payload: JSON.parse(body),
-    };
+    let payload;
+    try {
+        payload = JSON.parse(body);
+    } catch {
+        // An upstream that answers 200 with an HTML challenge, a proxy error
+        // page or a WAF interstitial lands here. Unguarded, JSON.parse threw a
+        // bare SyntaxError with no status and no hint of what came back, which
+        // is indistinguishable from a network failure by the time a proxy
+        // catches it. The body itself is never carried out of this function.
+        throw new WanBridgeUpstreamError(
+            `WanBridge ${path} answered ${response.status} with ${
+                body.trimStart().startsWith("<") ? "markup" : "non-JSON"
+            }, not JSON`,
+            { reason: WANBRIDGE_FAILURE.BODY, status: response.status }
+        );
+    }
+
+    return { ok: response.ok, status: response.status, payload };
 }
 
 const BRIDGE_NATIVE_FEE_DECIMALS = {
