@@ -56,11 +56,12 @@ export const WANBRIDGE_FAILURE = {
 };
 
 export class WanBridgeUpstreamError extends Error {
-    constructor(message, { reason, status = null } = {}) {
+    constructor(message, { reason, status = null, code = null } = {}) {
         super(message);
         this.name = "WanBridgeUpstreamError";
         this.reason = reason;
         this.status = status;
+        this.code = code;
     }
 }
 
@@ -116,6 +117,17 @@ async function fetchOneWanBridgeUrl(url, init = {}) {
                     error?.name === "AbortError"
                         ? WANBRIDGE_FAILURE.TIMEOUT
                         : WANBRIDGE_FAILURE.NETWORK,
+                // undici puts the OS-level reason here: ENOTFOUND, ECONNREFUSED,
+                // UND_ERR_CONNECT_TIMEOUT. It names the failure without naming
+                // a host or carrying any upstream content, which is what makes
+                // it safe to return and what separates "DNS does not resolve"
+                // from "the connection was refused" without platform log access.
+                code:
+                    error?.cause?.code ??
+                    (error?.name === "TypeError" &&
+                    !globalThis.AbortSignal?.timeout
+                        ? "NO_ABORTSIGNAL_TIMEOUT"
+                        : error?.name ?? null),
             }
         );
     }

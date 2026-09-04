@@ -121,6 +121,7 @@ export default async function handler(req, res) {
                 route: "token-pairs",
                 reason: error?.reason ?? "unknown",
                 upstreamStatus: error?.status ?? null,
+                code: error?.code ?? null,
                 cause: error?.message ?? String(error),
             })
         );
@@ -146,6 +147,7 @@ export default async function handler(req, res) {
             message: "Could not load WanBridge pairs",
             reason: error?.reason ?? "unknown",
             upstreamStatus: error?.status ?? null,
+            code: error?.code ?? null,
         });
     }
 }
