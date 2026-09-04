@@ -4,7 +4,7 @@
     "private": true,
     "description": "VinuChain text and image NFT dapp.",
     "engines": {
-        "node": ">=18 <23"
+        "node": "22.x"
     },
     "contributors": [
         "Samuele Marro",
