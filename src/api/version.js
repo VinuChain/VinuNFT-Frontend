@@ -34,5 +34,9 @@ export default function handler(req, res) {
         node: process.version,
         hasFetch: typeof fetch === "function",
         hasGlobalThisFetch: typeof globalThis.fetch === "function",
+        // Narrowing why a Node 22 runtime has no fetch. Flags are the project's
+        // own configuration, not user data or a secret.
+        execArgv: process.execArgv,
+        nodeOptions: process.env.NODE_OPTIONS || null,
     });
 }
