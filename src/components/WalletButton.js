@@ -10,6 +10,7 @@ import config from "../config";
 import ethProvider from "eth-provider";
 import { atom, useRecoilState } from "recoil";
 import { formatError, standardErrorState } from "../common/error";
+import { safePalProviderOptions } from "../common/safepal";
 
 const chainIdState = atom({
     key: "chainId",
@@ -53,7 +54,10 @@ export default function WalletButton() {
         const web3Modal = new Web3Modal({
             network: config.networks.main.chainId,
             cacheProvider: false,
-            providerOptions,
+            // SafePal is added per click: it is often only on
+            // window.safepalProvider, which Web3Modal's injected entry never
+            // reads. See common/safepal.js.
+            providerOptions: { ...providerOptions, ...safePalProviderOptions() },
             disableInjectedProvider: false,
         });
         // Force to prompt wallet selection
@@ -77,13 +81,18 @@ export default function WalletButton() {
         setStandardError(null);
 
         // Remove any pre-existing event handlers
-        delete wallet._events.accountsChanged;
-        delete wallet._events.chainChanged;
-        delete wallet._events.disconnect;
-        delete wallet._events.network;
+        // Only EventEmitter-backed providers expose _events. A wallet connected
+        // through its own namespace (SafePal) need not, and an unguarded
+        // delete there throws and aborts the connection it just approved.
+        if (wallet._events) {
+            delete wallet._events.accountsChanged;
+            delete wallet._events.chainChanged;
+            delete wallet._events.disconnect;
+            delete wallet._events.network;
 
-        // The only remaining one is the default connect eventHandler
-        wallet._eventsCount = 1;
+            // The only remaining one is the default connect eventHandler
+            wallet._eventsCount = 1;
+        }
 
         const handleDisconnect = () => {
             setWalletProvider(null);
