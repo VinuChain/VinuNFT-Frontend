@@ -12,6 +12,7 @@ import { atom, useRecoilState } from "recoil";
 import { formatError, standardErrorState } from "../common/error";
 import { safePalProviderOptions } from "../common/safepal";
 import { replaceWalletSubscription } from "../common/walletSubscription";
+import { requestAccountPicker } from "../common/accountPicker";
 
 const chainIdState = atom({
     key: "chainId",
@@ -52,6 +53,18 @@ export default function WalletButton() {
     };
 
     const connectWallet = async () => {
+        // The wallet the page is using now, if any. Picking it again below is a
+        // request for a different account of it.
+        const previousWallet = walletProvider?.provider;
+
+        // Web3Modal v1 appends a new #WEB3_CONNECT_MODAL_ID container every time
+        // it is constructed but renders into the first one in the document, so
+        // each click left one more empty container behind. Remove the previous
+        // picker so this one renders into a container of its own.
+        document
+            .querySelectorAll("#WEB3_CONNECT_MODAL_ID")
+            .forEach((container) => container.remove());
+
         const web3Modal = new Web3Modal({
             network: config.networks.main.chainId,
             cacheProvider: false,
@@ -103,17 +116,41 @@ export default function WalletButton() {
             restoreDefaultReadProvider();
         };
 
-        const handleChange = async () => {
-            if (wallet.selectedAddress) {
+        /**
+         * Follow the account the wallet reports. EIP-1193 passes the new
+         * account list with the event, and an empty list means the wallet
+         * locked or dropped this site. This used to read wallet.selectedAddress,
+         * a deprecated MetaMask property other wallets (SafePal among them)
+         * never set, which turned every account switch in those wallets into a
+         * disconnect.
+         */
+        const handleAccountsChanged = async (accounts) => {
+            const current = Array.isArray(accounts)
+                ? accounts
+                : await wallet
+                      .request({ method: "eth_accounts" })
+                      .catch(() => []);
+            if (current.length > 0) {
                 const regeneratedProvider = new ethers.providers.Web3Provider(
                     wallet
                 );
                 setWalletProvider(regeneratedProvider);
                 await readThrough(regeneratedProvider);
             } else {
-                // If the provider is connected but no addresses are selected, treat it as a disconnection
                 handleDisconnect();
             }
+        };
+
+        // A chain change passes a chain id, not accounts, so it gets its own
+        // handler: it used to share the account one and disconnect whenever
+        // selectedAddress was missing. The chain id is refreshed too, so the
+        // wrong-network alert follows the wallet.
+        const handleChainChanged = async () => {
+            const regeneratedProvider = new ethers.providers.Web3Provider(
+                wallet
+            );
+            setWalletProvider(regeneratedProvider);
+            setChainId(await readThrough(regeneratedProvider));
         };
 
         // ethers.js recommends refreshing the page when a user changes network
@@ -131,10 +168,18 @@ export default function WalletButton() {
         // that has no _events. See common/walletSubscription.js.
         replaceWalletSubscription(wallet, [
             ["disconnect", handleDisconnect],
-            ["accountsChanged", handleChange],
-            ["chainChanged", handleChange],
+            ["accountsChanged", handleAccountsChanged],
+            ["chainChanged", handleChainChanged],
             ["network", handleNetwork],
         ]);
+
+        // Web3Modal hands back the same wallet without asking it anything the
+        // user can see, so re-picking it would change nothing. Ask it for its
+        // account picker; see common/accountPicker.js. A different wallet has
+        // just been through its own connection prompt instead.
+        if (wallet === previousWallet) {
+            await requestAccountPicker(wallet);
+        }
 
         const newProvider = new ethers.providers.Web3Provider(wallet);
         setWalletProvider(newProvider);

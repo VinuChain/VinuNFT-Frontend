@@ -364,7 +364,8 @@ export function installMockWallet(
             window.ethereum = {
                 isMetaMask: true,
                 chainId,
-                selectedAddress: account,
+                // No selectedAddress: it is a deprecated MetaMask property most
+                // EIP-1193 wallets never set, and the app must not depend on it.
                 _events: {},
                 async request({ method, params }) {
                     calls.push({ method, params });
@@ -463,6 +464,9 @@ export function installMockWallet(
                         case "wallet_switchEthereumChain":
                         case "wallet_addEthereumChain":
                             return null;
+                        case "wallet_requestPermissions":
+                        case "wallet_getPermissions":
+                            return [{ parentCapability: "eth_accounts" }];
                         default:
                             return null;
                     }
@@ -470,7 +474,11 @@ export function installMockWallet(
                 on(event, handler) {
                     (this._events[event] = this._events[event] || []).push(handler);
                 },
-                removeListener() {},
+                removeListener(event, handler) {
+                    this._events[event] = (this._events[event] || []).filter(
+                        (h) => h !== handler
+                    );
+                },
                 enable() {
                     return this.request({ method: "eth_requestAccounts" });
                 },

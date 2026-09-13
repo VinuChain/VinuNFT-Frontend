@@ -312,9 +312,6 @@ test("clearing the selected account is treated as a disconnection", { skip: !has
     const { page, context, errors } = await openPage();
     try {
         await connectWallet(page);
-        await page.evaluate(() => {
-            window.ethereum.selectedAddress = null;
-        });
         await emit(page, "accountsChanged", []);
         await waitUntil(async () => (await bodyText(page)).includes("Connect Wallet"), {
             label: "the header to return to its unconnected state",
@@ -334,10 +331,9 @@ test("switching to another account keeps the session connected", { skip: !hasBui
         // The session has to be visibly connected before an event can be shown
         // not to have ended it.
         await waitForConnectedHeader(page);
+        // The mock wallet has no selectedAddress, like most EIP-1193 wallets:
+        // the account list the event carries is all the app gets.
         const next = "0x000000000000000000000000000000000000BEEF";
-        await page.evaluate((account) => {
-            window.ethereum.selectedAddress = account;
-        }, next);
         await emit(page, "accountsChanged", [next]);
         // Bounded on purpose: a switch that keeps the session changes nothing
         // this page renders, so the only honest test is to give the handler
@@ -348,6 +344,109 @@ test("switching to another account keeps the session connected", { skip: !hasBui
             (await bodyText(page)).includes("Change Wallet"),
             "an account switch is not a disconnection"
         );
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("a chain change from the wallet keeps the session connected", { skip: !hasBuild }, async () => {
+    // chainChanged used to share the account handler, which disconnected any
+    // wallet without selectedAddress on every network switch.
+    const { page, context, errors } = await openPage();
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        await emit(page, "chainChanged", "0xcf");
+        // Bounded for the same reason as the account switch above.
+        await page.waitForTimeout(600);
+
+        assert.ok(
+            (await bodyText(page)).includes("Change Wallet"),
+            "a chain change is not a disconnection"
+        );
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+// --- Change Wallet ----------------------------------------------------------
+
+/** Press Change Wallet and pick the injected wallet again, if a picker shows. */
+async function changeToSameWallet(page) {
+    await page.locator("button", { hasText: /change wallet/i }).first().click();
+    const picker = page.locator("text=Connect to your MetaMask Wallet").first();
+    await picker
+        .waitFor({ state: "visible", timeout: 2000 })
+        .then(() => picker.click())
+        .catch(() => {});
+}
+
+const permissionRequests = async (page) =>
+    (await walletCalls(page)).filter((c) => c.method === "wallet_requestPermissions");
+
+test("Change Wallet on the connected wallet opens its account picker", { skip: !hasBuild }, async () => {
+    // Picking the same wallet again used to re-send only eth_requestAccounts,
+    // which a wallet that already trusts the site answers silently with the
+    // same account: Change Wallet did nothing at all.
+    const { page, context, errors } = await openPage();
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        assert.equal(
+            (await permissionRequests(page)).length,
+            0,
+            "a first connection has already prompted and must not prompt twice"
+        );
+
+        await changeToSameWallet(page);
+        await waitForWalletCalls(page, "wallet_requestPermissions", 1);
+
+        const [request] = await permissionRequests(page);
+        assert.deepEqual(request.params, [{ eth_accounts: {} }]);
+        assert.ok((await bodyText(page)).includes("Change Wallet"));
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("closing the account picker keeps the current account connected", { skip: !hasBuild }, async () => {
+    const { page, context, errors } = await openPage("/", {
+        reject: ["wallet_requestPermissions"],
+    });
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        await changeToSameWallet(page);
+        await waitForWalletCalls(page, "wallet_requestPermissions", 1);
+        // Bounded: staying connected is the absence of a change.
+        await page.waitForTimeout(600);
+
+        assert.ok(
+            (await bodyText(page)).includes("Change Wallet"),
+            "a closed picker is not a disconnection"
+        );
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("pressing Change Wallet repeatedly keeps a single picker container", { skip: !hasBuild }, async () => {
+    // Each Web3Modal appended a container but rendered into the first, so every
+    // press used to leave another empty one in the page.
+    const { page, context, errors } = await openPage();
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        for (let press = 1; press <= 3; press++) {
+            await changeToSameWallet(page);
+            await waitForWalletCalls(page, "wallet_requestPermissions", press);
+        }
+
+        assert.equal(await page.locator('[id="WEB3_CONNECT_MODAL_ID"]').count(), 1);
         assert.deepEqual(errors, []);
     } finally {
         await context.close();
