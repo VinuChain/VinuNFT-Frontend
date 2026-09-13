@@ -57,7 +57,10 @@ export default function WalletButton() {
             // SafePal is added per click: it is often only on
             // window.safepalProvider, which Web3Modal's injected entry never
             // reads. See common/safepal.js.
-            providerOptions: { ...providerOptions, ...safePalProviderOptions() },
+            providerOptions: {
+                ...providerOptions,
+                ...safePalProviderOptions(),
+            },
             disableInjectedProvider: false,
         });
         // Force to prompt wallet selection
