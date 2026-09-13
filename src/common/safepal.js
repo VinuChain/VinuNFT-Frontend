@@ -28,7 +28,10 @@ export function findSafePalProvider(win) {
     if (!ethereum) return null;
     if (Array.isArray(ethereum.providers)) {
         const hit = ethereum.providers.find((p) => p && p.isSafePal === true);
-        return isProvider(hit) ? hit : null;
+        if (isProvider(hit)) return hit;
+        // No SafePal in the array: a flagged, usable root is still SafePal.
+        // Nothing here mirrors a library's lookup, so there is no reason to
+        // miss it the way RainbowKit's array-only search does.
     }
     return ethereum.isSafePal === true && isProvider(ethereum)
         ? ethereum

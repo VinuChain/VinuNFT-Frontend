@@ -39,6 +39,12 @@ test("finds SafePal's in-app browser on window.ethereum", () => {
     assert.equal(findSafePalProvider({ ethereum: sp }), sp);
 });
 
+test("falls back to a flagged root when the providers array lacks SafePal", () => {
+    const mm = provider({ isMetaMask: true });
+    const root = { ...provider({ isSafePal: true }), providers: [mm] };
+    assert.equal(findSafePalProvider({ ethereum: root }), root);
+});
+
 test("returns null when SafePal is not on the page", () => {
     assert.equal(findSafePalProvider(undefined), null);
     assert.equal(findSafePalProvider({}), null);

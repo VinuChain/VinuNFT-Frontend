@@ -11,6 +11,7 @@ import ethProvider from "eth-provider";
 import { atom, useRecoilState } from "recoil";
 import { formatError, standardErrorState } from "../common/error";
 import { safePalProviderOptions } from "../common/safepal";
+import { replaceWalletSubscription } from "../common/walletSubscription";
 
 const chainIdState = atom({
     key: "chainId",
@@ -115,19 +116,25 @@ export default function WalletButton() {
             }
         };
 
-        wallet.on("disconnect", handleDisconnect);
-        wallet.on("accountsChanged", handleChange);
-        wallet.on("chainChanged", handleChange);
-
         // ethers.js recommends refreshing the page when a user changes network
-        wallet.on("network", (newNetwork, oldNetwork) => {
+        const handleNetwork = (newNetwork, oldNetwork) => {
             // When a Provider makes its initial connection, it emits a "network"
             // event with a null oldNetwork along with the newNetwork. So, if the
             // oldNetwork exists, it represents a changing network
             if (oldNetwork) {
                 window.location.reload();
             }
-        });
+        };
+
+        // Detaches the previous connection's handlers through the public
+        // listener API first — the _events wipe above cannot reach a provider
+        // that has no _events. See common/walletSubscription.js.
+        replaceWalletSubscription(wallet, [
+            ["disconnect", handleDisconnect],
+            ["accountsChanged", handleChange],
+            ["chainChanged", handleChange],
+            ["network", handleNetwork],
+        ]);
 
         const newProvider = new ethers.providers.Web3Provider(wallet);
         setWalletProvider(newProvider);
