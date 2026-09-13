@@ -23,6 +23,21 @@
 const USER_REJECTED = 4001;
 const UNSUPPORTED = new Set([4200, -32601]);
 
+/**
+ * Whether Web3Modal handed back the wallet the page is already using.
+ *
+ * Injected wallets and SafePal come back as the same provider object. Frame
+ * does not: Web3Modal builds a fresh eth-provider wrapper on every pick and
+ * marks it isFrameNative, so two Frame wrappers are the same wallet as well.
+ */
+export function isSameWallet(next, previous) {
+    if (!next || !previous) return false;
+    return (
+        next === previous ||
+        (next.isFrameNative === true && previous.isFrameNative === true)
+    );
+}
+
 export async function requestAccountPicker(wallet) {
     if (!wallet || typeof wallet.request !== "function") return "unsupported";
     try {

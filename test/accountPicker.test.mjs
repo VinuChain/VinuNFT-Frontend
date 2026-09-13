@@ -2,7 +2,26 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const mod = await import("../src/common/accountPicker.js");
-const { requestAccountPicker } = mod.default || mod;
+const { requestAccountPicker, isSameWallet } = mod.default || mod;
+
+test("the same provider object is the same wallet", () => {
+    const injected = { request() {} };
+    assert.equal(isSameWallet(injected, injected), true);
+});
+
+test("two Frame wrappers are the same wallet, because Web3Modal rebuilds Frame on every pick", () => {
+    // Comparing objects alone made re-picking Frame skip the account picker.
+    assert.equal(isSameWallet({ isFrameNative: true }, { isFrameNative: true }), true);
+});
+
+test("different wallets, or no wallet before, are not the same wallet", () => {
+    const metaMask = { isMetaMask: true };
+    const safePal = { isSafePal: true };
+    assert.equal(isSameWallet(safePal, metaMask), false);
+    assert.equal(isSameWallet({ isFrameNative: true }, metaMask), false);
+    assert.equal(isSameWallet(metaMask, undefined), false);
+    assert.equal(isSameWallet(undefined, undefined), false);
+});
 
 /** A wallet whose request() answers with `answer(args)` and records every call. */
 function walletThat(answer) {

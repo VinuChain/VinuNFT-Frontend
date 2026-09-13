@@ -434,6 +434,32 @@ test("closing the account picker keeps the current account connected", { skip: !
     }
 });
 
+test("removing the site's access from the account picker disconnects", { skip: !hasBuild }, async () => {
+    // The picker can end the connection itself. The flow used to restore the
+    // wallet provider once the picker closed, leaving the page connected to a
+    // wallet that had just revoked it.
+    const { page, context, errors } = await openPage("/", { revokeOnPermissions: true });
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        await changeToSameWallet(page);
+        await waitForWalletCalls(page, "wallet_requestPermissions", 1);
+        await waitUntil(async () => (await bodyText(page)).includes("Connect Wallet"), {
+            label: "the header to return to its unconnected state",
+        });
+        // Bounded: an overwrite after the picker would flip it straight back.
+        await page.waitForTimeout(600);
+
+        assert.ok(
+            (await bodyText(page)).includes("Connect Wallet"),
+            "a revoked site must not be shown as connected"
+        );
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
 test("pressing Change Wallet repeatedly keeps a single picker container", { skip: !hasBuild }, async () => {
     // Each Web3Modal appended a container but rendered into the first, so every
     // press used to leave another empty one in the page.

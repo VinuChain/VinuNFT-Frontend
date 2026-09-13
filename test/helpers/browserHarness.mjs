@@ -336,7 +336,15 @@ export const TEST_ACCOUNT = "0x12BD0b15D5010De455DCe7944265Fe1D35a84023";
  */
 export function installMockWallet(
     page,
-    { account = TEST_ACCOUNT, chainId = "0xcf", reject = [], chain = {} } = {}
+    {
+        account = TEST_ACCOUNT,
+        chainId = "0xcf",
+        reject = [],
+        chain = {},
+        // Answer the account picker by removing this site's access, the way a
+        // user can from inside MetaMask's picker.
+        revokeOnPermissions = false,
+    } = {}
 ) {
     const state = {
         answers: chain.answers ?? {},
@@ -354,8 +362,9 @@ export function installMockWallet(
         misses: [],
     };
     return page.addInitScript(
-        ({ account, chainId, reject, state, zeroWord }) => {
+        ({ account, chainId, reject, state, zeroWord, revokeOnPermissions }) => {
             const calls = [];
+            let revoked = false;
             window.__walletCalls = calls;
             window.__chainState = state;
 
@@ -376,8 +385,10 @@ export function installMockWallet(
                     }
                     switch (method) {
                         case "eth_requestAccounts":
-                        case "eth_accounts":
+                            revoked = false;
                             return [account];
+                        case "eth_accounts":
+                            return revoked ? [] : [account];
                         case "eth_chainId":
                             return chainId;
                         case "net_version":
@@ -465,8 +476,16 @@ export function installMockWallet(
                         case "wallet_addEthereumChain":
                             return null;
                         case "wallet_requestPermissions":
-                        case "wallet_getPermissions":
+                            if (revokeOnPermissions) {
+                                revoked = true;
+                                for (const handler of this._events.accountsChanged || []) {
+                                    handler([]);
+                                }
+                                return [];
+                            }
                             return [{ parentCapability: "eth_accounts" }];
+                        case "wallet_getPermissions":
+                            return revoked ? [] : [{ parentCapability: "eth_accounts" }];
                         default:
                             return null;
                     }
@@ -484,7 +503,7 @@ export function installMockWallet(
                 },
             };
         },
-        { account, chainId, reject, state, zeroWord: ZERO_WORD }
+        { account, chainId, reject, state, zeroWord: ZERO_WORD, revokeOnPermissions }
     );
 }
 

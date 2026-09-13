@@ -12,7 +12,7 @@ import { atom, useRecoilState } from "recoil";
 import { formatError, standardErrorState } from "../common/error";
 import { safePalProviderOptions } from "../common/safepal";
 import { replaceWalletSubscription } from "../common/walletSubscription";
-import { requestAccountPicker } from "../common/accountPicker";
+import { isSameWallet, requestAccountPicker } from "../common/accountPicker";
 
 const chainIdState = atom({
     key: "chainId",
@@ -177,8 +177,19 @@ export default function WalletButton() {
         // user can see, so re-picking it would change nothing. Ask it for its
         // account picker; see common/accountPicker.js. A different wallet has
         // just been through its own connection prompt instead.
-        if (wallet === previousWallet) {
+        if (isSameWallet(wallet, previousWallet)) {
             await requestAccountPicker(wallet);
+            // The picker can also end the connection: the user may remove this
+            // site's access or lock the wallet from it, and the handlers above
+            // have then already cleared the page. Re-read the accounts instead
+            // of restoring a connection that no longer exists.
+            const accounts = await wallet
+                .request({ method: "eth_accounts" })
+                .catch(() => []);
+            if (!Array.isArray(accounts) || accounts.length === 0) {
+                handleDisconnect();
+                return;
+            }
         }
 
         const newProvider = new ethers.providers.Web3Provider(wallet);

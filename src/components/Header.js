@@ -38,6 +38,10 @@ export default function Header() {
 
     async function walletProviderChanged() {
         if (!walletProvider) {
+            // Forget the chain of a wallet that has gone. The wrong-network
+            // alert reads it, and its Switch button has no wallet to act on:
+            // left in place, the alert stayed up with a button that did nothing.
+            setChainId(null);
             return;
         }
 
