@@ -30,7 +30,9 @@ export function findSafePalProvider(win) {
         const hit = ethereum.providers.find((p) => p && p.isSafePal === true);
         return isProvider(hit) ? hit : null;
     }
-    return ethereum.isSafePal === true && isProvider(ethereum) ? ethereum : null;
+    return ethereum.isSafePal === true && isProvider(ethereum)
+        ? ethereum
+        : null;
 }
 
 /**
@@ -45,6 +47,11 @@ export function safePalProviderOptions(
     if (!provider) return {};
     return {
         "custom-safepal": {
+            // Web3Modal v1 hides any provider whose options carry no truthy
+            // `package` (ProviderController.shouldDisplayProvider), custom
+            // entries included — without this the row never renders. There is
+            // no package to load: the connector already holds the provider.
+            package: {},
             display: {
                 logo: SAFEPAL_ICON,
                 name: "SafePal",

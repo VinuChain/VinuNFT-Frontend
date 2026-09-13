@@ -59,6 +59,10 @@ test("the SafePal row requests accounts from SafePal and hands back that provide
     const mm = provider({ isMetaMask: true });
     const option = safePalProviderOptions({ ethereum: mm, safepalProvider: sp })["custom-safepal"];
     assert.equal(option.display.name, "SafePal");
+    // Web3Modal v1's shouldDisplayProvider drops an entry with no truthy
+    // package — the first build of this fix rendered no SafePal row for
+    // exactly that reason while every other assertion here passed.
+    assert.ok(option.package, "custom entries need a truthy package to render");
     assert.match(option.display.logo, /^data:image\/svg\+xml,/);
     const connected = await option.connector();
     assert.equal(connected, sp);
