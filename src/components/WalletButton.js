@@ -10,6 +10,8 @@ import config from "../config";
 import ethProvider from "eth-provider";
 import { atom, useRecoilState } from "recoil";
 import { formatError, standardErrorState } from "../common/error";
+import { safePalProviderOptions } from "../common/safepal";
+import { replaceWalletSubscription } from "../common/walletSubscription";
 
 const chainIdState = atom({
     key: "chainId",
@@ -53,7 +55,13 @@ export default function WalletButton() {
         const web3Modal = new Web3Modal({
             network: config.networks.main.chainId,
             cacheProvider: false,
-            providerOptions,
+            // SafePal is added per click: it is often only on
+            // window.safepalProvider, which Web3Modal's injected entry never
+            // reads. See common/safepal.js.
+            providerOptions: {
+                ...providerOptions,
+                ...safePalProviderOptions(),
+            },
             disableInjectedProvider: false,
         });
         // Force to prompt wallet selection
@@ -77,13 +85,18 @@ export default function WalletButton() {
         setStandardError(null);
 
         // Remove any pre-existing event handlers
-        delete wallet._events.accountsChanged;
-        delete wallet._events.chainChanged;
-        delete wallet._events.disconnect;
-        delete wallet._events.network;
+        // Only EventEmitter-backed providers expose _events. A wallet connected
+        // through its own namespace (SafePal) need not, and an unguarded
+        // delete there throws and aborts the connection it just approved.
+        if (wallet._events) {
+            delete wallet._events.accountsChanged;
+            delete wallet._events.chainChanged;
+            delete wallet._events.disconnect;
+            delete wallet._events.network;
 
-        // The only remaining one is the default connect eventHandler
-        wallet._eventsCount = 1;
+            // The only remaining one is the default connect eventHandler
+            wallet._eventsCount = 1;
+        }
 
         const handleDisconnect = () => {
             setWalletProvider(null);
@@ -103,19 +116,25 @@ export default function WalletButton() {
             }
         };
 
-        wallet.on("disconnect", handleDisconnect);
-        wallet.on("accountsChanged", handleChange);
-        wallet.on("chainChanged", handleChange);
-
         // ethers.js recommends refreshing the page when a user changes network
-        wallet.on("network", (newNetwork, oldNetwork) => {
+        const handleNetwork = (newNetwork, oldNetwork) => {
             // When a Provider makes its initial connection, it emits a "network"
             // event with a null oldNetwork along with the newNetwork. So, if the
             // oldNetwork exists, it represents a changing network
             if (oldNetwork) {
                 window.location.reload();
             }
-        });
+        };
+
+        // Detaches the previous connection's handlers through the public
+        // listener API first — the _events wipe above cannot reach a provider
+        // that has no _events. See common/walletSubscription.js.
+        replaceWalletSubscription(wallet, [
+            ["disconnect", handleDisconnect],
+            ["accountsChanged", handleChange],
+            ["chainChanged", handleChange],
+            ["network", handleNetwork],
+        ]);
 
         const newProvider = new ethers.providers.Web3Provider(wallet);
         setWalletProvider(newProvider);
