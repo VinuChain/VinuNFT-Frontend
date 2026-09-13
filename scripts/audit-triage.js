@@ -1,6 +1,10 @@
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 
+// Ratcheted down 2026-09-14 by a lockfile re-resolution inside the declared
+// ranges (no package.json change): critical 2 -> 0, high 28 -> 22, moderate
+// 32 -> 26. See the 2026-09-14 section of docs/dependency-audit-triage.md.
+//
 // Ratchet, re-set 2026-09-01 after the dependency remediation described in
 // docs/dependency-audit-triage.md. Previous ceiling (2026-08-20) was
 // low 109, moderate 153, high 252, critical 39 — 553 advisories carried as one
@@ -26,9 +30,9 @@ const path = require("node:path");
 const baseline = {
     info: 0,
     low: 13,
-    moderate: 32,
-    high: 28,
-    critical: 2,
+    moderate: 26,
+    high: 22,
+    critical: 0,
 };
 
 const yarnCli = process.env.npm_execpath;

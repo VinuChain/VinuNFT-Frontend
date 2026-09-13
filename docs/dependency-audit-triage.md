@@ -6,14 +6,14 @@ what the number means.
 
 ## Position
 
-| Severity | Baseline (2026-09-01) | Previous (2026-08-20) |
-|---|---:|---:|
-| Critical | 2 | 39 |
-| High | 28 | 252 |
-| Moderate | 28 | 153 |
-| Low | 13 | 109 |
-| **Total advisories** | **71** | **553** |
-| Audited packages | 1652 | 2365 |
+| Severity | Baseline (2026-09-14) | 2026-09-01 | 2026-08-20 |
+|---|---:|---:|---:|
+| Critical | 0 | 2 | 39 |
+| High | 22 | 28 | 252 |
+| Moderate | 26 | 28 | 153 |
+| Low | 13 | 13 | 109 |
+| **Total advisories** | **61** | **71** | **553** |
+| Audited packages | 1610 | 1652 | 2365 |
 
 The baseline is the exact observed count, so a newly published advisory against a
 package that is still installed fails the gate. That is intended. The response is
@@ -93,6 +93,10 @@ against the real build.
 
 ## The 71 that remain, and why each class is not exploitable here
 
+As of 2026-09-01. The 2026-09-14 re-resolution at the end of this document
+closed some advisories inside these classes; the reasoning for what is left is
+unchanged.
+
 ### `gatsby` — 46, build toolchain only
 
 `sharp`, `webpack`, `js-yaml`, `immutable`, `lodash`, `ajv`, `cross-spawn`,
@@ -133,7 +137,9 @@ cannot be in a graph that resolves no `net`, `tls` or `http`.
 `babel-plugin-styled-components` -> `lodash`. `@babel/traverse`'s arbitrary code
 execution requires an attacker to control source code being *compiled*; the
 plugin runs at build time over this repository's own source. No NFT content, no
-route parameter and no API response ever reaches a Babel compile.
+route parameter and no API response ever reaches a Babel compile. Both criticals
+are closed as of 2026-09-14: `@babel/traverse` now resolves to 7.29.8 in the
+same range.
 
 ### `uuid` moderate x2 (`react-tooltip`, `eth-provider`)
 
@@ -220,3 +226,44 @@ the gate disabled.
 
 Route query strings in this app are parsed by `query-string`, a different
 package, which is not affected.
+
+## Baseline moved down on 2026-09-14: lockfile re-resolution
+
+On `main` the gate reported high 33 against a baseline of 28, failing every
+branch. The response was the one section 3 used, not a higher number: re-resolve
+`yarn.lock` inside the ranges `package.json` already declares. No range changed.
+
+| Package | Was | Now | Closed |
+|---|---|---|---|
+| `@babel/traverse` | 7.16.7 | 7.29.8 | the critical: code execution when compiling crafted source |
+| `js-yaml` | 3.14.1 | 3.15.2 | high x3, moderate x2: merge-key CPU exhaustion, prototype pollution |
+| `flatted` | 3.2.4 | 3.4.4 | high x2: `parse()` prototype pollution and unbounded recursion |
+| `semver` | 7.3.5 | 7.8.5 | high x1: ReDoS |
+| `cross-spawn` | 7.0.3 | 7.0.6 | high x1: ReDoS |
+| `lodash` | 4.17.21 | 4.17.23 / 4.18.1 | moderate x1: `_.unset`/`_.omit` prototype pollution |
+
+The gate counts each advisory once per vulnerable install, so the table does
+not sum to the change in the Position row.
+
+### The high advisories that remain
+
+Every one has its fix outside the range that pulls it in, so no re-resolution
+reaches it:
+
+- Under `gatsby`, build toolchain only (same class as the `gatsby` section
+  above): `immutable` 3.7.6 (`~3.7.6`, fixed in 3.8.3), `lodash` 4.17.23
+  (`~4.17.0`, fixed in 4.18.0), `path-to-regexp` 0.1.12 (exact pin, fixed in
+  0.1.13), `serialize-javascript` 5.0.1 (`^5.0.1`, fixed in 7.0.3), `sharp`
+  0.32.6 (`^0.32.6`, fixed in 0.35), `tmp` 0.0.33 (`^0.0.33`, fixed in 0.2.6).
+- `ws` 8.18.0 (exact pin by `ethers`) and 8.9.0 (exact pin by `eth-provider`):
+  the Node WebSocket transport covered in the `ethers` and `eth-provider`
+  sections above, not in the browser bundle.
+
+Closing these needs a `resolutions` override or a root upgrade (`gatsby`,
+ethers 6), each with its own compatibility run.
+
+**Compatibility evidence:** `yarn install --frozen-lockfile` on Node 22 without
+`--ignore-engines`, `yarn lint`, `yarn test`, `yarn build`, `yarn verify:csp`
+and `yarn verify:rendered` (Chromium against the built `public/`) all pass.
+`yarn audit:triage` returned identical counts on two consecutive runs before the
+baseline was lowered, so the new numbers are not a partial audit response.
