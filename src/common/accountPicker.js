@@ -38,6 +38,20 @@ export function isSameWallet(next, previous) {
     );
 }
 
+/**
+ * Whether what the account picker returned still applies to the page.
+ *
+ * The picker can stay open while the page moves on: the wallet can disconnect,
+ * or a newer Change Wallet can connect another wallet. Its result applies only
+ * while a session exists and it is either the one the picker was opened from
+ * (`session`) or one this same wallet has since reported (an account switch
+ * made in the picker).
+ */
+export function pickerResultApplies(current, session, wallet) {
+    if (!current) return false;
+    return current === session || current.provider === wallet;
+}
+
 export async function requestAccountPicker(wallet) {
     if (!wallet || typeof wallet.request !== "function") return "unsupported";
     try {

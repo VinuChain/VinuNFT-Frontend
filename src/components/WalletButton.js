@@ -13,7 +13,11 @@ import { atom, useRecoilState } from "recoil";
 import { formatError, standardErrorState } from "../common/error";
 import { safePalProviderOptions } from "../common/safepal";
 import { replaceWalletSubscription } from "../common/walletSubscription";
-import { isSameWallet, requestAccountPicker } from "../common/accountPicker";
+import {
+    isSameWallet,
+    pickerResultApplies,
+    requestAccountPicker,
+} from "../common/accountPicker";
 
 const chainIdState = atom({
     key: "chainId",
@@ -197,6 +201,7 @@ export default function WalletButton() {
         // just been through its own connection prompt instead.
         const newProvider = new ethers.providers.Web3Provider(wallet);
         if (isSameWallet(wallet, previousWallet)) {
+            const session = currentWalletProvider();
             await requestAccountPicker(wallet);
             // The picker can also end the connection: the user may remove this
             // site's access or lock the wallet from it. A wallet that says so
@@ -204,7 +209,11 @@ export default function WalletButton() {
             // revokes silently answers eth_accounts with an empty list. A
             // failed read proves neither, so it keeps the session.
             const accounts = await newProvider.listAccounts().catch(() => null);
-            if (!currentWalletProvider()) return;
+            if (
+                !pickerResultApplies(currentWalletProvider(), session, wallet)
+            ) {
+                return;
+            }
             if (accounts?.length === 0) {
                 handleDisconnect();
                 return;

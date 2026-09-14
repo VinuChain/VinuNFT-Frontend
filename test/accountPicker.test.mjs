@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const mod = await import("../src/common/accountPicker.js");
-const { requestAccountPicker, isSameWallet } = mod.default || mod;
+const { requestAccountPicker, isSameWallet, pickerResultApplies } = mod.default || mod;
 
 test("the same provider object is the same wallet", () => {
     const injected = { request() {} };
@@ -21,6 +21,26 @@ test("different wallets, or no wallet before, are not the same wallet", () => {
     assert.equal(isSameWallet({ isFrameNative: true }, metaMask), false);
     assert.equal(isSameWallet(metaMask, undefined), false);
     assert.equal(isSameWallet(undefined, undefined), false);
+});
+
+test("a picker result applies to the session it was opened from, or this wallet's newer one", () => {
+    const wallet = { request() {} };
+    const session = { provider: wallet };
+    assert.equal(pickerResultApplies(session, session, wallet), true);
+    // An account switch made in the picker rebuilds the provider for the same wallet.
+    assert.equal(pickerResultApplies({ provider: wallet }, session, wallet), true);
+    // Frame: the session wraps the previous Frame wrapper, the picker the new one.
+    const frameSession = { provider: { isFrameNative: true } };
+    assert.equal(pickerResultApplies(frameSession, frameSession, { isFrameNative: true }), true);
+});
+
+test("a picker result does not apply after a disconnect or once another wallet took over", () => {
+    // The picker can stay open while a newer Change Wallet connects a different
+    // wallet; applying its result then put the older wallet back.
+    const wallet = { request() {} };
+    const session = { provider: wallet };
+    assert.equal(pickerResultApplies(null, session, wallet), false);
+    assert.equal(pickerResultApplies({ provider: { request() {} } }, session, wallet), false);
 });
 
 /** A wallet whose request() answers with `answer(args)` and records every call. */
