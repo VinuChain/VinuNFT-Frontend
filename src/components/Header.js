@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { RoutingLink, WalletButton } from ".";
-import { useWalletProvider } from "../common/provider";
+import { currentWalletProvider, useWalletProvider } from "../common/provider";
 import config from "../config";
 import { switchToVinuChain } from "../common/network";
 
@@ -38,10 +38,18 @@ export default function Header() {
 
     async function walletProviderChanged() {
         if (!walletProvider) {
+            // Forget the chain of a wallet that has gone. The wrong-network
+            // alert reads it, and its Switch button has no wallet to act on:
+            // left in place, the alert stayed up with a button that did nothing.
+            setChainId(null);
             return;
         }
 
-        const network = await walletProvider.getNetwork();
+        const network = await walletProvider.getNetwork().catch(() => null);
+        // A lookup for a wallet that has since gone or been replaced would
+        // write its chain back over the newer state, alert included. A failed
+        // one has nothing to write.
+        if (!network || currentWalletProvider() !== walletProvider) return;
         const newChainId = network.chainId;
 
         if (chainId !== null && newChainId !== chainId) {

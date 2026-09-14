@@ -312,9 +312,6 @@ test("clearing the selected account is treated as a disconnection", { skip: !has
     const { page, context, errors } = await openPage();
     try {
         await connectWallet(page);
-        await page.evaluate(() => {
-            window.ethereum.selectedAddress = null;
-        });
         await emit(page, "accountsChanged", []);
         await waitUntil(async () => (await bodyText(page)).includes("Connect Wallet"), {
             label: "the header to return to its unconnected state",
@@ -334,10 +331,9 @@ test("switching to another account keeps the session connected", { skip: !hasBui
         // The session has to be visibly connected before an event can be shown
         // not to have ended it.
         await waitForConnectedHeader(page);
+        // The mock wallet has no selectedAddress, like most EIP-1193 wallets:
+        // the account list the event carries is all the app gets.
         const next = "0x000000000000000000000000000000000000BEEF";
-        await page.evaluate((account) => {
-            window.ethereum.selectedAddress = account;
-        }, next);
         await emit(page, "accountsChanged", [next]);
         // Bounded on purpose: a switch that keeps the session changes nothing
         // this page renders, so the only honest test is to give the handler
@@ -348,6 +344,338 @@ test("switching to another account keeps the session connected", { skip: !hasBui
             (await bodyText(page)).includes("Change Wallet"),
             "an account switch is not a disconnection"
         );
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("a chain change from the wallet keeps the session connected", { skip: !hasBuild }, async () => {
+    // chainChanged used to share the account handler, which disconnected any
+    // wallet without selectedAddress on every network switch.
+    const { page, context, errors } = await openPage();
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        await emit(page, "chainChanged", "0xcf");
+        // Bounded for the same reason as the account switch above.
+        await page.waitForTimeout(600);
+
+        assert.ok(
+            (await bodyText(page)).includes("Change Wallet"),
+            "a chain change is not a disconnection"
+        );
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+// --- Change Wallet ----------------------------------------------------------
+
+/** Press Change Wallet and pick the injected wallet again, if a picker shows. */
+async function changeToSameWallet(page) {
+    await page.locator("button", { hasText: /change wallet/i }).first().click();
+    const picker = page.locator("text=Connect to your MetaMask Wallet").first();
+    await picker
+        .waitFor({ state: "visible", timeout: 2000 })
+        .then(() => picker.click())
+        .catch(() => {});
+}
+
+const permissionRequests = async (page) =>
+    (await walletCalls(page)).filter((c) => c.method === "wallet_requestPermissions");
+
+test("Change Wallet on the connected wallet opens its account picker", { skip: !hasBuild }, async () => {
+    // Picking the same wallet again used to re-send only eth_requestAccounts,
+    // which a wallet that already trusts the site answers silently with the
+    // same account: Change Wallet did nothing at all.
+    const { page, context, errors } = await openPage();
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        assert.equal(
+            (await permissionRequests(page)).length,
+            0,
+            "a first connection has already prompted and must not prompt twice"
+        );
+
+        await changeToSameWallet(page);
+        await waitForWalletCalls(page, "wallet_requestPermissions", 1);
+
+        const [request] = await permissionRequests(page);
+        assert.deepEqual(request.params, [{ eth_accounts: {} }]);
+        assert.ok((await bodyText(page)).includes("Change Wallet"));
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("closing the account picker keeps the current account connected", { skip: !hasBuild }, async () => {
+    const { page, context, errors } = await openPage("/", {
+        reject: ["wallet_requestPermissions"],
+    });
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        await changeToSameWallet(page);
+        await waitForWalletCalls(page, "wallet_requestPermissions", 1);
+        // Bounded: staying connected is the absence of a change.
+        await page.waitForTimeout(600);
+
+        assert.ok(
+            (await bodyText(page)).includes("Change Wallet"),
+            "a closed picker is not a disconnection"
+        );
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("removing the site's access from the account picker disconnects", { skip: !hasBuild }, async () => {
+    // The picker can end the connection itself. The flow used to restore the
+    // wallet provider once the picker closed, leaving the page connected to a
+    // wallet that had just revoked it.
+    const { page, context, errors } = await openPage("/", { revokeOnPermissions: true });
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        await changeToSameWallet(page);
+        await waitForWalletCalls(page, "wallet_requestPermissions", 1);
+        await waitUntil(async () => (await bodyText(page)).includes("Connect Wallet"), {
+            label: "the header to return to its unconnected state",
+        });
+        // Bounded: an overwrite after the picker would flip it straight back.
+        await page.waitForTimeout(600);
+
+        assert.ok(
+            (await bodyText(page)).includes("Connect Wallet"),
+            "a revoked site must not be shown as connected"
+        );
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("pressing Change Wallet repeatedly keeps a single picker container", { skip: !hasBuild }, async () => {
+    // Each Web3Modal appended a container but rendered into the first, so every
+    // press used to leave another empty one in the page.
+    const { page, context, errors } = await openPage();
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        for (let press = 1; press <= 3; press++) {
+            await changeToSameWallet(page);
+            await waitForWalletCalls(page, "wallet_requestPermissions", press);
+        }
+
+        assert.equal(await page.locator('[id="WEB3_CONNECT_MODAL_ID"]').count(), 1);
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("Change Wallet on a wallet without request() keeps it connected", { skip: !hasBuild }, async () => {
+    // Web3Modal still hands back window.web3.currentProvider from wallets that
+    // predate EIP-1193, which answer sendAsync only. The account picker is
+    // unsupported there, and re-reading the accounts through request() threw.
+    const { page, context, errors } = await openPage("/", { legacy: true });
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        const reads = (await walletCalls(page)).filter((c) => c.method === "eth_accounts").length;
+
+        await changeToSameWallet(page);
+        await waitForWalletCalls(page, "eth_accounts", reads + 1);
+        // Bounded: staying connected is the absence of a change.
+        await page.waitForTimeout(600);
+
+        assert.ok((await bodyText(page)).includes("Change Wallet"));
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+// --- Late answers -------------------------------------------------------------
+
+/** Hold the wallet's answers to `method` back by `ms` from now on. */
+const delayWallet = (page, method, ms) =>
+    page.evaluate(
+        ([m, t]) => {
+            window.__walletDelays = { ...window.__walletDelays, [m]: t };
+        },
+        [method, ms]
+    );
+
+test("a chain lookup that lands after a disconnect leaves no wrong-network alert", { skip: !hasBuild }, async () => {
+    // The header cleared its chain id on disconnect, but a lookup started while
+    // the wallet was still there wrote the old chain back when it landed,
+    // bringing back an alert whose Switch button had no wallet to act on.
+    const { page, context, errors } = await openPage("/", { chainId: "0x1" });
+    try {
+        await delayWallet(page, "eth_chainId", 600);
+        await connectWallet(page);
+        await emit(page, "disconnect");
+        await waitUntil(async () => (await bodyText(page)).includes("Connect Wallet"), {
+            label: "the header to return to its unconnected state",
+        });
+        // Bounded: past the held-back answers, which are what would restore
+        // it. ethers' getNetwork asks for the chain twice, so the last one
+        // lands about two delays after the lookup starts.
+        await page.waitForTimeout(3000);
+
+        assert.equal(await page.locator(".vinunft-header__network-alert").count(), 0);
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("a chain change still resolving at a disconnect does not take reads back", { skip: !hasBuild }, async () => {
+    // The chain handler waits on the network before choosing the read
+    // provider. A disconnect in that window restored the default one, and the
+    // lookup then landed and pointed reads back at the wallet that had gone.
+    const { page, context, errors } = await openPage("/marketplace/", { chainId: "0xcf" });
+    try {
+        await refreshAfterConnect(page);
+        // The wallet really was the read provider before it went.
+        await waitForWalletCalls(page, "eth_blockNumber", 1);
+
+        await delayWallet(page, "eth_chainId", 600);
+        await emit(page, "chainChanged", "0xcf");
+        await emit(page, "disconnect");
+        await waitUntil(async () => (await bodyText(page)).includes("Connect Wallet"), {
+            label: "the header to return to its unconnected state",
+        });
+        // Bounded: past the held-back answers, which are what would restore
+        // it. ethers' getNetwork asks for the chain twice, so the last one
+        // lands about two delays after the lookup starts.
+        await page.waitForTimeout(3000);
+
+        const refresh = page.locator("button", { hasText: /^Refresh$/ }).first();
+        await waitUntil(() => refresh.isEnabled(), {
+            label: "the marketplace to finish its load",
+        });
+        const blockReads = async () =>
+            (await walletCalls(page)).filter((c) => c.method === "eth_blockNumber").length;
+        const before = await blockReads();
+        await refresh.click();
+        // Bounded: the correct behaviour is a call that never arrives.
+        await page.waitForTimeout(1500);
+
+        assert.equal(await blockReads(), before, "a disconnected wallet must not be read from");
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("an account read still pending at a disconnect does not reconnect", { skip: !hasBuild }, async () => {
+    // An accountsChanged without a list sends the handler to read the accounts
+    // itself. A disconnect while that read was out was overwritten by its
+    // answer, reconnecting a wallet that had just gone.
+    const { page, context, errors } = await openPage();
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        await delayWallet(page, "eth_accounts", 600);
+        await emit(page, "accountsChanged");
+        await emit(page, "disconnect");
+        await waitUntil(async () => (await bodyText(page)).includes("Connect Wallet"), {
+            label: "the header to return to its unconnected state",
+        });
+        // Bounded: past the held-back answer, which is what would reconnect.
+        await page.waitForTimeout(2000);
+
+        assert.ok((await bodyText(page)).includes("Connect Wallet"));
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("a chain change whose network lookup fails stops reading through the wallet", { skip: !hasBuild }, async () => {
+    // The read provider was only replaced after a successful lookup. A wallet
+    // that moved chains and then failed the lookup kept serving reads, from
+    // whatever chain it had moved to.
+    const { page, context, errors } = await openPage("/marketplace/", { chainId: "0xcf" });
+    try {
+        await refreshAfterConnect(page);
+        // The wallet really was the read provider before the change.
+        await waitForWalletCalls(page, "eth_blockNumber", 1);
+
+        // ethers falls back from eth_chainId to net_version, so both fail.
+        await page.evaluate(() => {
+            window.__walletErrors = { eth_chainId: true, net_version: true };
+        });
+        await emit(page, "chainChanged", "0x1");
+        // Bounded: the failed lookup settles within a few ticks.
+        await page.waitForTimeout(1500);
+
+        const refresh = page.locator("button", { hasText: /^Refresh$/ }).first();
+        await waitUntil(() => refresh.isEnabled(), {
+            label: "the marketplace to finish its load",
+        });
+        const blockReads = async () =>
+            (await walletCalls(page)).filter((c) => c.method === "eth_blockNumber").length;
+        const before = await blockReads();
+        await refresh.click();
+        // Bounded: the correct behaviour is a call that never arrives.
+        await page.waitForTimeout(1500);
+
+        assert.equal(await blockReads(), before, "a wallet of unknown chain must not be read from");
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("a chain change after the wallet drops its accounts does not reconnect", { skip: !hasBuild }, async () => {
+    // A locked wallet reports accountsChanged([]) and may still report a chain
+    // change. The chain handler rebuilt the provider regardless, restoring a
+    // connected header with no account behind it.
+    const { page, context, errors } = await openPage();
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        await emit(page, "accountsChanged", []);
+        await waitUntil(async () => (await bodyText(page)).includes("Connect Wallet"), {
+            label: "the header to return to its unconnected state",
+        });
+        await emit(page, "chainChanged", "0xcf");
+        // Bounded: staying disconnected is the absence of a change.
+        await page.waitForTimeout(600);
+
+        assert.ok((await bodyText(page)).includes("Connect Wallet"));
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("an account read that fails after the picker keeps the session", { skip: !hasBuild }, async () => {
+    // Only an empty account list says the site lost access. A failed read says
+    // nothing, and used to be taken as an empty list and disconnect.
+    const { page, context, errors } = await openPage();
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        const reads = (await walletCalls(page)).filter((c) => c.method === "eth_accounts").length;
+        await page.evaluate(() => {
+            window.__walletErrors = { eth_accounts: true };
+        });
+
+        await changeToSameWallet(page);
+        await waitForWalletCalls(page, "eth_accounts", reads + 1);
+        // Bounded: staying connected is the absence of a change.
+        await page.waitForTimeout(600);
+
+        assert.ok((await bodyText(page)).includes("Change Wallet"));
         assert.deepEqual(errors, []);
     } finally {
         await context.close();

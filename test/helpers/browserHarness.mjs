@@ -336,7 +336,18 @@ export const TEST_ACCOUNT = "0x12BD0b15D5010De455DCe7944265Fe1D35a84023";
  */
 export function installMockWallet(
     page,
-    { account = TEST_ACCOUNT, chainId = "0xcf", reject = [], chain = {} } = {}
+    {
+        account = TEST_ACCOUNT,
+        chainId = "0xcf",
+        reject = [],
+        chain = {},
+        // Answer the account picker by removing this site's access, the way a
+        // user can from inside MetaMask's picker.
+        revokeOnPermissions = false,
+        // Expose the wallet the pre-EIP-1193 way: window.web3.currentProvider
+        // with sendAsync and no request(), which Web3Modal still connects.
+        legacy = false,
+    } = {}
 ) {
     const state = {
         answers: chain.answers ?? {},
@@ -354,8 +365,9 @@ export function installMockWallet(
         misses: [],
     };
     return page.addInitScript(
-        ({ account, chainId, reject, state, zeroWord }) => {
+        ({ account, chainId, reject, state, zeroWord, revokeOnPermissions, legacy }) => {
             const calls = [];
+            let revoked = false;
             window.__walletCalls = calls;
             window.__chainState = state;
 
@@ -364,7 +376,8 @@ export function installMockWallet(
             window.ethereum = {
                 isMetaMask: true,
                 chainId,
-                selectedAddress: account,
+                // No selectedAddress: it is a deprecated MetaMask property most
+                // EIP-1193 wallets never set, and the app must not depend on it.
                 _events: {},
                 async request({ method, params }) {
                     calls.push({ method, params });
@@ -373,10 +386,26 @@ export function installMockWallet(
                         error.code = 4001;
                         throw error;
                     }
+                    // Set window.__walletDelays[method] to hold an answer back
+                    // by that many ms, so a test can land it after the user
+                    // has moved on.
+                    const delay = window.__walletDelays?.[method];
+                    if (delay) {
+                        await new Promise((resolve) => setTimeout(resolve, delay));
+                    }
+                    // Set window.__walletErrors[method] to make that method
+                    // fail the way a flaky RPC or legacy transport does.
+                    if (window.__walletErrors?.[method]) {
+                        const error = new Error("Internal JSON-RPC error.");
+                        error.code = -32603;
+                        throw error;
+                    }
                     switch (method) {
                         case "eth_requestAccounts":
-                        case "eth_accounts":
+                            revoked = false;
                             return [account];
+                        case "eth_accounts":
+                            return revoked ? [] : [account];
                         case "eth_chainId":
                             return chainId;
                         case "net_version":
@@ -463,6 +492,17 @@ export function installMockWallet(
                         case "wallet_switchEthereumChain":
                         case "wallet_addEthereumChain":
                             return null;
+                        case "wallet_requestPermissions":
+                            if (revokeOnPermissions) {
+                                revoked = true;
+                                for (const handler of this._events.accountsChanged || []) {
+                                    handler([]);
+                                }
+                                return [];
+                            }
+                            return [{ parentCapability: "eth_accounts" }];
+                        case "wallet_getPermissions":
+                            return revoked ? [] : [{ parentCapability: "eth_accounts" }];
                         default:
                             return null;
                     }
@@ -470,13 +510,46 @@ export function installMockWallet(
                 on(event, handler) {
                     (this._events[event] = this._events[event] || []).push(handler);
                 },
-                removeListener() {},
+                removeListener(event, handler) {
+                    this._events[event] = (this._events[event] || []).filter(
+                        (h) => h !== handler
+                    );
+                },
                 enable() {
                     return this.request({ method: "eth_requestAccounts" });
                 },
             };
+
+            if (legacy) {
+                const wallet = window.ethereum;
+                delete window.ethereum;
+                window.web3 = {
+                    currentProvider: {
+                        isMetaMask: true,
+                        _events: wallet._events,
+                        on: (event, handler) => wallet.on(event, handler),
+                        removeListener: (event, handler) =>
+                            wallet.removeListener(event, handler),
+                        sendAsync(payload, callback) {
+                            wallet.request(payload).then(
+                                (result) =>
+                                    callback(null, { id: payload.id, jsonrpc: "2.0", result }),
+                                (error) => callback(error)
+                            );
+                        },
+                    },
+                };
+            }
         },
-        { account, chainId, reject, state, zeroWord: ZERO_WORD }
+        {
+            account,
+            chainId,
+            reject,
+            state,
+            zeroWord: ZERO_WORD,
+            revokeOnPermissions,
+            legacy,
+        }
     );
 }
 

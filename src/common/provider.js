@@ -44,6 +44,10 @@ const useWalletProvider = () => {
     return [_walletProvider, setWalletProvider];
 };
 
+// The wallet provider as of now, for async work that must not apply its result
+// after the wallet has changed or gone while it was waiting.
+const currentWalletProvider = () => _walletProvider;
+
 const restoreDefaultReadProvider = () => {
     _readProvider = defaultReadProvider;
     for (const listener of Array.from(_readListeners)) {
@@ -57,6 +61,7 @@ const ensProvider = new ethers.providers.AlchemyProvider(
 );
 
 export {
+    currentWalletProvider,
     defaultReadProvider,
     ensProvider,
     restoreDefaultReadProvider,
