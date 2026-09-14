@@ -45,10 +45,11 @@ export default function Header() {
             return;
         }
 
-        const network = await walletProvider.getNetwork();
+        const network = await walletProvider.getNetwork().catch(() => null);
         // A lookup for a wallet that has since gone or been replaced would
-        // write its chain back over the newer state, alert included.
-        if (currentWalletProvider() !== walletProvider) return;
+        // write its chain back over the newer state, alert included. A failed
+        // one has nothing to write.
+        if (!network || currentWalletProvider() !== walletProvider) return;
         const newChainId = network.chainId;
 
         if (chainId !== null && newChainId !== chainId) {

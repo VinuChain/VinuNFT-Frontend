@@ -599,6 +599,42 @@ test("an account read still pending at a disconnect does not reconnect", { skip:
     }
 });
 
+test("a chain change whose network lookup fails stops reading through the wallet", { skip: !hasBuild }, async () => {
+    // The read provider was only replaced after a successful lookup. A wallet
+    // that moved chains and then failed the lookup kept serving reads, from
+    // whatever chain it had moved to.
+    const { page, context, errors } = await openPage("/marketplace/", { chainId: "0xcf" });
+    try {
+        await refreshAfterConnect(page);
+        // The wallet really was the read provider before the change.
+        await waitForWalletCalls(page, "eth_blockNumber", 1);
+
+        // ethers falls back from eth_chainId to net_version, so both fail.
+        await page.evaluate(() => {
+            window.__walletErrors = { eth_chainId: true, net_version: true };
+        });
+        await emit(page, "chainChanged", "0x1");
+        // Bounded: the failed lookup settles within a few ticks.
+        await page.waitForTimeout(1500);
+
+        const refresh = page.locator("button", { hasText: /^Refresh$/ }).first();
+        await waitUntil(() => refresh.isEnabled(), {
+            label: "the marketplace to finish its load",
+        });
+        const blockReads = async () =>
+            (await walletCalls(page)).filter((c) => c.method === "eth_blockNumber").length;
+        const before = await blockReads();
+        await refresh.click();
+        // Bounded: the correct behaviour is a call that never arrives.
+        await page.waitForTimeout(1500);
+
+        assert.equal(await blockReads(), before, "a wallet of unknown chain must not be read from");
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
 test("a chain change after the wallet drops its accounts does not reconnect", { skip: !hasBuild }, async () => {
     // A locked wallet reports accountsChanged([]) and may still report a chain
     // change. The chain handler rebuilt the provider regardless, restoring a

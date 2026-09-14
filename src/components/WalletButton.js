@@ -50,9 +50,12 @@ export default function WalletButton() {
      * The lookup is skipped once `provider` is no longer the wallet provider:
      * a disconnect or a newer event landing while it waited has already set
      * the page up, and applying this result would undo that.
+     *
+     * A lookup that fails reads as "not VinuChain": the wallet may already be
+     * on another chain, so the configured RPC is the safe reader.
      */
     const readThrough = async (provider) => {
-        const network = await provider.getNetwork();
+        const network = await provider.getNetwork().catch(() => null);
         if (currentWalletProvider() !== provider) return;
         if (network?.chainId === config.networks.main.chainId) {
             setReadProvider(provider);
