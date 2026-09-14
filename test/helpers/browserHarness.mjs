@@ -393,6 +393,13 @@ export function installMockWallet(
                     if (delay) {
                         await new Promise((resolve) => setTimeout(resolve, delay));
                     }
+                    // Set window.__walletErrors[method] to make that method
+                    // fail the way a flaky RPC or legacy transport does.
+                    if (window.__walletErrors?.[method]) {
+                        const error = new Error("Internal JSON-RPC error.");
+                        error.code = -32603;
+                        throw error;
+                    }
                     switch (method) {
                         case "eth_requestAccounts":
                             revoked = false;

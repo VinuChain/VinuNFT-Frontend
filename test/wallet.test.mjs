@@ -574,3 +574,74 @@ test("a chain change still resolving at a disconnect does not take reads back", 
         await context.close();
     }
 });
+
+test("an account read still pending at a disconnect does not reconnect", { skip: !hasBuild }, async () => {
+    // An accountsChanged without a list sends the handler to read the accounts
+    // itself. A disconnect while that read was out was overwritten by its
+    // answer, reconnecting a wallet that had just gone.
+    const { page, context, errors } = await openPage();
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        await delayWallet(page, "eth_accounts", 600);
+        await emit(page, "accountsChanged");
+        await emit(page, "disconnect");
+        await waitUntil(async () => (await bodyText(page)).includes("Connect Wallet"), {
+            label: "the header to return to its unconnected state",
+        });
+        // Bounded: past the held-back answer, which is what would reconnect.
+        await page.waitForTimeout(2000);
+
+        assert.ok((await bodyText(page)).includes("Connect Wallet"));
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("a chain change after the wallet drops its accounts does not reconnect", { skip: !hasBuild }, async () => {
+    // A locked wallet reports accountsChanged([]) and may still report a chain
+    // change. The chain handler rebuilt the provider regardless, restoring a
+    // connected header with no account behind it.
+    const { page, context, errors } = await openPage();
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        await emit(page, "accountsChanged", []);
+        await waitUntil(async () => (await bodyText(page)).includes("Connect Wallet"), {
+            label: "the header to return to its unconnected state",
+        });
+        await emit(page, "chainChanged", "0xcf");
+        // Bounded: staying disconnected is the absence of a change.
+        await page.waitForTimeout(600);
+
+        assert.ok((await bodyText(page)).includes("Connect Wallet"));
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("an account read that fails after the picker keeps the session", { skip: !hasBuild }, async () => {
+    // Only an empty account list says the site lost access. A failed read says
+    // nothing, and used to be taken as an empty list and disconnect.
+    const { page, context, errors } = await openPage();
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        const reads = (await walletCalls(page)).filter((c) => c.method === "eth_accounts").length;
+        await page.evaluate(() => {
+            window.__walletErrors = { eth_accounts: true };
+        });
+
+        await changeToSameWallet(page);
+        await waitForWalletCalls(page, "eth_accounts", reads + 1);
+        // Bounded: staying connected is the absence of a change.
+        await page.waitForTimeout(600);
+
+        assert.ok((await bodyText(page)).includes("Change Wallet"));
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});

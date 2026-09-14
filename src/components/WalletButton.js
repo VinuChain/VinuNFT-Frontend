@@ -136,9 +136,18 @@ export default function WalletButton() {
             const regeneratedProvider = new ethers.providers.Web3Provider(
                 wallet
             );
-            const current = Array.isArray(accounts)
-                ? accounts
-                : await regeneratedProvider.listAccounts().catch(() => []);
+            let current = accounts;
+            if (!Array.isArray(current)) {
+                const session = currentWalletProvider();
+                current = await regeneratedProvider
+                    .listAccounts()
+                    .catch(() => null);
+                // A failed read says nothing, and a session that changed or
+                // ended while it was out is newer than its answer.
+                if (current === null || currentWalletProvider() !== session) {
+                    return;
+                }
+            }
             if (current.length > 0) {
                 setWalletProvider(regeneratedProvider);
                 await readThrough(regeneratedProvider);
@@ -152,6 +161,9 @@ export default function WalletButton() {
         // selectedAddress was missing. The chain id is refreshed too, so the
         // wrong-network alert follows the wallet.
         const handleChainChanged = async () => {
+            // A chain change does not bring back a session that has ended,
+            // e.g. a wallet that reported no accounts when it locked.
+            if (!currentWalletProvider()) return;
             const regeneratedProvider = new ethers.providers.Web3Provider(
                 wallet
             );
@@ -187,11 +199,13 @@ export default function WalletButton() {
         if (isSameWallet(wallet, previousWallet)) {
             await requestAccountPicker(wallet);
             // The picker can also end the connection: the user may remove this
-            // site's access or lock the wallet from it, and the handlers above
-            // have then already cleared the page. Re-read the accounts instead
-            // of restoring a connection that no longer exists.
-            const accounts = await newProvider.listAccounts().catch(() => []);
-            if (accounts.length === 0) {
+            // site's access or lock the wallet from it. A wallet that says so
+            // through accountsChanged has already cleared the page; one that
+            // revokes silently answers eth_accounts with an empty list. A
+            // failed read proves neither, so it keeps the session.
+            const accounts = await newProvider.listAccounts().catch(() => null);
+            if (!currentWalletProvider()) return;
+            if (accounts?.length === 0) {
                 handleDisconnect();
                 return;
             }
