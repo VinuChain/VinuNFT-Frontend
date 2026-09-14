@@ -344,6 +344,9 @@ export function installMockWallet(
         // Answer the account picker by removing this site's access, the way a
         // user can from inside MetaMask's picker.
         revokeOnPermissions = false,
+        // Expose the wallet the pre-EIP-1193 way: window.web3.currentProvider
+        // with sendAsync and no request(), which Web3Modal still connects.
+        legacy = false,
     } = {}
 ) {
     const state = {
@@ -362,7 +365,7 @@ export function installMockWallet(
         misses: [],
     };
     return page.addInitScript(
-        ({ account, chainId, reject, state, zeroWord, revokeOnPermissions }) => {
+        ({ account, chainId, reject, state, zeroWord, revokeOnPermissions, legacy }) => {
             const calls = [];
             let revoked = false;
             window.__walletCalls = calls;
@@ -382,6 +385,13 @@ export function installMockWallet(
                         const error = new Error("User rejected the request.");
                         error.code = 4001;
                         throw error;
+                    }
+                    // Set window.__walletDelays[method] to hold an answer back
+                    // by that many ms, so a test can land it after the user
+                    // has moved on.
+                    const delay = window.__walletDelays?.[method];
+                    if (delay) {
+                        await new Promise((resolve) => setTimeout(resolve, delay));
                     }
                     switch (method) {
                         case "eth_requestAccounts":
@@ -502,8 +512,37 @@ export function installMockWallet(
                     return this.request({ method: "eth_requestAccounts" });
                 },
             };
+
+            if (legacy) {
+                const wallet = window.ethereum;
+                delete window.ethereum;
+                window.web3 = {
+                    currentProvider: {
+                        isMetaMask: true,
+                        _events: wallet._events,
+                        on: (event, handler) => wallet.on(event, handler),
+                        removeListener: (event, handler) =>
+                            wallet.removeListener(event, handler),
+                        sendAsync(payload, callback) {
+                            wallet.request(payload).then(
+                                (result) =>
+                                    callback(null, { id: payload.id, jsonrpc: "2.0", result }),
+                                (error) => callback(error)
+                            );
+                        },
+                    },
+                };
+            }
         },
-        { account, chainId, reject, state, zeroWord: ZERO_WORD, revokeOnPermissions }
+        {
+            account,
+            chainId,
+            reject,
+            state,
+            zeroWord: ZERO_WORD,
+            revokeOnPermissions,
+            legacy,
+        }
     );
 }
 

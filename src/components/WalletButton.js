@@ -2,6 +2,7 @@ import React from "react";
 import { ethers } from "ethers";
 import Web3Modal from "web3modal";
 import {
+    currentWalletProvider,
     restoreDefaultReadProvider,
     useReadProvider,
     useWalletProvider,
@@ -41,15 +42,20 @@ export default function WalletButton() {
      * foreign head, and the mixed events and impossible `lastIndexedBlock`
      * survive the disconnect. Writes still go to the wallet, which is what the
      * wrong-network banner is about.
+     *
+     * The lookup is skipped once `provider` is no longer the wallet provider:
+     * a disconnect or a newer event landing while it waited has already set
+     * the page up, and applying this result would undo that.
      */
     const readThrough = async (provider) => {
         const network = await provider.getNetwork();
+        if (currentWalletProvider() !== provider) return;
         if (network?.chainId === config.networks.main.chainId) {
             setReadProvider(provider);
         } else {
             restoreDefaultReadProvider();
         }
-        return network?.chainId;
+        setChainId(network?.chainId);
     };
 
     const connectWallet = async () => {
@@ -125,15 +131,15 @@ export default function WalletButton() {
          * disconnect.
          */
         const handleAccountsChanged = async (accounts) => {
+            // Accounts are read through ethers, not wallet.request: Web3Modal
+            // still hands back legacy send/sendAsync providers that have none.
+            const regeneratedProvider = new ethers.providers.Web3Provider(
+                wallet
+            );
             const current = Array.isArray(accounts)
                 ? accounts
-                : await wallet
-                      .request({ method: "eth_accounts" })
-                      .catch(() => []);
+                : await regeneratedProvider.listAccounts().catch(() => []);
             if (current.length > 0) {
-                const regeneratedProvider = new ethers.providers.Web3Provider(
-                    wallet
-                );
                 setWalletProvider(regeneratedProvider);
                 await readThrough(regeneratedProvider);
             } else {
@@ -150,7 +156,7 @@ export default function WalletButton() {
                 wallet
             );
             setWalletProvider(regeneratedProvider);
-            setChainId(await readThrough(regeneratedProvider));
+            await readThrough(regeneratedProvider);
         };
 
         // ethers.js recommends refreshing the page when a user changes network
@@ -177,24 +183,22 @@ export default function WalletButton() {
         // user can see, so re-picking it would change nothing. Ask it for its
         // account picker; see common/accountPicker.js. A different wallet has
         // just been through its own connection prompt instead.
+        const newProvider = new ethers.providers.Web3Provider(wallet);
         if (isSameWallet(wallet, previousWallet)) {
             await requestAccountPicker(wallet);
             // The picker can also end the connection: the user may remove this
             // site's access or lock the wallet from it, and the handlers above
             // have then already cleared the page. Re-read the accounts instead
             // of restoring a connection that no longer exists.
-            const accounts = await wallet
-                .request({ method: "eth_accounts" })
-                .catch(() => []);
-            if (!Array.isArray(accounts) || accounts.length === 0) {
+            const accounts = await newProvider.listAccounts().catch(() => []);
+            if (accounts.length === 0) {
                 handleDisconnect();
                 return;
             }
         }
 
-        const newProvider = new ethers.providers.Web3Provider(wallet);
         setWalletProvider(newProvider);
-        setChainId(await readThrough(newProvider));
+        await readThrough(newProvider);
     };
 
     return (

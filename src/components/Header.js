@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { RoutingLink, WalletButton } from ".";
-import { useWalletProvider } from "../common/provider";
+import { currentWalletProvider, useWalletProvider } from "../common/provider";
 import config from "../config";
 import { switchToVinuChain } from "../common/network";
 
@@ -46,6 +46,9 @@ export default function Header() {
         }
 
         const network = await walletProvider.getNetwork();
+        // A lookup for a wallet that has since gone or been replaced would
+        // write its chain back over the newer state, alert included.
+        if (currentWalletProvider() !== walletProvider) return;
         const newChainId = network.chainId;
 
         if (chainId !== null && newChainId !== chainId) {

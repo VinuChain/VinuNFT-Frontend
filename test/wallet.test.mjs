@@ -478,3 +478,99 @@ test("pressing Change Wallet repeatedly keeps a single picker container", { skip
         await context.close();
     }
 });
+
+test("Change Wallet on a wallet without request() keeps it connected", { skip: !hasBuild }, async () => {
+    // Web3Modal still hands back window.web3.currentProvider from wallets that
+    // predate EIP-1193, which answer sendAsync only. The account picker is
+    // unsupported there, and re-reading the accounts through request() threw.
+    const { page, context, errors } = await openPage("/", { legacy: true });
+    try {
+        await connectWallet(page);
+        await waitForConnectedHeader(page);
+        const reads = (await walletCalls(page)).filter((c) => c.method === "eth_accounts").length;
+
+        await changeToSameWallet(page);
+        await waitForWalletCalls(page, "eth_accounts", reads + 1);
+        // Bounded: staying connected is the absence of a change.
+        await page.waitForTimeout(600);
+
+        assert.ok((await bodyText(page)).includes("Change Wallet"));
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+// --- Late answers -------------------------------------------------------------
+
+/** Hold the wallet's answers to `method` back by `ms` from now on. */
+const delayWallet = (page, method, ms) =>
+    page.evaluate(
+        ([m, t]) => {
+            window.__walletDelays = { ...window.__walletDelays, [m]: t };
+        },
+        [method, ms]
+    );
+
+test("a chain lookup that lands after a disconnect leaves no wrong-network alert", { skip: !hasBuild }, async () => {
+    // The header cleared its chain id on disconnect, but a lookup started while
+    // the wallet was still there wrote the old chain back when it landed,
+    // bringing back an alert whose Switch button had no wallet to act on.
+    const { page, context, errors } = await openPage("/", { chainId: "0x1" });
+    try {
+        await delayWallet(page, "eth_chainId", 600);
+        await connectWallet(page);
+        await emit(page, "disconnect");
+        await waitUntil(async () => (await bodyText(page)).includes("Connect Wallet"), {
+            label: "the header to return to its unconnected state",
+        });
+        // Bounded: past the held-back answers, which are what would restore
+        // it. ethers' getNetwork asks for the chain twice, so the last one
+        // lands about two delays after the lookup starts.
+        await page.waitForTimeout(3000);
+
+        assert.equal(await page.locator(".vinunft-header__network-alert").count(), 0);
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("a chain change still resolving at a disconnect does not take reads back", { skip: !hasBuild }, async () => {
+    // The chain handler waits on the network before choosing the read
+    // provider. A disconnect in that window restored the default one, and the
+    // lookup then landed and pointed reads back at the wallet that had gone.
+    const { page, context, errors } = await openPage("/marketplace/", { chainId: "0xcf" });
+    try {
+        await refreshAfterConnect(page);
+        // The wallet really was the read provider before it went.
+        await waitForWalletCalls(page, "eth_blockNumber", 1);
+
+        await delayWallet(page, "eth_chainId", 600);
+        await emit(page, "chainChanged", "0xcf");
+        await emit(page, "disconnect");
+        await waitUntil(async () => (await bodyText(page)).includes("Connect Wallet"), {
+            label: "the header to return to its unconnected state",
+        });
+        // Bounded: past the held-back answers, which are what would restore
+        // it. ethers' getNetwork asks for the chain twice, so the last one
+        // lands about two delays after the lookup starts.
+        await page.waitForTimeout(3000);
+
+        const refresh = page.locator("button", { hasText: /^Refresh$/ }).first();
+        await waitUntil(() => refresh.isEnabled(), {
+            label: "the marketplace to finish its load",
+        });
+        const blockReads = async () =>
+            (await walletCalls(page)).filter((c) => c.method === "eth_blockNumber").length;
+        const before = await blockReads();
+        await refresh.click();
+        // Bounded: the correct behaviour is a call that never arrives.
+        await page.waitForTimeout(1500);
+
+        assert.equal(await blockReads(), before, "a disconnected wallet must not be read from");
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
