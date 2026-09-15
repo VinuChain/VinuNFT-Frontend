@@ -22,7 +22,7 @@ test("the testnet is recorded, and recorded as unusable by this app", () => {
     // Measured 2026-09-02: eth_chainId returns 0xce and testnet.vinuexplorer.org
     // answers. The ledger's "no reachable VinuChain testnet" blocker is void.
     assert.equal(config.networks.testnet.chainId, 206);
-    assert.equal(config.networks.testnet.rpc, "https://vinufoundation-rpc.com");
+    assert.equal(config.networks.testnet.rpc, "https://testnet-rpc.vinuchain.org");
 
     // Reachable is not the same as usable. Nothing is deployed on 206, so the
     // app has no addresses and no first blocks for it, and the CSP does not
