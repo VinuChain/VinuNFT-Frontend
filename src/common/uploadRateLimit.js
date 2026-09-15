@@ -1,3 +1,4 @@
+import { serverFetch } from "./serverFetch";
 /**
  * Durable rate limiting for the IPFS upload endpoint.
  *
@@ -57,7 +58,7 @@ function storeTimeoutMs() {
 async function upstashIncrement(url, token, commands) {
     let response;
     try {
-        response = await fetch(`${url.replace(/\/+$/, "")}/pipeline`, {
+        response = await serverFetch(`${url.replace(/\/+$/, "")}/pipeline`, {
             method: "POST",
             headers: {
                 Authorization: `Bearer ${token}`,

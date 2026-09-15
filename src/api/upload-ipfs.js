@@ -1,3 +1,4 @@
+import { serverFetch, serverFormData } from "../common/serverFetch";
 import { ethers } from "ethers";
 import {
     createUploadMessage,
@@ -299,7 +300,7 @@ async function pinJson(metadata) {
         );
     }
 
-    const response = await fetch(PINATA_PIN_JSON_URL, {
+    const response = await serverFetch(PINATA_PIN_JSON_URL, {
         method: "POST",
         headers: {
             Authorization: `Bearer ${envValue("PINATA_API_JWT")}`,
@@ -360,14 +361,15 @@ async function pinFile(payload) {
         );
     }
 
-    const formData = new FormData();
+    const FormDataCtor = await serverFormData();
+    const formData = new FormDataCtor();
     formData.append(
         "file",
         new Blob([fileBytes], { type: declaredType }),
         payload.name
     );
 
-    return fetch(PINATA_PIN_FILE_URL, {
+    return serverFetch(PINATA_PIN_FILE_URL, {
         method: "POST",
         headers: {
             Authorization: `Bearer ${envValue("PINATA_API_JWT")}`,

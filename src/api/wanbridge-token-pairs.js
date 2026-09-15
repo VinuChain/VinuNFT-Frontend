@@ -2,6 +2,9 @@ import {
     buildVinuChainRoutes,
     fetchWanBridgeJson,
     VINUCHAIN_CHAIN_TYPE,
+    WanBridgeUpstreamError,
+    WANBRIDGE_FAILURE,
+    WANBRIDGE_TOKEN_PAIRS_FALLBACK,
 } from "../common/wanbridge";
 import { applyApiRateLimit, sendJson } from "../common/apiRateLimit";
 
@@ -15,13 +18,29 @@ async function getVinuChainCatalog() {
         return cachedCatalog.value;
     }
 
-    const [hashResponse, pairsResponse] = await Promise.all([
-        fetchWanBridgeJson("tokenPairsHash"),
-        fetchWanBridgeJson("tokenPairs"),
+    // The hash is advisory - it is only reported - so its failure must not take
+    // the catalog down with it. The pairs are the page, and they alone get the
+    // second source.
+    const [hashResult, pairsResponse] = await Promise.all([
+        fetchWanBridgeJson("tokenPairsHash").catch(() => null),
+        fetchWanBridgeJson(
+            "tokenPairs",
+            {},
+            {
+                fallback: WANBRIDGE_TOKEN_PAIRS_FALLBACK,
+            }
+        ),
     ]);
+    const hashResponse = hashResult ?? { ok: false, payload: {} };
 
     if (!pairsResponse.ok || !pairsResponse.payload.success) {
-        throw new Error("WanBridge tokenPairs failed");
+        throw new WanBridgeUpstreamError(
+            `WanBridge tokenPairs returned ${pairsResponse.status} without success`,
+            {
+                reason: WANBRIDGE_FAILURE.STATUS,
+                status: pairsResponse.status,
+            }
+        );
     }
 
     const pairs = pairsResponse.payload.data.filter(
@@ -46,6 +65,24 @@ async function getVinuChainCatalog() {
     };
 
     return value;
+}
+
+/**
+ * The last catalog this instance fetched, however old, or null.
+ *
+ * Held past its TTL on purpose: when a refresh fails, a bridge page that lists
+ * the routes it listed a minute ago is worth more than a 502, and the pairs
+ * themselves change rarely. It is returned marked `stale` with the time it was
+ * fetched — never as if it were live — so the page can say so.
+ */
+function lastKnownCatalog() {
+    return cachedCatalog ? cachedCatalog.value : null;
+}
+
+/** Test seam: the catalog is module state, so one test's success would
+ *  otherwise be served as another test's stale fallback. */
+export function _resetCatalogCache() {
+    cachedCatalog = null;
 }
 
 export default async function handler(req, res) {
@@ -82,11 +119,36 @@ export default async function handler(req, res) {
             JSON.stringify({
                 event: "vinunft.wanbridge_proxy_failed",
                 route: "token-pairs",
+                reason: error?.reason ?? "unknown",
+                upstreamStatus: error?.status ?? null,
+                code: error?.code ?? null,
                 cause: error?.message ?? String(error),
             })
         );
+
+        // Serve the last catalog this instance fetched rather than nothing.
+        // Explicitly marked stale with the time it was taken: the page must be
+        // able to say the routes may have moved, and must never present this
+        // as live. A cold instance has no catalog and still fails.
+        const stale = lastKnownCatalog();
+        if (stale) {
+            res.setHeader("Cache-Control", "no-store");
+            return sendJson(res, 200, {
+                ...stale,
+                stale: true,
+                staleReason: error?.reason ?? "unknown",
+            });
+        }
+
+        // `reason` is a fixed enum describing OUR call, not the upstream's
+        // content, so it is safe to return and is what makes a live 502
+        // diagnosable without shell access to the platform's logs.
         return sendJson(res, 502, {
             message: "Could not load WanBridge pairs",
+            reason: error?.reason ?? "unknown",
+            upstreamStatus: error?.status ?? null,
+            code: error?.code ?? null,
+            detail: error?.detail ?? null,
         });
     }
 }

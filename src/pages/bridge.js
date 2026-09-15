@@ -723,6 +723,30 @@ export default function Bridge({ location }) {
                     <></>
                 )}
 
+                {catalog?.stale ? (
+                    // The proxy could not reach WanBridge and answered with the
+                    // last catalog it held. Saying so is the whole point: routes
+                    // and fees shown below may have moved, and a bridge that
+                    // quietly renders stale routes as live is worse than one
+                    // that says it is out of date.
+                    <p
+                        className="notification is-warning bridge-stale"
+                        role="status"
+                    >
+                        WanBridge could not be reached, so these routes are the
+                        last ones loaded
+                        {catalog.fetchedAt
+                            ? ` (${new Date(
+                                  catalog.fetchedAt
+                              ).toLocaleString()})`
+                            : ""}
+                        . They may be out of date — check on WanBridge before
+                        sending anything.
+                    </p>
+                ) : (
+                    <></>
+                )}
+
                 {featuredRoutes.length > 0 ? (
                     <section className="bridge-featured">
                         {featuredRoutes.map((route) => (
