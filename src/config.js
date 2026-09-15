@@ -44,7 +44,7 @@ const config = {
         testnet: {
             name: "VinuChain Testnet",
             chainId: 206,
-            rpc: "https://vinufoundation-rpc.com",
+            rpc: "https://testnet-rpc.vinuchain.org",
             blockExplorer: "https://testnet.vinuexplorer.org",
         },
     },
