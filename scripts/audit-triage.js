@@ -1,6 +1,9 @@
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 
+// Moderate 6 -> 5 on 2026-09-24: the app dropped query-string, removing one of
+// decode-uri-component's two paths (gatsby > query-string remains).
+//
 // Ratcheted down 2026-09-24 by `resolutions` overrides plus an in-range
 // re-resolution: low 13 -> 9, moderate 26 -> 6, high 22 -> 6. See the
 // 2026-09-24 section of docs/dependency-audit-triage.md.
@@ -34,7 +37,7 @@ const path = require("node:path");
 const baseline = {
     info: 0,
     low: 9,
-    moderate: 6,
+    moderate: 5,
     high: 6,
     critical: 0,
 };

@@ -9,7 +9,6 @@ import {
 import config from "../../config";
 import { ethers } from "ethers";
 import { v1 } from "../../common/abi";
-import * as queryString from "query-string";
 import { socialPreview, parseNftRoute } from "../../common/socialPreview";
 
 import HTMLViewer from "../../components/HTMLViewer";
@@ -108,7 +107,7 @@ export default function NFTPage(props) {
     // is correct for every read at once rather than a guard per setter. The
     // guard that used to try was commented out below the reads it protected.
     const { type, id } = parseNftRoute(
-        queryString.parse(props.location.search)
+        Object.fromEntries(new URLSearchParams(props.location.search))
     );
     return <NFTDetail {...props} key={`${type}:${id}`} />;
 }
@@ -119,12 +118,17 @@ function NFTDetail({ location }) {
     const marketplaceAddress = config.contractAddresses.v1.marketplace;
     const marketplaceABI = v1.marketplace;
 
-    const parsedQuery = queryString.parse(location.search);
+    const parsedQuery = Object.fromEntries(
+        new URLSearchParams(location.search)
+    );
     // parseInt("5abc") is 5 and parseInt("-1") is -1, so the page used to read
     // a token the URL never named; an unrecognised type built a contract at
     // address `undefined` and threw inside the async reads. One parser, shared
     // with the social preview, so the two cannot disagree about the same URL.
-    const { type: macroNftType, id } = parseNftRoute(parsedQuery);
+    const { type: macroNftType, id: routeId } = parseNftRoute(parsedQuery);
+    // Every read below guards on `id` alone, so an id without a valid type
+    // (/nft?id=1) built contracts at address `undefined` with no ABI and threw.
+    const id = macroNftType ? routeId : null;
 
     const nftAddress = config.contractAddresses.v1[macroNftType];
     const nftABI = v1[macroNftType];

@@ -41,9 +41,7 @@ test("a text NFT renders its on-chain body against the shipped CSP", { skip: !ha
     page.on("console", (m) => {
         const t = m.text();
         if (!/Content Security Policy|Refused to connect/i.test(t)) return;
-        // The ENS lookup against Alchemy mainnet is refused by the same policy.
-        // It is a separate defect and must not mask this one.
-        if (/alchemyapi\.io|frame-ancestors/i.test(t)) return;
+        if (/frame-ancestors/i.test(t)) return;
         cspErrors.push(t);
     });
 
