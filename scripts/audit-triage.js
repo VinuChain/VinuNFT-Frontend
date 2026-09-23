@@ -1,6 +1,10 @@
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 
+// Ratcheted down 2026-09-24 by `resolutions` overrides plus an in-range
+// re-resolution: low 13 -> 9, moderate 26 -> 6, high 22 -> 6. See the
+// 2026-09-24 section of docs/dependency-audit-triage.md.
+//
 // Ratcheted down 2026-09-14 by a lockfile re-resolution inside the declared
 // ranges (no package.json change): critical 2 -> 0, high 28 -> 22, moderate
 // 32 -> 26. See the 2026-09-14 section of docs/dependency-audit-triage.md.
@@ -29,9 +33,9 @@ const path = require("node:path");
 // advisory is reachable, not to raise the number.
 const baseline = {
     info: 0,
-    low: 13,
-    moderate: 26,
-    high: 22,
+    low: 9,
+    moderate: 6,
+    high: 6,
     critical: 0,
 };
 

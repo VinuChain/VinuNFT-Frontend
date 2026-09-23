@@ -6,14 +6,14 @@ what the number means.
 
 ## Position
 
-| Severity | Baseline (2026-09-14) | 2026-09-01 | 2026-08-20 |
-|---|---:|---:|---:|
-| Critical | 0 | 2 | 39 |
-| High | 22 | 28 | 252 |
-| Moderate | 26 | 28 | 153 |
-| Low | 13 | 13 | 109 |
-| **Total advisories** | **61** | **71** | **553** |
-| Audited packages | 1610 | 1652 | 2365 |
+| Severity | Baseline (2026-09-24) | 2026-09-14 | 2026-09-01 | 2026-08-20 |
+|---|---:|---:|---:|---:|
+| Critical | 0 | 0 | 2 | 39 |
+| High | 6 | 22 | 28 | 252 |
+| Moderate | 6 | 26 | 28 | 153 |
+| Low | 9 | 13 | 13 | 109 |
+| **Total advisories** | **21** | **61** | **71** | **553** |
+| Audited packages | 1688 | 1610 | 1652 | 2365 |
 
 The baseline is the exact observed count, so a newly published advisory against a
 package that is still installed fails the gate. That is intended. The response is
@@ -267,3 +267,62 @@ ethers 6), each with its own compatibility run.
 and `yarn verify:rendered` (Chromium against the built `public/`) all pass.
 `yarn audit:triage` returned identical counts on two consecutive runs before the
 baseline was lowered, so the new numbers are not a partial audit response.
+
+## Baseline moved down on 2026-09-24: `resolutions` overrides
+
+The overrides the 2026-09-14 section called for. Each pins a patched release
+that is API-compatible with the parent's use, inside the same major where one
+exists:
+
+| Package | Was | Now | Parent pinning the old one |
+|---|---|---|---|
+| `immutable` | 3.7.6 | 3.8.4 | `gatsby` > `@ardatan/relay-compiler` (`~3.7.6`) |
+| `lodash` | 4.17.23 | 4.18.1 | `gatsby` > `@graphql-codegen/plugin-helpers` (`~4.17.0`) |
+| `path-to-regexp` | 0.1.12 | 0.1.13 | `gatsby` (exact pin) |
+| `qs` | 6.15.3 | 6.16.0 | `gatsby` > `express` (`~6.15.1`) |
+| `serialize-javascript` | 5.0.1 | 7.1.1 | `gatsby` > `css-minimizer-webpack-plugin` (`^5.0.1`) |
+| `tmp` | 0.0.33 | 0.2.7 | `gatsby-cli` > `inquirer` > `external-editor` (`^0.0.33`) |
+| `cookie` | 0.5.0 | 0.7.2 | `gatsby` (`^0.5.0`) |
+| `webpack` | 5.98.0 | 5.104.1 | `gatsby` (`~5.98.0`); the lowest patched release, not latest |
+| `ws` | 8.9.0 / 8.18.0 | 8.21.3 | `eth-provider`, `ethers` (exact pins) |
+| `uuid` | 7.0.3 / 8.3.2 / 9.0.0 | 11.1.1 | `react-tooltip`, `gatsby`, `eth-provider`; `v4()`, plus `v5()` in Gatsby's `createNodeId`, none with a `buf` |
+
+`serialize-javascript` 7 declares `node >=20`, so `engines` moves from
+`>=18 <23` to `>=20 <23`. CI already builds on Node 20, and Node 18 has been
+end-of-life since April 2025.
+
+In-range re-resolution, no override: `ajv` 6.12.6 / 8.8.2 -> 6.15.0 / 8.20.0,
+`@babel/runtime` 7.16.7 / 7.17.9 -> 7.29.7, `word-wrap` 1.2.3 -> 1.2.5,
+`cookiejar` 2.1.3 -> 2.1.4.
+
+`uuid` is the one override that reaches the browser bundle: `react-tooltip`
+calls `uuid.v4()` in the constructor of every `ReactTooltip`, which each
+listing group mounts, so the buy and listing journeys in `verify:rendered`
+exercise it.
+
+### What remains, and why
+
+- `sharp` high x2 (libvips/libheif). The fix is 0.35, and `gatsby build` then
+  fails `ENGINE.VALIDATION`: Gatsby copies sharp's native addon into its
+  rendering engine without the `@img/sharp-libvips-*` shared library that
+  sharp >= 0.33 loads from a separate package. `gatsby-sharp` pins `^0.32.6` on
+  the latest Gatsby (5.16.1). No plugin here processes images
+  (`gatsby-plugin-sharp`/`gatsby-plugin-image` are not installed), so no input
+  reaches libvips.
+- `file-type` moderate (ASF parser loop). The fix is 21, ESM-only, under
+  `gatsby-core-utils`' CommonJS `require`. It only sniffs files Gatsby downloads
+  at build time, and this site downloads none.
+- `decode-uri-component` moderate. The fix is 0.5, ESM-only, under the CommonJS
+  `query-string` 7 here and `query-string` 6 inside Gatsby. See the
+  `query-string` section above; the upgrade path is `URLSearchParams`.
+- `@parcel/reporter-dev-server` moderate. `gatsby-parcel-config` pins the whole
+  Parcel family at exactly 2.8.3; overriding one member splits it, and the dev
+  server reporter never runs in `gatsby build`.
+- `elliptic` low x9. No patched version exists; the fix is ethers 6 (see
+  "Deferred, with the reason").
+
+**Compatibility evidence:** `yarn install --frozen-lockfile` after removing
+`node_modules`, `yarn lint`, `yarn test`, `yarn clean && yarn build`,
+`yarn verify:csp`, `yarn verify:rendered` (230 in Chromium) and
+`yarn verify:deployed` all pass, and a console and network pass over the main
+pages matched the pre-change build.
