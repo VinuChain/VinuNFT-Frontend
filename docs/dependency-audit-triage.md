@@ -287,6 +287,10 @@ exists:
 | `ws` | 8.9.0 / 8.18.0 | 8.21.3 | `eth-provider`, `ethers` (exact pins) |
 | `uuid` | 7.0.3 / 8.3.2 / 9.0.0 | 11.1.1 | `react-tooltip`, `gatsby`, `eth-provider`; `v4()`, plus `v5()` in Gatsby's `createNodeId`, none with a `buf` |
 
+`serialize-javascript` 7 declares `node >=20`, so `engines` moves from
+`>=18 <23` to `>=20 <23`. CI already builds on Node 20, and Node 18 has been
+end-of-life since April 2025.
+
 In-range re-resolution, no override: `ajv` 6.12.6 / 8.8.2 -> 6.15.0 / 8.20.0,
 `@babel/runtime` 7.16.7 / 7.17.9 -> 7.29.7, `word-wrap` 1.2.3 -> 1.2.5,
 `cookiejar` 2.1.3 -> 2.1.4.
