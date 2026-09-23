@@ -55,9 +55,14 @@ const restoreDefaultReadProvider = () => {
     }
 };
 
-const ensProvider = new ethers.providers.AlchemyProvider(
-    config.networks.ens.chainId,
+// Not ethers 5's AlchemyProvider: it still targets eth-mainnet.alchemyapi.io,
+// which no longer resolves, so every ENS lookup failed. Without a key, the
+// keyless public mainnet RPC the CSP already allows.
+const ensProvider = new ethers.providers.StaticJsonRpcProvider(
     config.api_keys.alchemy_mainnet
+        ? `https://eth-mainnet.g.alchemy.com/v2/${config.api_keys.alchemy_mainnet}`
+        : "https://ethereum-rpc.publicnode.com",
+    config.networks.ens.chainId
 );
 
 export {

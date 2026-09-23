@@ -137,11 +137,12 @@ test("form-action is closed, since no form in this app posts anywhere", { skip: 
 });
 
 test("connect-src allows the ENS provider the address components call", { skip: !hasBuild }, () => {
-    // src/common/provider.js builds an ethers 5 AlchemyProvider for mainnet,
-    // which talks to this host. Without it every useEns lookup is refused in
+    // src/common/provider.js talks to Alchemy's current mainnet host when a key
+    // is set, else publicnode. Without them every useEns lookup is refused in
     // production and no ENS name ever resolves, while dev serves no CSP.
     const connect = directive(builtCsp(), "connect-src");
-    assert.ok(connect.includes("https://eth-mainnet.alchemyapi.io"), connect);
+    assert.ok(connect.includes("https://eth-mainnet.g.alchemy.com"), connect);
+    assert.ok(connect.includes("https://ethereum-rpc.publicnode.com"), connect);
 });
 
 test("every built page hash-allows its own inline scripts", { skip: !hasBuild }, async () => {

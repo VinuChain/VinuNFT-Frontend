@@ -51,8 +51,9 @@ async function waitForReady(page, until) {
     await page.locator(until).first().waitFor({ timeout: CONDITION_TIMEOUT });
 }
 
-async function openPage(browser, origin, { route, answers, onCall, until }) {
+async function openPage(browser, origin, { route, answers, onCall, until, onPage }) {
     const page = await browser.newPage();
+    onPage?.(page);
     await routeOffline(page, origin, {
         rpc: {
             eth_blockNumber: BLOCK,
@@ -264,9 +265,14 @@ test(
             for (const route of [
                 "/nft/?type=text&id=5abc",
                 "/nft/?type=bogus&id=1",
+                // An id with no type built contracts at address undefined
+                // with no ABI, and every read threw.
+                "/nft/?id=1",
             ]) {
                 const calls = [];
+                const errors = [];
                 const page = await openPage(browser, origin, {
+                    onPage: (p) => p.on("pageerror", (e) => errors.push(e.message)),
                     route,
                     onCall: (body) =>
                         calls.push(String(body?.params?.[0]?.data ?? "")),
@@ -278,6 +284,9 @@ test(
                     !calls.some((data) => data.startsWith(uriSelector)),
                     `${route} must not read a token: ${calls.join(",")}`
                 );
+                // The reads are effects that start after the refusal renders.
+                await page.waitForTimeout(1500);
+                assert.deepEqual(errors, [], `${route} must not throw`);
                 await page.close();
             }
         } finally {

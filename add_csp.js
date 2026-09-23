@@ -120,10 +120,9 @@ const CONNECT_SRC_ORIGINS = [
     "https://mainnet.base.org", // Base RPC
     "https://mainnet.optimism.io", // OP Mainnet RPC
     "https://gwan-ssl.wandevs.org:56891", // Wanchain RPC
-    // ENS reverse lookup. ethers 5's AlchemyProvider resolves mainnet to this
-    // host; ethers 6 moved to eth-mainnet.g.alchemy.com, so the deferred v6
-    // migration has to change this entry or every ENS name stops resolving.
-    "https://eth-mainnet.alchemyapi.io",
+    // ENS lookups (src/common/provider.js). The legacy alchemyapi.io host no
+    // longer resolves; without a key ENS uses the publicnode RPC above.
+    "https://eth-mainnet.g.alchemy.com",
 ];
 
 // frame-ancestors is IGNORED in a <meta> element — the browser console says so

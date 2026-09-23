@@ -10,10 +10,10 @@ what the number means.
 |---|---:|---:|---:|---:|
 | Critical | 0 | 0 | 2 | 39 |
 | High | 6 | 22 | 28 | 252 |
-| Moderate | 6 | 26 | 28 | 153 |
+| Moderate | 5 | 26 | 28 | 153 |
 | Low | 9 | 13 | 13 | 109 |
-| **Total advisories** | **21** | **61** | **71** | **553** |
-| Audited packages | 1688 | 1610 | 1652 | 2365 |
+| **Total advisories** | **20** | **61** | **71** | **553** |
+| Audited packages | 1687 | 1610 | 1652 | 2365 |
 
 The baseline is the exact observed count, so a newly published advisory against a
 package that is still installed fails the gate. That is intended. The response is
@@ -160,12 +160,12 @@ which owns that file and its ratcheted baseline.
 
 ### `query-string` -> `decode-uri-component` moderate x1
 
-**Reachable input** — `location.search` is whatever a crafted link contains. The
-remaining advisory needs 0.5.0, outside query-string 7's `^0.2.0` range. The
-impact is exponential decoding of malformed percent-encoding: the visitor's own
-tab stalls on a link they clicked. There is no server to exhaust. Upgrade path is
-query-string 8/9 (ESM-only) or dropping it for the platform's `URLSearchParams`,
-which touches `src/pages/nft/index.js`.
+Closed for the app on 2026-09-24: `src/pages/nft/index.js` parses
+`location.search` with the platform's `URLSearchParams`, and `query-string` is no
+longer a dependency. The advisory stays open because `gatsby` still depends on
+`query-string` 6 -> `decode-uri-component` 0.2.2, and Gatsby only imports it in
+its `gatsby develop` 404 page (`internal-plugins/dev-404-page`), which is not in
+the production build.
 
 ## Deferred, with the reason
 
@@ -174,10 +174,8 @@ measures it.
 
 - **ethers 5 -> 6.** Rewrites `ethers.utils.*`, `ethers.providers.*` and
   `BigNumber` across essentially every file in `src/`. It is the only fix for the
-  9 `elliptic` advisories. It also moves the Alchemy mainnet host from
-  `eth-mainnet.alchemyapi.io` to `eth-mainnet.g.alchemy.com`, so
-  `CONNECT_SRC_ORIGINS` in `add_csp.js` has to change in the same commit or every
-  ENS lookup is refused by CSP.
+  9 `elliptic` advisories. (The Alchemy host move it once implied is done:
+  `src/common/provider.js` already targets `eth-mainnet.g.alchemy.com`.)
 - **`@uiw/react-md-editor` 3 -> 4.** Now carries 0 advisories at 3.25.6, so this
   is currency, not remediation.
 - **`web3modal` -> `@reown/appkit`.** `web3modal` 1.x is deprecated upstream. Its
@@ -224,8 +222,7 @@ functions, none of which run Express. That is the same unreachable class as the
 twelve modules already carried above, so the baseline is ratcheted rather than
 the gate disabled.
 
-Route query strings in this app are parsed by `query-string`, a different
-package, which is not affected.
+Route query strings in this app are parsed by `URLSearchParams`, not `qs`.
 
 ## Baseline moved down on 2026-09-14: lockfile re-resolution
 
@@ -313,8 +310,8 @@ exercise it.
   `gatsby-core-utils`' CommonJS `require`. It only sniffs files Gatsby downloads
   at build time, and this site downloads none.
 - `decode-uri-component` moderate. The fix is 0.5, ESM-only, under the CommonJS
-  `query-string` 7 here and `query-string` 6 inside Gatsby. See the
-  `query-string` section above; the upgrade path is `URLSearchParams`.
+  `query-string` 6 inside Gatsby (dev-server 404 page only); the app's own use
+  moved to `URLSearchParams`. See the `query-string` section above.
 - `@parcel/reporter-dev-server` moderate. `gatsby-parcel-config` pins the whole
   Parcel family at exactly 2.8.3; overriding one member splits it, and the dev
   server reporter never runs in `gatsby build`.

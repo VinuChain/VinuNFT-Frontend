@@ -39,9 +39,8 @@ Copy `.env.example` into `.env.development` or `.env.production` as needed.
 Browser-safe variables:
 
 - `GATSBY_ALCHEMY_MAINNET_API_KEY`, Ethereum mainnet, ENS reverse lookups only.
-  Left empty, ethers 5 falls back to its shared public demo key and ENS names
-  stop resolving under real traffic. `https://eth-mainnet.alchemyapi.io` is in
-  the CSP `connect-src` for this; an ethers 6 upgrade moves that host.
+  Used against `https://eth-mainnet.g.alchemy.com` (in the CSP `connect-src`).
+  Left empty, ENS falls back to the keyless `https://ethereum-rpc.publicnode.com`.
 - `GATSBY_IPFS_UPLOAD_ENDPOINT`, default `/api/upload-ipfs`
 
 Server-only variables:
