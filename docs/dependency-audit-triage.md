@@ -6,14 +6,14 @@ what the number means.
 
 ## Position
 
-| Severity | Baseline (2026-09-24) | 2026-09-14 | 2026-09-01 | 2026-08-20 |
-|---|---:|---:|---:|---:|
-| Critical | 0 | 0 | 2 | 39 |
-| High | 6 | 22 | 28 | 252 |
-| Moderate | 5 | 26 | 28 | 153 |
-| Low | 9 | 13 | 13 | 109 |
-| **Total advisories** | **20** | **61** | **71** | **553** |
-| Audited packages | 1687 | 1610 | 1652 | 2365 |
+| Severity | Baseline (2026-09-30) | 2026-09-24 | 2026-09-14 | 2026-09-01 | 2026-08-20 |
+|---|---:|---:|---:|---:|---:|
+| Critical | 0 | 0 | 0 | 2 | 39 |
+| High | 7 | 6 | 22 | 28 | 252 |
+| Moderate | 5 | 5 | 26 | 28 | 153 |
+| Low | 9 | 9 | 13 | 13 | 109 |
+| **Total advisories** | **21** | **20** | **61** | **71** | **553** |
+| Audited packages | 1600 | 1687 | 1610 | 1652 | 2365 |
 
 The baseline is the exact observed count, so a newly published advisory against a
 package that is still installed fails the gate. That is intended. The response is
@@ -324,21 +324,35 @@ exercise it.
 `yarn verify:deployed` all pass, and a console and network pass over the main
 pages matched the pre-change build.
 
-## Baseline held on 2026-09-30: in-range re-resolution
+## Baseline moved on 2026-09-30: in-range re-resolution, high 6 -> 7
 
-Two advisories published after the 2026-09-24 ratchet pushed the audit above
-the baseline. Both patched releases sit inside the declared ranges, so the fix
-is a lockfile re-resolution with no `package.json` change:
+Advisories published after the 2026-09-24 ratchet pushed the audit to high 22,
+moderate 11. Every one with a patched release inside the declared range is
+closed by a lockfile re-resolution, with no `package.json` change:
 
 | Package | Was | Now | Parent | Where it runs |
 |---|---|---|---|---|
+| `joi` (high, `Joi.string().isoDate()` regex backtracking; no `isoDate` rule here) | 17.13.6 | 17.13.8 | direct (`^17.4.2`) | **browser**: price and form validation (`src/common/schemas.js`, `ListModal`, `EditModal`) and token-metadata validation (`src/common/nftInfo.js`) |
 | `fast-uri` (high, host confusion) | 3.1.6 | 3.1.8 | `ajv` 8 under `webpack`/`schema-utils` and `eslint` | build and lint only: validates webpack options, never user input |
-| `multer` (moderate, aborted-upload DoS) | 2.3.0 | 2.4.0 | `gatsby` (`^2.0.1`) | `gatsby develop` only; no Gatsby process runs in production |
+| `brace-expansion` (high x2, moderate) | 1.1.18 | 1.1.21 | `minimatch` 3 | build and lint glob matching |
+| `engine.io` (high, protocol DoS) | 6.6.9 | 6.6.11 | `gatsby` > `socket.io` | `gatsby develop` only |
+| `multer` (moderate, aborted-upload DoS) | 2.3.0 | 2.4.0 | `gatsby` (`^2.0.1`) | `gatsby develop` only |
+| `moment` (moderate, locale path traversal) | 2.30.1 | 2.31.0 | `gatsby` | build and dev server |
 
 `multer` 2.4.0 dropped `concat-stream`, which removes `concat-stream` and
-`typedarray` from the lockfile. The baseline is unchanged.
+`typedarray` from the lockfile.
+
+The one advisory without an in-range fix raises the high baseline from 6 to 7:
+`webpack-dev-middleware` 5.3.4 (path traversal, GHSA-g84c-rxfj-3j2c). The fix
+is 7.4.6, two majors past Gatsby's own `^5.3.4`, and the middleware only runs
+inside `gatsby develop`, bound to the developer's machine. No Gatsby process
+runs in production, and CI never starts the dev server, so an override would
+ship unverified.
 
 `sharp`, `file-type`, `decode-uri-component`, `@parcel/reporter-dev-server`
 and `elliptic` stay deferred for the reasons in the 2026-09-24 section: Gatsby
 5.16.1 is still the latest release and still pins the same parents, and
 `elliptic` still has no patched version.
+`sharp` 0.35.5, published after that section, was re-tested with a
+`resolutions` pin: `gatsby build` still fails `ENGINE.VALIDATION` for the same
+reason.
