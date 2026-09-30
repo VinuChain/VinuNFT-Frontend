@@ -1,6 +1,12 @@
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 
+// High 6 -> 7 on 2026-09-30: webpack-dev-middleware path traversal
+// (GHSA-g84c-rxfj-3j2c). The fix is 7.4.6, two majors past Gatsby's own
+// `^5.3.4`, and the middleware only runs inside `gatsby develop`. Everything
+// else published since 2026-09-24 was closed by an in-range re-resolution. See
+// the 2026-09-30 section of docs/dependency-audit-triage.md.
+//
 // Moderate 6 -> 5 on 2026-09-24: the app dropped query-string, removing one of
 // decode-uri-component's two paths (gatsby > query-string remains).
 //
@@ -38,7 +44,7 @@ const baseline = {
     info: 0,
     low: 9,
     moderate: 5,
-    high: 6,
+    high: 7,
     critical: 0,
 };
 
