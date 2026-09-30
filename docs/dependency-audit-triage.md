@@ -323,3 +323,22 @@ exercise it.
 `yarn verify:csp`, `yarn verify:rendered` (230 in Chromium) and
 `yarn verify:deployed` all pass, and a console and network pass over the main
 pages matched the pre-change build.
+
+## Baseline held on 2026-09-30: in-range re-resolution
+
+Two advisories published after the 2026-09-24 ratchet pushed the audit above
+the baseline. Both patched releases sit inside the declared ranges, so the fix
+is a lockfile re-resolution with no `package.json` change:
+
+| Package | Was | Now | Parent | Where it runs |
+|---|---|---|---|---|
+| `fast-uri` (high, host confusion) | 3.1.6 | 3.1.8 | `ajv` 8 under `webpack`/`schema-utils` and `eslint` | build and lint only: validates webpack options, never user input |
+| `multer` (moderate, aborted-upload DoS) | 2.3.0 | 2.4.0 | `gatsby` (`^2.0.1`) | `gatsby develop` only; no Gatsby process runs in production |
+
+`multer` 2.4.0 dropped `concat-stream`, which removes `concat-stream` and
+`typedarray` from the lockfile. The baseline is unchanged.
+
+`sharp`, `file-type`, `decode-uri-component`, `@parcel/reporter-dev-server`
+and `elliptic` stay deferred for the reasons in the 2026-09-24 section: Gatsby
+5.16.1 is still the latest release and still pins the same parents, and
+`elliptic` still has no patched version.
