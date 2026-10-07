@@ -373,14 +373,32 @@ some high/moderate:
 | `serialize-javascript` 7 (low) | 7.1.1 | 7.1.2 | webpack terser, build time |
 | `postcss-selector-parser` 7 (moderate) | 7.1.5 | 7.1.6 | cssnano, build time |
 
-Remaining and deferred. Build, lint or dev-server tooling with no
-untrusted input: `braces`, `http-cache-semantics`, `sprintf-js` (no patched
-version exists), `@graphql-tools/utils` (fix is 12, Gatsby's codegen pins 8/9),
-`postcss-selector-parser` 6 (cssnano), plus the 2026-09-24 and 2026-09-30
-deferrals (`sharp`, `file-type`, `decode-uri-component`,
-`@parcel/reporter-dev-server`, `webpack-dev-middleware`): Gatsby
-5.16.1 and its `gatsby-sharp` 1.16.0 are still the latest releases and pin the
-same parents. `elliptic` is the exception: it is shipped in the browser
-bundle (see the `ethers` section above), has no patched version, and stays
-deferred only until the ethers 6 migration. The baseline is set to the observed counts; the next new
-advisory must be triaged, not absorbed.
+GitHub classes every alert in this repo as runtime scope, because `yarn.lock`
+does not distinguish dev from production dependencies. "Runtime" in the
+alert list therefore means "in the lockfile", not "in the shipped bundle"; the
+bundle is judged separately below.
+
+### Open Dependabot alerts after the 2026-10-07 follow-up
+
+| # | Package | Sev | In the shipped bundle? | Status |
+|---|---|---|---|---|
+| 39, 29, 24 | `sharp` 0.32.6 (fix 0.35.x) | high | No. Gatsby build only; no image plugin runs, and no SVG reaches librsvg/libvips | Deferred: 0.35.5 fails `gatsby build` with `ENGINE.VALIDATION` (re-tested with a `resolutions` pin); `gatsby-sharp` pins `^0.32.6` |
+| 38 | `sprintf-js` 1.0.3 (no fix) | medium | No. `argparse` under `js-yaml` 3, parsing this repo's own YAML | Deferred: no patched version; precision specifiers never come from untrusted input |
+| 37 | `@graphql-tools/utils` 8.13.1, 9.2.1 (fix 12.0.1) | high | No. Gatsby's GraphQL codegen at build time; `mergeDeep` is only reachable with attacker-aliased subgraph responses, and there is no gateway | Deferred: 12 is ESM-only (`"type": "module"`) under CommonJS `require` in Gatsby's codegen |
+| 36 | `postcss-selector-parser` 6.1.4 (fix 7.1.6) | medium | No. css-loader and cssnano at build time, over this repo's own CSS | **Fixed** by a `resolutions` pin to 7.1.6 |
+| 35 | `http-cache-semantics` 4.2.0 (no fix) | high | No. `got`/`cacheable-request` in Gatsby's build-time downloads, no shared cache | Deferred: no patched version; cross-user disclosure needs a shared HTTP cache |
+| 34 | `braces` 3.0.3 (no fix) | high | No. `micromatch` under `lint-staged` and `chokidar` under `gatsby develop`, with patterns from config | Deferred: no patched version; patterns are not attacker-supplied |
+| 33 | `webpack-dev-middleware` 5.3.4 (fix 7.4.6) | high | No. `gatsby develop` only | Deferred: two majors past Gatsby's `^5.3.4`; see 2026-09-30 |
+| 25 | `decode-uri-component` 0.2.2 (fix 0.5.0) | medium | No. `gatsby` > `query-string` 6, dev-server 404 page | Deferred: 0.5 is ESM-only under a CommonJS `require` |
+| 15 | `file-type` 16.5.4 (fix 21.3.1) | medium | No. Sniffs files Gatsby downloads at build time; this site downloads none | Deferred: 21 is ESM-only under `gatsby-core-utils` |
+| 8 | `elliptic` 6.6.1 (no fix) | low | **Yes.** Confirmed in the shipped bundle (see the `ethers` section) | Deferred until the ethers 6 migration; no patched version exists |
+| 7 | `@parcel/reporter-dev-server` 2.8.3 (fix 2.16.4) | medium | No. `gatsby develop` only | Deferred: `gatsby-parcel-config` pins the whole Parcel family at 2.8.3 |
+
+`postcss-selector-parser` 6 -> 7 for css-loader was checked by building before
+and after: the emitted `public/styles.*.css` is byte-identical.
+
+Alerts are not dismissed here; that is the repository owner's call. `elliptic`
+is the only entry above that is reachable from the browser: its advisory
+describes the primitive itself, it is low severity, and no version patches it.
+The baseline is set to the observed counts; the next new advisory must be
+triaged, not absorbed.
