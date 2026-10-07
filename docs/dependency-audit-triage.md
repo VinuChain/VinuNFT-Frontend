@@ -356,3 +356,29 @@ and `elliptic` stay deferred for the reasons in the 2026-09-24 section: Gatsby
 `sharp` 0.35.5, published after that section, was re-tested with a
 `resolutions` pin: `gatsby build` still fails `ENGINE.VALIDATION` for the same
 reason.
+
+## Baseline moved on 2026-10-07: in-range re-resolution, high 7 -> 26
+
+Newly published advisories (yarn audit counts one per dependency path) pushed
+the audit to critical 2, high 29, moderate 11. In-range lockfile
+re-resolutions, with no `package.json` change, closed the critical pair and
+some high/moderate:
+
+| Package | Was | Now | Where it runs |
+|---|---|---|---|
+| `proxy-addr` (critical) | 2.0.7 | 2.0.8 | `gatsby develop` (express) |
+| `shell-quote` (critical) | 1.10.0 | 1.12.0 | `gatsby develop` launch-editor |
+| `compression` (high) | 1.8.1 | 1.8.2 | `gatsby develop` / `gatsby serve` |
+| `source-map-js` (high) | 1.2.1 | 1.2.2 | postcss, build time |
+| `serialize-javascript` 7 (low) | 7.1.1 | 7.1.2 | webpack terser, build time |
+| `postcss-selector-parser` 7 (moderate) | 7.1.5 | 7.1.6 | cssnano, build time |
+
+Remaining and deferred, all build, lint or dev-server tooling with no
+untrusted input: `braces`, `http-cache-semantics`, `sprintf-js` (no patched
+version exist), `@graphql-tools/utils` (fix is 12, Gatsby's codegen pins 8/9),
+`postcss-selector-parser` 6 (cssnano), plus the 2026-09-24 and 2026-09-30
+deferrals (`sharp`, `file-type`, `decode-uri-component`,
+`@parcel/reporter-dev-server`, `webpack-dev-middleware`, `elliptic`): Gatsby
+5.16.1 and its `gatsby-sharp` 1.16.0 are still the latest releases and pin the
+same parents. The baseline is set to the observed counts; the next new
+advisory must be triaged, not absorbed.
