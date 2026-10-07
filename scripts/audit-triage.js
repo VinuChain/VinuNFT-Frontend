@@ -1,6 +1,9 @@
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 
+// Re-set 2026-10-07 to low 9, moderate 9, high 26, critical 0 (docs section
+// 2026-10-07): new advisories, all build/dev tooling; in-range fixes applied.
+//
 // High 6 -> 7 on 2026-09-30: webpack-dev-middleware path traversal
 // (GHSA-g84c-rxfj-3j2c). The fix is 7.4.6, two majors past Gatsby's own
 // `^5.3.4`, and the middleware only runs inside `gatsby develop`. Everything
@@ -43,8 +46,8 @@ const path = require("node:path");
 const baseline = {
     info: 0,
     low: 9,
-    moderate: 5,
-    high: 7,
+    moderate: 9,
+    high: 26,
     critical: 0,
 };
 
