@@ -1,7 +1,7 @@
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 
-// Re-set 2026-10-07 to low 9, moderate 9, high 26, critical 0 (docs section
+// Re-set 2026-10-07 to low 9, moderate 7, high 26, critical 0 (docs section
 // 2026-10-07): new advisories, all build/dev tooling; in-range fixes applied.
 //
 // High 6 -> 7 on 2026-09-30: webpack-dev-middleware path traversal
@@ -46,7 +46,7 @@ const path = require("node:path");
 const baseline = {
     info: 0,
     low: 9,
-    moderate: 9,
+    moderate: 7,
     high: 26,
     critical: 0,
 };
