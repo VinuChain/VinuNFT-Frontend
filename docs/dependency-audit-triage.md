@@ -373,12 +373,14 @@ some high/moderate:
 | `serialize-javascript` 7 (low) | 7.1.1 | 7.1.2 | webpack terser, build time |
 | `postcss-selector-parser` 7 (moderate) | 7.1.5 | 7.1.6 | cssnano, build time |
 
-Remaining and deferred, all build, lint or dev-server tooling with no
+Remaining and deferred. Build, lint or dev-server tooling with no
 untrusted input: `braces`, `http-cache-semantics`, `sprintf-js` (no patched
-version exist), `@graphql-tools/utils` (fix is 12, Gatsby's codegen pins 8/9),
+version exists), `@graphql-tools/utils` (fix is 12, Gatsby's codegen pins 8/9),
 `postcss-selector-parser` 6 (cssnano), plus the 2026-09-24 and 2026-09-30
 deferrals (`sharp`, `file-type`, `decode-uri-component`,
-`@parcel/reporter-dev-server`, `webpack-dev-middleware`, `elliptic`): Gatsby
+`@parcel/reporter-dev-server`, `webpack-dev-middleware`): Gatsby
 5.16.1 and its `gatsby-sharp` 1.16.0 are still the latest releases and pin the
-same parents. The baseline is set to the observed counts; the next new
+same parents. `elliptic` is the exception: it is shipped in the browser
+bundle (see the `ethers` section above), has no patched version, and stays
+deferred only until the ethers 6 migration. The baseline is set to the observed counts; the next new
 advisory must be triaged, not absorbed.
