@@ -402,3 +402,42 @@ is the only entry above that is reachable from the browser: its advisory
 describes the primitive itself, it is low severity, and no version patches it.
 The baseline is set to the observed counts; the next new advisory must be
 triaged, not absorbed.
+
+## Baseline moved down on 2026-10-24: in-range re-resolution, low 16 -> 9, moderate 11 -> 5, high 22 -> 19
+
+Advisories published after the 2026-10-07 baseline took the gate to low 16,
+moderate 11 (high 22 was still under its ceiling of 26). Every new one has a
+patched release inside the declared range, so a lockfile re-resolution (no
+`package.json` change, no added or duplicated packages) closes it:
+
+| Package | Was | Now | Advisory | Where it runs |
+|---|---|---|---|---|
+| `fast-uri` (low x6, moderate x6, one per path) | 3.1.8 | 3.1.9 | GHSA-333x-w4r6-6crp, GHSA-xhq7-xmqj-769h, GHSA-w74x-v6f9-j3xg, GHSA-wjr9-j795-jxcr | build and lint only: `ajv` 8 under `webpack`/`schema-utils` and `eslint`, validating tool options, never user input |
+| `serialize-javascript` 7 (low) | 7.1.2 | 7.1.4 | GHSA-m5mm-p8h7-m29v | webpack terser, build time |
+| `body-parser` (high x2) | 2.3.0 / 1.20.6 | 2.4.0 / 1.20.9 | GHSA-27r3-jxmh-p828 | `gatsby develop` (express) only; the deployed `public/` runs no Express |
+| `multer` (high) | 2.4.0 | 2.5.0 | GHSA-q7qp-rjg7-q26m | `gatsby develop` only |
+
+The `body-parser` bump moved `qs` to 6.16.x, `content-type` and `iconv-lite` to
+their newest in-range patch; `qs` stays inside the existing `^6.16.0` override.
+
+### New advisories that stay open
+
+Both are in packages already deferred above, with the same reachability:
+
+- `sharp` high x9 (three new advisories, three paths each): GHSA-f88m-g3jw-g9cj
+  (libvips), GHSA-rgj7-g3m4-5g8c (libheif), GHSA-wq5f-xc86-pv6w (librsvg). All
+  are native-library parsers of image input. `gatsby-plugin-sharp` and
+  `gatsby-plugin-image` are not installed, nothing in `src/` or the `gatsby-*.js`
+  files references `sharp`, and the site downloads no images at build time, so
+  no input reaches libvips, libheif or librsvg. The fix is `sharp` >= 0.35.x,
+  which still fails `gatsby build` with `ENGINE.VALIDATION` (see 2026-09-24).
+- `http-cache-semantics` high (GHSA-ch52-4w7c-c8xp), now counted on four paths
+  (it was one alert in the 2026-10-07 table): `got`/`cacheable-request` in
+  Gatsby's build-time downloads. Disclosure needs a shared HTTP cache serving
+  several users; there is none. No patched version exists.
+
+Everything else still open (`@graphql-tools/utils`, `webpack-dev-middleware`,
+`elliptic`, `decode-uri-component`, `file-type`, `@parcel/reporter-dev-server`)
+is unchanged from the 2026-10-07 table. `braces` and `sprintf-js` no longer
+appear in the audit. The baseline is now the exact observed count (low 9,
+moderate 5, high 19, critical 0).
