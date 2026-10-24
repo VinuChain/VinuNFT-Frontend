@@ -1,6 +1,11 @@
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 
+// Re-set 2026-10-24 to low 9, moderate 5, high 19, critical 0 (docs section
+// 2026-10-24): in-range lockfile re-resolution closed every advisory published
+// since 2026-10-07 that has a patched release; the rest are the already-deferred
+// classes.
+//
 // Re-set 2026-10-07 to low 9, moderate 7, high 26, critical 0 (docs section
 // 2026-10-07): new advisories, all build/dev tooling; in-range fixes applied.
 //
@@ -46,8 +51,8 @@ const path = require("node:path");
 const baseline = {
     info: 0,
     low: 9,
-    moderate: 7,
-    high: 26,
+    moderate: 5,
+    high: 19,
     critical: 0,
 };
 
